@@ -397,10 +397,20 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_NEURON
 	.neuron_alloc = __real_neuron_alloc,
 #endif
+	.cuda_set_sync_memops = __real_cuda_set_sync_memops,
 #if HAVE_CUDA
 	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 	.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
 	.ofi_cuCtxGetCurrent = __real_ofi_cuCtxGetCurrent,
+#if OFI_HAVE_CUDA_CTX_SYNC_MEMOPS
+	.ofi_cuCtxGetDevice = __real_ofi_cuCtxGetDevice,
+	.ofi_cuCtxGetFlags = __real_ofi_cuCtxGetFlags,
+	.ofi_cuCtxSetFlags = __real_ofi_cuCtxSetFlags,
+	.ofi_cuDevicePrimaryCtxGetState =
+		__real_ofi_cuDevicePrimaryCtxGetState,
+	.ofi_cuDevicePrimaryCtxSetFlags =
+		__real_ofi_cuDevicePrimaryCtxSetFlags,
+#endif
 	.ofi_cuCtxCreate_v2 = __real_ofi_cuCtxCreate_v2,
 	.ofi_cuCtxDestroy = __real_ofi_cuCtxDestroy,
 	.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,
@@ -686,6 +696,17 @@ void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size)
 }
 #endif
 
+int __wrap_cuda_set_sync_memops(void *ptr)
+{
+	return g_efa_unit_test_mocks.cuda_set_sync_memops(ptr);
+}
+
+int efa_mock_cuda_set_sync_memops_return_mock(void *ptr)
+{
+	check_expected(ptr);
+	return (int) mock();
+}
+
 #if HAVE_CUDA
 cudaError_t __wrap_ofi_cudaMalloc(void **ptr, size_t size)
 {
@@ -719,6 +740,73 @@ CUresult efa_mock_ofi_cuCtxGetCurrent_return_mock(CUcontext *pctx)
 	*pctx = (CUcontext) mock();
 	return (CUresult) mock();
 }
+
+#if OFI_HAVE_CUDA_CTX_SYNC_MEMOPS
+CUresult __wrap_ofi_cuCtxGetDevice(CUdevice *device)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxGetDevice(device);
+}
+
+CUresult efa_mock_ofi_cuCtxGetDevice_return_mock(CUdevice *device)
+{
+	*device = (CUdevice) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuCtxGetFlags(unsigned int *flags)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxGetFlags(flags);
+}
+
+CUresult efa_mock_ofi_cuCtxGetFlags_return_mock(unsigned int *flags)
+{
+	*flags = (unsigned int) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuCtxSetFlags(unsigned int flags)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxSetFlags(flags);
+}
+
+CUresult efa_mock_ofi_cuCtxSetFlags_return_mock(unsigned int flags)
+{
+	check_expected(flags);
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuDevicePrimaryCtxGetState(CUdevice dev,
+					       unsigned int *flags,
+					       int *active)
+{
+	return g_efa_unit_test_mocks.ofi_cuDevicePrimaryCtxGetState(
+		dev, flags, active);
+}
+
+CUresult efa_mock_ofi_cuDevicePrimaryCtxGetState_return_mock(
+	CUdevice dev, unsigned int *flags, int *active)
+{
+	check_expected(dev);
+	*flags = (unsigned int) mock();
+	*active = (int) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev,
+					       unsigned int flags)
+{
+	return g_efa_unit_test_mocks.ofi_cuDevicePrimaryCtxSetFlags(dev,
+								    flags);
+}
+
+CUresult efa_mock_ofi_cuDevicePrimaryCtxSetFlags_return_mock(
+	CUdevice dev, unsigned int flags)
+{
+	check_expected(dev);
+	check_expected(flags);
+	return (CUresult) mock();
+}
+#endif
 
 CUresult __wrap_ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev)
 {

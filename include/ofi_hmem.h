@@ -54,6 +54,13 @@ typedef void* ofi_hmem_async_event_t;
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+#define OFI_HAVE_CUDA_CTX_SYNC_MEMOPS (CUDA_VERSION >= 12010)
+#else
+#define OFI_HAVE_CUDA_CTX_SYNC_MEMOPS 0
+#endif /* HAVE_CUDA */
+
+#if HAVE_CUDA
+
 /* Libfabric supported CUDA operations. */
 cudaError_t ofi_cudaMemcpy(void* dst, const void* src, size_t count,
 			   enum cudaMemcpyKind kind);
@@ -74,6 +81,14 @@ cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t ofi_cudaFree(void *ptr);
 CUresult ofi_cuDeviceGet(CUdevice *device, int ordinal);
 CUresult ofi_cuCtxGetCurrent(CUcontext *pctx);
+#if OFI_HAVE_CUDA_CTX_SYNC_MEMOPS
+CUresult ofi_cuCtxGetDevice(CUdevice *device);
+CUresult ofi_cuCtxGetFlags(unsigned int *flags);
+CUresult ofi_cuCtxSetFlags(unsigned int flags);
+CUresult ofi_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags,
+					int *active);
+CUresult ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
+#endif
 CUresult ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult ofi_cuCtxDestroy(CUcontext ctx);
 CUresult ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);

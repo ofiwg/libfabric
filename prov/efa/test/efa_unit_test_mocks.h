@@ -203,10 +203,22 @@ struct efa_unit_test_mocks
 	void *(*neuron_alloc)(void **handle, size_t size);
 #endif
 
+	int (*cuda_set_sync_memops)(void *ptr);
+
 #if HAVE_CUDA
 	cudaError_t (*ofi_cudaMalloc)(void **ptr, size_t size);
 	CUresult (*ofi_cuDeviceGet)(CUdevice *device, int ordinal);
 	CUresult (*ofi_cuCtxGetCurrent)(CUcontext *pctx);
+#if OFI_HAVE_CUDA_CTX_SYNC_MEMOPS
+	CUresult (*ofi_cuCtxGetDevice)(CUdevice *device);
+	CUresult (*ofi_cuCtxGetFlags)(unsigned int *flags);
+	CUresult (*ofi_cuCtxSetFlags)(unsigned int flags);
+	CUresult (*ofi_cuDevicePrimaryCtxGetState)(CUdevice dev,
+						   unsigned int *flags,
+						   int *active);
+	CUresult (*ofi_cuDevicePrimaryCtxSetFlags)(CUdevice dev,
+						   unsigned int flags);
+#endif
 	CUresult (*ofi_cuCtxCreate_v2)(CUcontext *pctx, unsigned int flags, CUdevice dev);
 	CUresult (*ofi_cuCtxDestroy)(CUcontext ctx);
 	CUresult (*ofi_cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
@@ -321,11 +333,31 @@ void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
 void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size);
 #endif
 
+int __real_cuda_set_sync_memops(void *ptr);
+int efa_mock_cuda_set_sync_memops_return_mock(void *ptr);
+
 #if HAVE_CUDA
 cudaError_t __real_ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t efa_mock_ofi_cudaMalloc_return_mock(void **ptr, size_t size);
 CUresult __real_ofi_cuDeviceGet(CUdevice *device, int ordinal);
 CUresult __real_ofi_cuCtxGetCurrent(CUcontext *pctx);
+#if OFI_HAVE_CUDA_CTX_SYNC_MEMOPS
+CUresult __real_ofi_cuCtxGetDevice(CUdevice *device);
+CUresult efa_mock_ofi_cuCtxGetDevice_return_mock(CUdevice *device);
+CUresult __real_ofi_cuCtxGetFlags(unsigned int *flags);
+CUresult efa_mock_ofi_cuCtxGetFlags_return_mock(unsigned int *flags);
+CUresult __real_ofi_cuCtxSetFlags(unsigned int flags);
+CUresult efa_mock_ofi_cuCtxSetFlags_return_mock(unsigned int flags);
+CUresult __real_ofi_cuDevicePrimaryCtxGetState(CUdevice dev,
+					       unsigned int *flags,
+					       int *active);
+CUresult efa_mock_ofi_cuDevicePrimaryCtxGetState_return_mock(
+	CUdevice dev, unsigned int *flags, int *active);
+CUresult __real_ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev,
+					       unsigned int flags);
+CUresult efa_mock_ofi_cuDevicePrimaryCtxSetFlags_return_mock(
+	CUdevice dev, unsigned int flags);
+#endif
 CUresult __real_ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult __real_ofi_cuCtxDestroy(CUcontext ctx);
 CUresult __real_ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
