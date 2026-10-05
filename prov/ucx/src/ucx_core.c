@@ -271,7 +271,7 @@ ssize_t ucx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	 * by the callback function.
 	 */
 	tc = &req->completion;
-	if (req->type == UCX_REQ_UNSPEC &&
+	if (req->type == UCX_REQ_UNEXPECTED_ERR &&
 	    !(claim_discard &&
 	      ucx_translate_errcode((int)req->status) == -FI_ETRUNC)) {
 		ret = ucx_write_error_completion(cq, tc->op_context,
