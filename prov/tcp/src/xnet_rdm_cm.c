@@ -42,13 +42,21 @@
  * return the version.  The returned version must be <= the requested
  * version, and is used by the active side to fallback to an older
  * protocol version.
+ *
+ * Version 2 adds addr, the sender's RDM address (the address returned by
+ * fi_getname and inserted into peers' AVs), which is used to identify the
+ * peer of a connection request.  A request carries addr if its version is
+ * >= 2.  Responses, and requests from older versions, carry only the fields
+ * before addr (XNET_RDM_CM_BASE_SIZE).  Trailing data is ignored.
  */
 struct xnet_rdm_cm {
 	uint8_t version;
 	uint8_t features;
 	uint16_t port;
 	uint32_t pid;
+	union ofi_sock_ip addr;
 };
+#define XNET_RDM_CM_BASE_SIZE offsetof(struct xnet_rdm_cm, addr)
 
 /*
  * RDM feature flag xnet_rdm_cm::features, bit wised.
@@ -217,7 +225,7 @@ err:
 
 static int xnet_rdm_connect(struct xnet_conn *conn)
 {
-	struct xnet_rdm_cm msg;
+	struct xnet_rdm_cm msg = {0};
 	struct fi_info *info;
 	int ret;
 
@@ -240,6 +248,8 @@ static int xnet_rdm_connect(struct xnet_conn *conn)
 	msg.pid = htonl((uint32_t) getpid());
 	msg.features = xnet_firewall_addr ? XNET_RDM_FIREWALL_ADDR : 0;
 	msg.port = htons(ofi_addr_get_port(&conn->rdm->addr.sa));
+	memcpy(&msg.addr, &conn->rdm->addr,
+	       ofi_sizeofaddr(&conn->rdm->addr.sa));
 
 	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "rdm addr",
 			&conn->rdm->addr);
@@ -420,6 +430,7 @@ static void xnet_set_protocol(struct xnet_ep *ep, struct xnet_rdm_cm *msg)
 		return;
 
 	switch (msg->version & ~XNET_RDM_VERSION_FLAG) {
+	case 2:
 	case 1:
 		ep->util_ep.flags |= XNET_EP_RENDEZVOUS;
 		/* fall through */
@@ -438,7 +449,8 @@ static void xnet_set_rdm_version(struct xnet_rdm_cm *msg)
 	msg->version |= XNET_RDM_VERSION_FLAG;
 }
 
-static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
+static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry,
+				 size_t datalen)
 {
 	struct xnet_rdm *rdm;
 	struct xnet_rdm_cm *msg;
@@ -454,9 +466,25 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 	msg = (struct xnet_rdm_cm *) cm_entry->data;
 
-	memcpy(&peer_addr, cm_entry->info->dest_addr,
-	       cm_entry->info->dest_addrlen);
-	ofi_addr_set_port(&peer_addr.sa, ntohs(msg->port));
+	/* Identify the peer by the address it advertised, which is what the
+	 * application inserted into the AV.  The observed address, which NAT
+	 * or routing may change, is only used by the connection itself.
+	 * Older peers (version < 2) do not advertise an address; use the
+	 * observed address with their listening port.  The address must have
+	 * the format of the local address, as the AV compares addresses
+	 * bytewise.
+	 */
+	if (msg->version >= 2 && datalen >= sizeof(*msg) &&
+	    msg->addr.sa.sa_family == rdm->addr.sa.sa_family &&
+	    !ofi_is_any_addr(&msg->addr.sa)) {
+		memcpy(&peer_addr, &msg->addr, ofi_sizeofaddr(&msg->addr.sa));
+	} else {
+		memcpy(&peer_addr, cm_entry->info->dest_addr,
+		       cm_entry->info->dest_addrlen);
+		ofi_addr_set_port(&peer_addr.sa, ntohs(msg->port));
+	}
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "connreq peer addr",
+			&peer_addr);
 
 	flags = (msg->features & XNET_RDM_FIREWALL_ADDR) ? FI_FIREWALL_ADDR : 0;
 	av = container_of(rdm->util_ep.av, struct rxm_av, util_av);
@@ -546,7 +574,7 @@ accept:
 	xnet_set_rdm_version(msg);
 	xnet_set_protocol(conn->ep, msg);
 
-	ret = fi_accept(&conn->ep->util_ep.ep_fid, msg, sizeof(*msg));
+	ret = fi_accept(&conn->ep->util_ep.ep_fid, msg, XNET_RDM_CM_BASE_SIZE);
 	if (ret)
 		goto close;
 
@@ -561,7 +589,7 @@ put:
 	util_put_peer(peer);
 reject:
 	(void) fi_reject(&rdm->pep->util_pep.pep_fid, cm_entry->info->handle,
-			 msg, sizeof(*msg));
+			 msg, XNET_RDM_CM_BASE_SIZE);
 	fi_freeinfo(cm_entry->info);
 }
 
@@ -595,7 +623,8 @@ void xnet_handle_event_list(struct xnet_progress *progress)
 
 		switch (event->event) {
 		case FI_CONNREQ:
-			xnet_process_connreq(&event->cm_entry);
+			xnet_process_connreq(&event->cm_entry, event->len -
+					     sizeof(struct fi_eq_cm_entry));
 			break;
 		case FI_CONNECTED:
 			xnet_process_connected(&event->cm_entry);
