@@ -62,10 +62,11 @@ enum {
 
 /* Version 1 adds support for tagged rendezvous transfers.
  * ops: tag_rts, cts, data
+ * Version 2 adds the sender's RDM address to connection requests.
  * VERSION_FLAG set in a response indicates the peer checks the version
  */
 #define XNET_RDM_VERSION_FLAG	(1 << 7)
-#define XNET_RDM_VERSION	1
+#define XNET_RDM_VERSION	2
 
 #define XNET_CTRL_HDR_VERSION	3
 

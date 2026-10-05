@@ -65,6 +65,7 @@ int xnet_eq_write(struct util_eq *eq, uint32_t event,
 
 	entry->rdm = rdm;
 	entry->event = event;
+	entry->len = len;
 	memcpy(&entry->cm_entry, buf, len);
 	slist_insert_tail(&entry->list_entry,
 			  &xnet_rdm2_progress(rdm)->event_list);

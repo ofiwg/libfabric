@@ -112,6 +112,15 @@ need wire compatibility with older versions of libfabric use the rdm
 endpoint support directly from the tcp provider.  This will provide the
 best performance.
 
+An rdm endpoint identifies a connecting peer by the endpoint address
+that the peer reports, which is the address returned by fi_getname and
+inserted into the address vector.  The source address of the TCP
+connection, which NAT or routing may change, is not used for this.
+Peers from older libfabric versions do not report their address and are
+identified by the source address of the connection and their listening
+port.  The provider does not authenticate peers: a process that can
+connect to an rdm endpoint can claim to be any peer.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
