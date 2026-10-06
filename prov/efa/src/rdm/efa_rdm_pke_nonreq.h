@@ -235,9 +235,7 @@ enum efa_rdm_rma_context_pkt_type {
 };
 
 void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
-				    struct efa_rdm_ope *txe, void *local_buf,
-				    size_t seg_size, void *desc,
-				    uint64_t remote_buf, size_t remote_key);
+				    struct efa_rdm_ope *txe, size_t seg_start);
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *ope,

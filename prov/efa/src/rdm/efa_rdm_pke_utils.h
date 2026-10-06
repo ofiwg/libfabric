@@ -42,6 +42,8 @@ int efa_rdm_pkt_type_of_base_hdr(struct efa_rdm_base_hdr *base_hdr)
 static inline
 int efa_rdm_pkt_type_of_pke(struct efa_rdm_pke *pke)
 {
+	if (pke->flags & EFA_RDM_PKE_WRITE_CONTEXT)
+		return EFA_RDM_RMA_CONTEXT_PKT;
 	if (efa_rdm_pke_has_base_hdr(pke)) {
 		return efa_rdm_pkt_type_of_base_hdr(efa_rdm_pke_get_base_hdr(pke));
 	}

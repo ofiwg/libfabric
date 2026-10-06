@@ -644,6 +644,31 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);
 
 void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope);
 
+/**
+ * @brief one segment of a (possibly chunked) RMA write, derived from the ope
+ *
+ * A write larger than the max write-once length is split into segments. The
+ * segment parameters are recomputed from the ope and the segment's start
+ * offset by efa_rdm_ope_get_write_segment() rather than stored per segment.
+ */
+struct efa_rdm_ope_write_segment {
+	void *local_buf;     /**< local source address for this segment */
+	void *desc;          /**< local memory registration descriptor */
+	uint64_t remote_buf; /**< remote destination address for this segment */
+	uint64_t remote_key; /**< remote memory key for this segment */
+	size_t seg_size;     /**< number of bytes in this segment */
+};
+
+/**
+ * @brief recompute an RMA write segment from its start offset into the write
+ *
+ * @param[in]  ope        the write operation entry
+ * @param[in]  seg_start  byte offset of the segment within the write
+ * @param[out] seg        the recomputed segment parameters
+ */
+void efa_rdm_ope_get_write_segment(struct efa_rdm_ope *ope, size_t seg_start,
+				   struct efa_rdm_ope_write_segment *seg);
+
 int efa_rdm_ope_post_read(struct efa_rdm_ope *ope);
 
 int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope);
