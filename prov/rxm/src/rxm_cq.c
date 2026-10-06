@@ -529,6 +529,22 @@ static bool rxm_sar_drain_pkt_list(struct rxm_proto_info *proto_info,
 	return false;
 }
 
+/* Hold from reading a sender's fi_addr until its message is matched or
+ * queued, so that an AV insert cannot resolve the sender in between.
+ */
+static struct ofi_genlock *rxm_resolve_lock(struct rxm_ep *ep)
+{
+	return &container_of(ep->util_ep.av, struct rxm_av,
+			     util_av)->resolve_lock;
+}
+
+static fi_addr_t rxm_rx_buf_src_addr(struct rxm_rx_buf *rx_buf)
+{
+	assert(ofi_genlock_held(rxm_resolve_lock(rx_buf->ep)));
+	return rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV) ?
+	       rx_buf->conn->peer->fi_addr : FI_ADDR_UNSPEC;
+}
+
 /* Acquire the SRX entry for a deferred reassembly, once FIRST has arrived.
  * *matched reports whether a posted receive was found or the entry had to be
  * queued as unexpected.
@@ -537,10 +553,13 @@ static struct fi_peer_rx_entry *
 rxm_sar_acquire_entry(struct rxm_rx_buf *rx_buf, bool *matched)
 {
 	struct fid_peer_srx *srx = rx_buf->ep->srx;
+	struct ofi_genlock *resolve_lock = rxm_resolve_lock(rx_buf->ep);
 	struct fi_peer_rx_entry *rx_entry = NULL;
 	struct fi_peer_match_attr match = {0};
 	int ret;
 
+	ofi_genlock_lock(resolve_lock);
+	match.addr = rxm_rx_buf_src_addr(rx_buf);
 	switch (rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
 		match.msg_size = rx_buf->pkt.hdr.size;
@@ -552,6 +571,7 @@ rxm_sar_acquire_entry(struct rxm_rx_buf *rx_buf, bool *matched)
 		ret = srx->owner_ops->get_tag(srx, &match, &rx_entry);
 		break;
 	default:
+		ofi_genlock_unlock(resolve_lock);
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
 		assert(0);
 		*matched = false;
@@ -576,6 +596,7 @@ rxm_sar_acquire_entry(struct rxm_rx_buf *rx_buf, bool *matched)
 		rx_entry->peer_context = NULL;
 		*matched = true;
 	}
+	ofi_genlock_unlock(resolve_lock);
 	return rx_entry;
 }
 
@@ -904,12 +925,12 @@ static inline void rxm_entry_prep_for_queue(struct fi_peer_rx_entry *rx_entry,
 	}
 	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_seg)
 		rxm_init_sar_proto(rx_buf);
-	rxm_replace_rx_buf(rx_buf);
 }
 
 static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 {
 	struct fid_peer_srx *srx = rx_buf->ep->srx;
+	struct ofi_genlock *resolve_lock;
 	struct fi_peer_rx_entry *rx_entry;
 	struct fi_peer_match_attr match = {0};
 	int ret;
@@ -920,9 +941,6 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 					(int) rx_buf->pkt.ctrl_hdr.conn_id);
 		if (!rx_buf->conn)
 			return -FI_EOTHER;
-		match.addr = rx_buf->conn->peer->fi_addr;
-	} else {
-		match.addr = FI_ADDR_UNSPEC;
 	}
 
 	if (rx_buf->ep->rxm_info->mode & OFI_BUFFERED_RECV) {
@@ -930,6 +948,9 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		return 0;
 	}
 
+	resolve_lock = rxm_resolve_lock(rx_buf->ep);
+	ofi_genlock_lock(resolve_lock);
+	match.addr = rxm_rx_buf_src_addr(rx_buf);
 	switch(rx_buf->pkt.hdr.op) {
 	case ofi_op_msg:
 		match.msg_size = rx_buf->pkt.hdr.size;
@@ -937,7 +958,8 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		ret = srx->owner_ops->get_msg(srx, &match, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			rxm_entry_prep_for_queue(rx_entry, rx_buf);
-			return srx->owner_ops->queue_msg(rx_entry);
+			ret = srx->owner_ops->queue_msg(rx_entry);
+			goto queued;
 		}
 		rx_entry->peer_context = NULL;
 		break;
@@ -948,15 +970,18 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		ret = srx->owner_ops->get_tag(srx, &match, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			rxm_entry_prep_for_queue(rx_entry, rx_buf);
-			return srx->owner_ops->queue_tag(rx_entry);
+			ret = srx->owner_ops->queue_tag(rx_entry);
+			goto queued;
 		}
 		rx_entry->peer_context = NULL;
 		break;
 	default:
+		ofi_genlock_unlock(resolve_lock);
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
 		assert(0);
 		return -FI_EINVAL;
 	}
+	ofi_genlock_unlock(resolve_lock);
 	rx_buf->peer_entry = rx_entry;
 
 	/* Only a FIRST segment gets here, so the new proto starts out empty. */
@@ -964,6 +989,12 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		rxm_init_sar_proto(rx_buf);
 
 	return rxm_handle_rx_buf(rx_buf);
+
+queued:
+	/* Reposting calls into the msg provider, so keep it out of the lock. */
+	ofi_genlock_unlock(resolve_lock);
+	rxm_replace_rx_buf(rx_buf);
+	return ret;
 }
 
 static int rxm_sar_match_msg_id(struct dlist_entry *item, const void *arg)
