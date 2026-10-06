@@ -952,6 +952,15 @@ void util_put_peer(struct util_peer_addr *peer);
  *
  * A future cleanup would be to remove using the util_av and have the
  * rxm_av implementation be independent.
+ *
+ * resolve_lock makes resolving a peer atomic for the receive path.  An
+ * insert holds it from setting the peer's fi_addr until foreach_ep has
+ * moved the peer's unexpected messages off the unspec queues.  The
+ * receive path holds it from reading a sender's fi_addr until the message
+ * is matched or queued.  A message read with the new fi_addr then queues
+ * behind its sender's older ones, and one read without it is moved by the
+ * insert.  Lock order: endpoint lock, then resolve_lock, then the AV lock
+ * or the srx unspec_lock.  The endpoint lock is never taken under it.
  */
 struct rxm_av {
 	struct util_av util_av;
@@ -962,6 +971,7 @@ struct rxm_av {
 	struct fid_av *util_coll_av;
 	struct fid_av *offload_coll_av;
 	void (*foreach_ep)(struct util_av *av, struct util_ep *util_ep);
+	struct ofi_genlock resolve_lock;
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -1364,6 +1374,9 @@ struct util_srx_ctx {
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_genlock	*lock;
+	/* Protects all unexpected queues: the unspec queues, unexp_peers and
+	 * src_unexp_peers.  foreach_unspec_addr holds only this lock while it
+	 * moves entries to their senders. */
 	struct ofi_genlock	unspec_lock;
 };
 
