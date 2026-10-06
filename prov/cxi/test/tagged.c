@@ -5464,6 +5464,7 @@ Test(tagged_src_err, addr)
 
 	/* Cleanup Second EP */
 	fi_close(&fid_ep->fid);
+	fi_close(&fid_eq->fid);
 	fi_close(&fid_av->fid);
 	fi_close(&fid_tx_cq->fid);
 	fi_close(&fid_rx_cq->fid);
