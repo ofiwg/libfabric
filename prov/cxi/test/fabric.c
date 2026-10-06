@@ -732,7 +732,7 @@ Test(fabric, close_with_open_domain)
 	cr_assert_neq(domain, NULL);
 
 	/* Verify fabric refcount was incremented */
-	cr_assert_gt(ofi_atomic_get32(&fab->ref), 0);
+	cr_assert_gt(ofi_atomic_get32(&fab->util_fabric.ref), 0);
 
 	/* Try to close fabric while domain is open - should fail */
 	ret = fi_close(&cxit_fabric->fid);
@@ -743,7 +743,7 @@ Test(fabric, close_with_open_domain)
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	/* Verify fabric refcount was decremented */
-	cr_assert_eq(ofi_atomic_get32(&fab->ref), 0);
+	cr_assert_eq(ofi_atomic_get32(&fab->util_fabric.ref), 0);
 
 	/* Now fabric close should succeed */
 	cxit_destroy_fabric();
