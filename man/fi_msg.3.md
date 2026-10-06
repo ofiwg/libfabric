@@ -57,7 +57,7 @@ ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr);
 
-ssize_t fi_recv_flush(struct fid_ep *ep, uint64_t flags);
+int fi_recv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -249,6 +249,11 @@ The fi_recv_flush call initiates receives that the provider has queued on the
 endpoint's receive queue but has not yet started, and returns once the queued
 work has been initiated.  Its primary use is to start receives deferred by the
 FI_MORE flag.  Flags are reserved for future use and must be 0.
+
+A flush call fails only on a fatal error, such as a PCIe write error, that
+prevents the deferred work from being initiated.  Per-request errors are
+reported by the individual post calls, not by flush.  On failure, the number of
+receives initiated is undefined and the endpoint should be considered unusable.
 
 ## fi_xpu_send / fi_xpu_recv
 

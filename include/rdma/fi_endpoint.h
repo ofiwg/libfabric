@@ -109,7 +109,7 @@ struct fi_ops_ep {
 	ssize_t (*tx_size_left)(struct fid_ep *ep);
 	int	(*export_xpu)(struct fid_ep *ep, uint64_t flags,
 			struct fid_xpu_ep *xpu_ep);
-	ssize_t	(*tx_flush)(struct fid_ep *ep, uint64_t flags);
+	int	(*tx_flush)(struct fid_ep *ep, uint64_t flags);
 };
 
 struct fi_ops_msg {
@@ -132,7 +132,7 @@ struct fi_ops_msg {
 			uint64_t data, fi_addr_t dest_addr, void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr);
-	ssize_t	(*recv_flush)(struct fid_ep *ep, uint64_t flags);
+	int	(*recv_flush)(struct fid_ep *ep, uint64_t flags);
 };
 
 struct fi_ops_cm;
@@ -292,7 +292,7 @@ fi_tx_size_left(struct fid_ep *ep)
 	return ep->ops->tx_size_left(ep);
 }
 
-static inline ssize_t
+static inline int
 fi_tx_flush(struct fid_ep *ep, uint64_t flags)
 {
 	return FI_CHECK_OP(ep->ops, struct fi_ops_ep, tx_flush) ?
@@ -373,7 +373,7 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ep->msg->injectdata(ep, buf, len, data, dest_addr);
 }
 
-static inline ssize_t
+static inline int
 fi_recv_flush(struct fid_ep *ep, uint64_t flags)
 {
 	return FI_CHECK_OP(ep->msg, struct fi_ops_msg, recv_flush) ?
