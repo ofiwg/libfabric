@@ -3826,8 +3826,7 @@ static void opx_drvchk_read_srcversion(char *dst, size_t len)
 		return;
 	}
 
-	char	buf[128] = {0};
-	ssize_t n	 = read(fd, buf, sizeof(buf) - 1);
+	ssize_t n	 = read(fd, dst, len - 1);
 	close(fd);
 	if (n <= 0) {
 		snprintf(dst, len, "nosrcver");
@@ -3835,11 +3834,10 @@ static void opx_drvchk_read_srcversion(char *dst, size_t len)
 	}
 
 	/* Strip the trailing newline sysfs leaves behind. */
-	buf[n] = '\0';
-	while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' ' || buf[n - 1] == '\t')) {
-		buf[--n] = '\0';
+	dst[n] = '\0';
+	while (n > 0 && (dst[n - 1] == '\n' || dst[n - 1] == '\r' || dst[n - 1] == ' ' || dst[n - 1] == '\t')) {
+		dst[--n] = '\0';
 	}
-	snprintf(dst, len, "%s", buf);
 }
 
 /*
