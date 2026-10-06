@@ -61,17 +61,19 @@ struct fi_ops_wr {
 	ssize_t	(*queue_trecv)(struct fid_ep *ep, const fi_wr wr,
 			void *context);
 	int	(*modify_addr)(struct fid_ep *ep, fi_wr wr,
-			fi_addr_t addr);
+			enum fi_op_type op_type, fi_addr_t addr);
 	int	(*modify_iov)(struct fid_ep *ep, fi_wr wr,
-			const struct iovec *iov, void **desc, size_t count);
+			enum fi_op_type op_type, const struct iovec *iov,
+			void **desc, size_t count);
 	int	(*modify_rma_iov)(struct fid_ep *ep, fi_wr wr,
+			enum fi_op_type op_type,
 			const struct fi_rma_iov *rma_iov, size_t count);
 	int	(*modify_tag)(struct fid_ep *ep, fi_wr wr,
-			uint64_t tag, uint64_t ignore);
+			enum fi_op_type op_type, uint64_t tag, uint64_t ignore);
 	int	(*modify_data)(struct fid_ep *ep, fi_wr wr,
-			uint64_t data);
+			enum fi_op_type op_type, uint64_t data);
 	int	(*modify_flags)(struct fid_ep *ep, fi_wr wr,
-			uint64_t flags);
+			enum fi_op_type op_type, uint64_t flags);
 };
 
 #ifndef FABRIC_DIRECT_WR
@@ -102,42 +104,45 @@ fi_wr_queue_trecv(struct fid_ep *ep, const fi_wr wr, void *context)
 }
 
 static inline int
-fi_wr_modify_addr(struct fid_ep *ep, fi_wr wr, fi_addr_t addr)
+fi_wr_modify_addr(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
+		  fi_addr_t addr)
 {
-	return ep->wr->modify_addr(ep, wr, addr);
+	return ep->wr->modify_addr(ep, wr, op_type, addr);
 }
 
 static inline int
-fi_wr_modify_iov(struct fid_ep *ep, fi_wr wr,
+fi_wr_modify_iov(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
 		 const struct iovec *iov, void **desc, size_t count)
 {
-	return ep->wr->modify_iov(ep, wr, iov, desc, count);
+	return ep->wr->modify_iov(ep, wr, op_type, iov, desc, count);
 }
 
 static inline int
-fi_wr_modify_rma_iov(struct fid_ep *ep, fi_wr wr,
+fi_wr_modify_rma_iov(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
 		     const struct fi_rma_iov *rma_iov, size_t count)
 {
-	return ep->wr->modify_rma_iov(ep, wr, rma_iov, count);
+	return ep->wr->modify_rma_iov(ep, wr, op_type, rma_iov, count);
 }
 
 static inline int
-fi_wr_modify_tag(struct fid_ep *ep, fi_wr wr, uint64_t tag,
-		 uint64_t ignore)
+fi_wr_modify_tag(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
+		 uint64_t tag, uint64_t ignore)
 {
-	return ep->wr->modify_tag(ep, wr, tag, ignore);
+	return ep->wr->modify_tag(ep, wr, op_type, tag, ignore);
 }
 
 static inline int
-fi_wr_modify_data(struct fid_ep *ep, fi_wr wr, uint64_t data)
+fi_wr_modify_data(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
+		  uint64_t data)
 {
-	return ep->wr->modify_data(ep, wr, data);
+	return ep->wr->modify_data(ep, wr, op_type, data);
 }
 
 static inline int
-fi_wr_modify_flags(struct fid_ep *ep, fi_wr wr, uint64_t flags)
+fi_wr_modify_flags(struct fid_ep *ep, fi_wr wr, enum fi_op_type op_type,
+		   uint64_t flags)
 {
-	return ep->wr->modify_flags(ep, wr, flags);
+	return ep->wr->modify_flags(ep, wr, op_type, flags);
 }
 
 #endif /* FABRIC_DIRECT_WR */
