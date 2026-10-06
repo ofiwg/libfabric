@@ -723,7 +723,8 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 		if (fi_param_get_size_t(&core_prov, "rocr_d2h_threshold",
 					&d2h_thresh) < 0)
 			d2h_thresh = D2H_THRESHOLD;
-		if (size < d2h_thresh) {
+		if (size < d2h_thresh &&
+		    !rocr_hsa_pointer_is_imported(src_type)) {
 			memcpy(dst, src, size);
 			ofi_hsa_signal_store_screlease(ipc_signal->sig, 0);
 			ipc_signal->addr = NULL;
