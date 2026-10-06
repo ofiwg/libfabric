@@ -287,13 +287,39 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	return ret;
 }
 
+/* Set the peers' fi_addrs and move their unexpected messages to them as one
+ * step for the receive path, see resolve_lock.  The receive path takes
+ * resolve_lock under the endpoint lock, so nothing here may take an
+ * endpoint lock.  That is why the caller, not this function, unwinds a
+ * failed insert: rxm_av_remove() takes it through the remove_handler.
+ */
+static int rxm_av_resolve_peers(struct rxm_av *av, const void *addr,
+				size_t count, fi_addr_t *fi_addr,
+				fi_addr_t *user_ids, uint64_t flags)
+{
+	struct dlist_entry *av_entry;
+	struct util_ep *util_ep;
+	int ret;
+
+	ofi_genlock_lock(&av->resolve_lock);
+	ret = rxm_av_add_peers(av, addr, count, fi_addr, user_ids, flags);
+	if (ret || !av->foreach_ep)
+		goto unlock;
+
+	dlist_foreach (&av->util_av.ep_list, av_entry) {
+		util_ep = container_of(av_entry, struct util_ep, av_entry);
+		av->foreach_ep(&av->util_av, util_ep);
+	}
+unlock:
+	ofi_genlock_unlock(&av->resolve_lock);
+	return ret;
+}
+
 static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct rxm_av *av;
 	fi_addr_t *user_ids = NULL;
-	struct dlist_entry *av_entry;
-	struct util_ep *util_ep;
 	int ret;
 
 	if (flags & FI_AV_USER_ID) {
@@ -310,19 +336,9 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 	count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr, user_ids, flags);
-	if (ret) {
+	ret = rxm_av_resolve_peers(av, addr, count, fi_addr, user_ids, flags);
+	if (ret)
 		rxm_av_remove(av_fid, fi_addr, count, flags);
-		goto out;
-	}
-
-	if (!av->foreach_ep)
-		goto out;
-
-	dlist_foreach (&av->util_av.ep_list, av_entry) {
-		util_ep = container_of(av_entry, struct util_ep, av_entry);
-		av->foreach_ep(&av->util_av, util_ep);
-	}
 
 out:
 	free(user_ids);
@@ -356,7 +372,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	if (ret > 0 && ret < count)
 		count = ret;
 
-	ret = rxm_av_add_peers(av, addr, count, fi_addr, NULL, flags);
+	ret = rxm_av_resolve_peers(av, addr, count, fi_addr, NULL, flags);
 	if (ret) {
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		return ret;
@@ -413,6 +429,7 @@ static int rxm_av_close(struct fid *av_fid)
 	if (ret)
 		return ret;
 
+	ofi_genlock_destroy(&av->resolve_lock);
 	ofi_rbmap_cleanup(&av->addr_map);
 	ofi_bufpool_destroy(av->conn_pool);
 	ofi_bufpool_destroy(av->peer_pool);
@@ -475,9 +492,19 @@ int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_TABLE;
 
-	ret = ofi_av_init(domain, attr, &util_attr, &av->util_av, context);
+	/* Under FI_THREAD_DOMAIN the application serializes inserts with
+	 * progress.  Otherwise an insert can race the receive path even when
+	 * the endpoint lock is a no-op.
+	 */
+	ret = ofi_genlock_init(&av->resolve_lock,
+			       domain->threading == FI_THREAD_DOMAIN ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
 	if (ret)
 		goto destroy2;
+
+	ret = ofi_av_init(domain, attr, &util_attr, &av->util_av, context);
+	if (ret)
+		goto destroy3;
 
 	av->util_av.av_fid.fid.ops = &rxm_av_fi_ops;
 	av->util_av.av_fid.ops = &rxm_av_ops;
@@ -486,6 +513,8 @@ int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	*fid_av = &av->util_av.av_fid;
 	return 0;
 
+destroy3:
+	ofi_genlock_destroy(&av->resolve_lock);
 destroy2:
 	ofi_bufpool_destroy(av->conn_pool);
 destroy1:
