@@ -29,6 +29,7 @@
  */
 
 #include <rdma/fi_xpu.h>
+#include <rdma/fi_trigger.h>
 
 typedef void *fi_wr;
 struct fi_wr_attr;
@@ -237,7 +238,7 @@ fi_xpu_trecv_flush(struct fid_xpu_ep *ep, uint64_t flags, int scope)
 /* xpu_addr references fi_xpu_ctx_attr::av_addr_size bytes. */
 FI_XPU_FUNC int
 fi_xpu_wr_modify_addr(struct fid_xpu_ep *ep, fi_wr wr,
-		      const void *xpu_addr, int scope)
+		      enum fi_op_type op_type, const void *xpu_addr, int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
@@ -248,8 +249,8 @@ fi_xpu_wr_modify_addr(struct fid_xpu_ep *ep, fi_wr wr,
 /* desc references count * fi_xpu_ctx_attr::mr_desc_size bytes. */
 FI_XPU_FUNC int
 fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep, fi_wr wr,
-		     const struct iovec *iov, const void *desc, size_t count,
-		     int scope)
+		     enum fi_op_type op_type, const struct iovec *iov,
+		     const void *desc, size_t count, int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
@@ -259,6 +260,7 @@ fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep, fi_wr wr,
 
 FI_XPU_FUNC int
 fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep, fi_wr wr,
+			 enum fi_op_type op_type,
 			 const struct fi_rma_iov *rma_iov, size_t count,
 			 int scope)
 {
@@ -270,7 +272,8 @@ fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep, fi_wr wr,
 
 FI_XPU_FUNC int
 fi_xpu_wr_modify_tag(struct fid_xpu_ep *ep, fi_wr wr,
-		     uint64_t tag, uint64_t ignore, int scope)
+		     enum fi_op_type op_type, uint64_t tag, uint64_t ignore,
+		     int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
@@ -280,7 +283,7 @@ fi_xpu_wr_modify_tag(struct fid_xpu_ep *ep, fi_wr wr,
 
 FI_XPU_FUNC int
 fi_xpu_wr_modify_data(struct fid_xpu_ep *ep, fi_wr wr,
-		      uint64_t data, int scope)
+		      enum fi_op_type op_type, uint64_t data, int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
@@ -290,7 +293,7 @@ fi_xpu_wr_modify_data(struct fid_xpu_ep *ep, fi_wr wr,
 
 FI_XPU_FUNC int
 fi_xpu_wr_modify_flags(struct fid_xpu_ep *ep, fi_wr wr,
-		       uint64_t flags, int scope)
+		       enum fi_op_type op_type, uint64_t flags, int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
