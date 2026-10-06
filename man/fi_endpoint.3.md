@@ -123,7 +123,7 @@ DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
 int fi_ep_export_xpu(struct fid_ep *ep, uint64_t flags,
     struct fid_xpu_ep *xpu_ep);
 
-ssize_t fi_tx_flush(struct fid_ep *ep, uint64_t flags);
+int fi_tx_flush(struct fid_ep *ep, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -449,6 +449,11 @@ The primary use of the flush calls is to start operations deferred by the
 FI_MORE flag. An application that posts a batch of transfers, each but the last
 carrying FI_MORE, may call the matching flush instead of issuing a final request
 without FI_MORE, which is useful when the batch size is not known in advance.
+
+A flush call fails only on a fatal error, such as a PCIe write error, that
+prevents the deferred work from being initiated.  Per-request errors are
+reported by the individual post calls, not by flush.  On failure, the number of
+requests initiated is undefined and the endpoint should be considered unusable.
 
 ## fi_ep_alias
 
