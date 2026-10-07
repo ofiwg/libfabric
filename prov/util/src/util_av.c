@@ -434,7 +434,7 @@ size_t ofi_av_size(struct util_av *av)
 static int util_verify_av_util_attr(struct util_domain *domain,
 				    const struct util_av_attr *util_attr)
 {
-	if (util_attr->flags & ~(OFI_AV_DYN_ADDRLEN)) {
+	if (util_attr->flags & ~(OFI_AV_DYN_ADDRLEN | OFI_AV_ENTRY_POOL_EAGER_GROW)) {
 		FI_WARN(domain->prov, FI_LOG_AV, "invalid internal flags\n");
 		return -FI_EINVAL;
 	}
@@ -481,7 +481,21 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	av->hash = NULL;
 
 	pool_attr.chunk_cnt = orig_size;
-	return ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
+	ret = ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
+	if (ret)
+		return ret;
+
+	/* Pre-grow the pool now instead of lazily on first insert. */
+	if (util_attr->flags & OFI_AV_ENTRY_POOL_EAGER_GROW) {
+		ret = ofi_bufpool_grow(av->av_entry_pool);
+		if (ret) {
+			ofi_bufpool_destroy(av->av_entry_pool);
+			av->av_entry_pool = NULL;
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 static int util_verify_av_attr(struct util_domain *domain,
