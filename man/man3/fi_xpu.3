@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_xpu" "3" "2026\-10\-01" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_xpu" "3" "2026\-10\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -542,19 +542,21 @@ FI_XPU_FUNC int fi_xpu_trecv_flush(struct fid_xpu_ep *ep, uint64_t flags,
     int scope);
 
 FI_XPU_FUNC int fi_xpu_wr_modify_addr(struct fid_xpu_ep *ep,
-    fi_wr wr, const void *xpu_addr, int scope);
-FI_XPU_FUNC int fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep,
-    fi_wr wr, const struct iovec *iov, const void *desc,
-    size_t count, int scope);
-FI_XPU_FUNC int fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep,
-    fi_wr wr, const struct fi_rma_iov *rma_iov, size_t count,
+    fi_wr wr, enum fi_op_type op_type, const void *xpu_addr,
     int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep,
+    fi_wr wr, enum fi_op_type op_type, const struct iovec *iov,
+    const void *desc, size_t count, int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep,
+    fi_wr wr, enum fi_op_type op_type,
+    const struct fi_rma_iov *rma_iov, size_t count, int scope);
 FI_XPU_FUNC int fi_xpu_wr_modify_tag(struct fid_xpu_ep *ep,
-    fi_wr wr, uint64_t tag, uint64_t ignore, int scope);
+    fi_wr wr, enum fi_op_type op_type, uint64_t tag,
+    uint64_t ignore, int scope);
 FI_XPU_FUNC int fi_xpu_wr_modify_data(struct fid_xpu_ep *ep,
-    fi_wr wr, uint64_t data, int scope);
+    fi_wr wr, enum fi_op_type op_type, uint64_t data, int scope);
 FI_XPU_FUNC int fi_xpu_wr_modify_flags(struct fid_xpu_ep *ep,
-    fi_wr wr, uint64_t flags, int scope);
+    fi_wr wr, enum fi_op_type op_type, uint64_t flags, int scope);
 \f[R]
 .fi
 .SS Completion Functions
