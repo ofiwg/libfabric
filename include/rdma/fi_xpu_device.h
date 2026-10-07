@@ -35,7 +35,7 @@ typedef void *fi_wr;
 struct fi_wr_attr;
 struct fi_rma_iov;
 
-#if defined(__CUDACC__) || (defined(__HIP_DEVICE_COMPILE__) && __HIP_DEVICE_COMPILE__)
+#if defined(__CUDACC__) || defined(__HIPCC__)
   #define FI_XPU_FUNC __device__ static inline
 #elif defined(__SYCL_DEVICE_ONLY__)
   #define FI_XPU_FUNC static inline
