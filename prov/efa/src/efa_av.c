@@ -618,7 +618,7 @@ int efa_av_init_util_av(struct efa_domain *efa_domain,
 
 	util_attr.addrlen = EFA_EP_ADDR_LEN;
 	util_attr.context_len = context_len;
-	util_attr.flags = 0;
+	util_attr.flags = OFI_AV_ENTRY_POOL_EAGER_GROW;
 	return ofi_av_init(&efa_domain->util_domain, attr, &util_attr,
 			   util_av, context);
 }
