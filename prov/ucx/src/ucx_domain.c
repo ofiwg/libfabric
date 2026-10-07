@@ -227,6 +227,17 @@ static inline void ucx_update_memtype_cache(enum fi_hmem_iface iface,
 	 * this range.
 	 */
 	ucs_memtype_cache_update(base, size, UCS_MEMORY_TYPE_UNKNOWN,
+#if (UCP_API_MAJOR > 1) || (UCP_API_MAJOR == 1 && UCP_API_MINOR >= 22)
+			       /*
+				* UCX 1.22 introduced a memory registration flag
+				* so providers can report whether a memory region
+				* is safe to register.
+				* Memory type is unknown here, so use 0.
+				* UCX will detect the true type and registrability
+				* flags on the next lookup
+				*/
+				 0,
+#endif
 				 UCS_SYS_DEVICE_ID_UNKNOWN);
 }
 
