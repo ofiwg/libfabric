@@ -14,6 +14,12 @@ extern "C" {
 /*
  * Cooperative scope hints — specifies the set of threads issuing the
  * same operation collectively.
+ *
+ * A call at a scope other than FI_XPU_WORK_ITEM is one operation for the
+ * scope: every thread passes identical arguments and gets the same result.
+ * Threads that each issue an operation of their own call at
+ * FI_XPU_WORK_ITEM; the threads of a subgroup that make such a call together
+ * must name the same object.
  */
 enum {
 	FI_XPU_WORK_ITEM,
