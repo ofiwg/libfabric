@@ -543,6 +543,12 @@ void test_av_implicit_av_lru_eviction(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer0, *peer1, *peer2, *peer3;
 	struct efa_ep_addr_hashable *efa_ep_addr_hashable;
+	/*
+	 * Eviction frees the evicted peer and its AV entry, and the next insert
+	 * can recycle both, so keep copies of the addresses to look up instead
+	 * of dereferencing an evicted peer.
+	 */
+	struct efa_ep_addr addr1, addr2, addr3;
 	struct efa_av *av;
 	fi_addr_t implicit_fi_addr;
 	uint32_t ahn;
@@ -564,6 +570,7 @@ void test_av_implicit_av_lru_eviction(void **state)
 	/* Manually insert second address into implicit AV */
 	peer1 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
+	addr1 = *efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry);
 
 	/* Expected LRU list: HEAD->peer0->peer1 */
 	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer1->av_entry);
@@ -581,18 +588,21 @@ void test_av_implicit_av_lru_eviction(void **state)
 	/* Manually insert third address into implicit AV */
 	peer2 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
+	addr2 = *efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry);
 
 	/* Expected LRU list: HEAD->peer0->peer2 */
 	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer2->av_entry);
 
-	/* Verify that peer1 is evicted and added to the evicted hashmap */
+	/* Verify that peer1 is evicted and added to the evicted hashmap, and
+	 * that the address being inserted is not */
 	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset), 1);
-	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry),
+	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, &addr1,
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
 	assert_non_null(efa_ep_addr_hashable);
-	assert_int_equal(efa_is_same_addr(efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry),
-					  &efa_ep_addr_hashable->addr),
-			 1);
+	assert_int_equal(efa_is_same_addr(&addr1, &efa_ep_addr_hashable->addr), 1);
+	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, &addr2,
+		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
+	assert_null(efa_ep_addr_hashable);
 
 	/* Access peer0 through the raw address lookup path */
 	implicit_fi_addr = test_av_implicit_av_lookup_raw_addr(
@@ -606,15 +616,17 @@ void test_av_implicit_av_lru_eviction(void **state)
 	/* Manually insert fourth address into implicit AV */
 	peer3 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
+	addr3 = *efa_av_entry_ep_addr(&peer3->av_entry->efa_av_entry);
 
 	/* Verify that peer2 is evicted and added to the evicted hashmap */
 	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset), 2);
-	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry),
+	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, &addr2,
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
 	assert_non_null(efa_ep_addr_hashable);
-	assert_int_equal(efa_is_same_addr(efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry),
-					  &efa_ep_addr_hashable->addr),
-			 1);
+	assert_int_equal(efa_is_same_addr(&addr2, &efa_ep_addr_hashable->addr), 1);
+	HASH_FIND(hh, ((struct efa_rdm_av *)(av))->evicted_peers_hashset, &addr3,
+		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
+	assert_null(efa_ep_addr_hashable);
 
 	/* Expected LRU list: HEAD->peer0->peer3 */
 	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer3->av_entry);

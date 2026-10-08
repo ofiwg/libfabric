@@ -292,9 +292,11 @@ static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 		goto out;
 
 	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(!dlist_empty(&rdm_av->implicit_av_lru_list));
 
-	dlist_pop_front(&rdm_av->implicit_av_lru_list, struct efa_rdm_av_entry,
-			av_entry_to_release, implicit_av_lru_entry);
+	av_entry_to_release = container_of(rdm_av->implicit_av_lru_list.next,
+					   struct efa_rdm_av_entry,
+					   implicit_av_lru_entry);
 	EFA_INFO(FI_LOG_AV,
 		 "Evicting AV entry for peer implicit fi_addr %" PRIu64
 		 " AHN %" PRIu16 " QPN %" PRIu16 " QKEY %" PRIu32 " from "
@@ -304,13 +306,15 @@ static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 		 efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry)->qpn,
 		 efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry)->qkey);
 
-	/* Add to hashset with list of evicted peers */
+	/* Remember the evicted peer, so that its packets are dropped. */
 	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
 	if (!ep_addr_hashable) {
 		EFA_WARN(FI_LOG_AV, "Could not allocate memory for LRU AV entry hashset entry\n");
-		return FI_ENOMEM;
+		return -FI_ENOMEM;
 	}
-	memcpy(ep_addr_hashable, efa_av_entry_ep_addr(&av_entry->efa_av_entry), sizeof(struct efa_ep_addr));
+	memcpy(ep_addr_hashable,
+	       efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry),
+	       sizeof(struct efa_ep_addr));
 	HASH_ADD(hh, rdm_av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
 
 	efa_rdm_av_entry_release_implicit(av, av_entry_to_release);
@@ -683,6 +687,7 @@ void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entr
 	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 				     &rdm_av->prv_reverse_av_implicit,
 				     &av_entry->efa_av_entry);
+	dlist_remove(&av_entry->implicit_av_lru_entry);
 
 	efa_rdm_av_entry_deinit(av, av_entry);
 
@@ -712,6 +717,7 @@ void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
 	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 				     &rdm_av->prv_reverse_av_implicit,
 				     &av_entry->efa_av_entry);
+	dlist_remove(&av_entry->implicit_av_lru_entry);
 
 	efa_rdm_av_entry_deinit(av, av_entry);
 
