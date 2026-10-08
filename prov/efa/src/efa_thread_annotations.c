@@ -11,5 +11,6 @@ OFI_TSA_LOCK_SYMBOL_DEFINE(efa_srx_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_implicit_av_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_ctrl_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_av_ep_list_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DEFINE(efa_av_conn_pool_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_util_av_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_util_domain_lock_sym);

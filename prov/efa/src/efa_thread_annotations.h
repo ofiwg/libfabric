@@ -108,7 +108,8 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
  *   srx_lock -> util_domain.lock -> util_av.lock -> util_av_implicit.lock
  *            -> util_av.ep_list_lock -> ctrl_lock
  *
- * and ctrl_lock is a leaf. See prov/efa/docs/efa_rdm_av_locking.md.
+ * and ctrl_lock is a leaf. The AV's conn_pool_lock is a separate leaf under
+ * the AV locks. See prov/efa/docs/efa_rdm_av_locking.md.
  */
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_ibv_cq_poll_list_lock_sym);
@@ -132,5 +133,8 @@ OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_av_ep_list_lock_sym,
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_ctrl_lock_sym,
 					   efa_av_ep_list_lock_sym,
 					   efa_srx_lock_sym);
+/* Leaf: held only around conn allocation and free. */
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_av_conn_pool_lock_sym,
+					   efa_implicit_av_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */

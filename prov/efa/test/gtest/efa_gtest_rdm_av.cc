@@ -32,10 +32,14 @@ class EfaConnTest : public Test
 };
 
 /**
- * @brief efa_conn_alloc unwinds the conn via efa_rdm_av_entry_deinit when
- * efa_av_reverse_av_add fails, so the insert fails cleanly.
+ * @brief An implicit insert whose map reservation fails unwinds the conn, the
+ * AH, the LRU entry and the util AV slot, so the insert fails cleanly.
+ *
+ * Every map slot is reserved before the conn is published, so the publication
+ * itself (efa_av_reverse_av_add on a reserved slot) cannot fail; the
+ * reservation is where an allocation failure can happen.
  */
-TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
+TEST_F(EfaConnTest, alloc_reserve_failure_rdm_cleanup)
 {
 	fi_addr_t addr;
 	static struct ibv_ah dummy_ibv_ah;
@@ -54,20 +58,19 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 		.WillOnce(Return(0));
 	EFA_EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
+	EFA_EXPECT_CALL(mock_efa, efa_av_array_reserve)
 		.WillOnce(Return(-FI_ENOMEM));
+	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add).Times(0);
 
 	addr = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
 }
 
 /**
- * @brief Test that efa_conn_alloc cleans up RDM resources when
- * efa_av_reverse_av_add fails via the explicit fi_av_insert path
- * (insert_implicit_av=false). The explicit path acquires the SRX lock
- * itself before calling efa_av_insert_one_explicit.
+ * @brief Same as alloc_reserve_failure_rdm_cleanup, through the explicit
+ * fi_av_insert path.
  */
-TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
+TEST_F(EfaConnTest, alloc_reserve_failure_explicit_insert)
 {
 	fi_addr_t addr;
 	int num_addr;
@@ -87,8 +90,9 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 		.WillOnce(Return(0));
 	EFA_EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
+	EFA_EXPECT_CALL(mock_efa, efa_av_array_reserve)
 		.WillOnce(Return(-FI_ENOMEM));
+	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add).Times(0);
 
 	num_addr = efa_test_av_insert_fake_gid(resource.ep, resource.av, &addr);
 	EXPECT_EQ(num_addr, 0);

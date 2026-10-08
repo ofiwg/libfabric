@@ -17,23 +17,50 @@ struct efa_rdm_pke;
  * implicit AV (peers that send to us before the application inserts them), the
  * connid-aware previous-connection reverse maps, the SHM sub-AV, the implicit
  * AV LRU eviction list and the evicted-peers hashset.
+ *
+ * Every remote endpoint known to the AV is one efa_rdm_av_entry (a "conn")
+ * allocated from conn_pool. The explicit and implicit util AVs only provide the
+ * raw address hash and the fi_addr allocator; their entries carry no context.
+ * fi_addr -> conn goes through addr_to_entry_map (explicit) and
+ * addr_to_entry_map_implicit (implicit), and (AHN, QPN) -> conn through
+ * cur_reverse_av and cur_reverse_av_implicit. All four are efa_av_arrays with
+ * lock-free readers. A conn keeps its address and its peer_idx from the moment
+ * it enters the AV until it leaves it; promotion from the implicit to the
+ * explicit AV only changes which of these maps point at it.
+ *
+ * Writers of the explicit maps hold util_av.lock; writers of the implicit maps
+ * hold util_av_implicit.lock. Deciding that an address is in neither AV (and
+ * inserting it implicitly) requires both. See
+ * prov/efa/docs/efa_rdm_av_locking.md.
  */
 struct efa_rdm_av {
 	struct efa_av efa_av;
 
 	struct fid_av *shm_rdm_av;
-	size_t shm_used;
+	size_t shm_used OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
 
 	/* prv_reverse_av is a map from (ahn + qpn + connid) to all previous
-	 * efa_av_entries, used only by the connid-aware RDM reverse lookup. */
+	 * explicit conns, used only by the connid-aware RDM reverse lookup. */
 	struct efa_prv_reverse_av *prv_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
+
+	/*
+	 * Owns every conn. Indexed, so ofi_buf_index() of a conn is its
+	 * peer_idx: dense, and reused only after the conn is freed. Pool memory
+	 * stays mapped until the AV is closed. conn_pool_lock is a leaf held
+	 * only around ofi_ibuf_alloc/free: conns are created under util_av.lock
+	 * (explicit) or util_av_implicit.lock (implicit), and AH eviction frees
+	 * implicit conns of any AV in the domain holding only that AV's
+	 * util_av_implicit.lock.
+	 */
+	struct ofi_genlock conn_pool_lock;
+	struct ofi_bufpool *conn_pool OFI_TSA_GUARDED_BY(efa_av_conn_pool_lock_sym);
 
 	/* implicit AV is used when receiving messages from peers not explicitly
 	 * inserted by the application */
 	struct util_av util_av_implicit;
 	struct efa_av_array *addr_to_entry_map_implicit;
 	struct efa_av_array *cur_reverse_av_implicit;
-	struct efa_prv_reverse_av *prv_reverse_av_implicit;
+	struct efa_prv_reverse_av *prv_reverse_av_implicit OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
 
 	size_t implicit_av_size;
 	struct dlist_entry implicit_av_lru_list OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
@@ -44,7 +71,7 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
 	       "efa_av must be the first member of efa_rdm_av");
 
 /**
- * @brief Publication state of an AV entry, tracked in debug builds only
+ * @brief Publication state of a conn, tracked in debug builds only
  *
  * The CQ read fast path resolves a peer with three lookups, the first two of
  * which are lock free:
@@ -55,27 +82,29 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
  *
  * Lookup 1 or 3 runs first and lookup 2 second, so an fi_addr must never become
  * visible to lookup 1 or 3 while lookup 2 would still miss for a peer that
- * already exists. Publishing an entry therefore has to update the peer maps
- * before adding the entry to the reverse AV; see efa_rdm_av_entry_publish.
+ * already exists. The TX path depends on addr_to_entry_map and lookup 2 in the
+ * same way. Promoting a conn to the explicit AV therefore has to move its peers
+ * to the explicit fi_addr before the conn is added to the explicit maps; see
+ * efa_rdm_av_entry_implicit_to_explicit.
  *
- * For an explicit AV entry, these states record where an entry is in that
- * sequence so the ordering can be checked with asserts and unit tests.
+ * For an explicit conn, these states record where it is in that sequence so
+ * the ordering can be checked with asserts and unit tests.
  *
- *   UNPUBLISHED  allocated, fi_addr assigned, invisible to lookups 1 and 3
+ *   UNPUBLISHED  allocated, invisible to lookups 1 and 3
  *   PEERS_READY  peer maps updated, still invisible to lookups 1 and 3
  *   PUBLISHED    visible to lookups 1 and 3, so lookup 2 must resolve
  *
- * Implicit AV entries also start in the UNPUBLISHED state but they can only
- * get to the IMPLICIT state.
+ * An implicit conn is in the IMPLICIT state until it is promoted, which takes
+ * it through PEERS_READY to PUBLISHED. A new explicit conn has no peers to move
+ * and goes straight to PUBLISHED.
  *
  * The same hazard does exist on the implicit side, in the opposite direction.
- * When the AV entry moves from implicit AV to explicit AV, the peer maps are
- * updated before the reverse AV. But all accesses to the implicit AV take the
- * util_av_implicit.lock, so the issue is beningn.
+ * When a conn moves from the implicit AV to the explicit AV, the peer maps are
+ * updated before the implicit reverse AV. But all accesses to the implicit AV
+ * take the util_av_implicit.lock, so the issue is benign.
  *
- * The util AV entry pool does not zero recycled buffers, so a reused entry would
- * start out holding the previous occupant's state. Both the allocation and teardown
- * paths set the state to UNPUBLISHED to avoid any reuse.
+ * Conns are zeroed when they are allocated from conn_pool, so a recycled conn
+ * starts out UNPUBLISHED.
  */
 enum efa_rdm_av_entry_publish_state {
 	EFA_RDM_AV_ENTRY_UNPUBLISHED = 0,
@@ -85,20 +114,29 @@ enum efa_rdm_av_entry_publish_state {
 };
 
 /**
- * @brief RDM address vector entry
+ * @brief RDM AV entry ("conn"): one remote endpoint known to the AV
  *
- * Embeds the base efa_av_entry as its first member and adds the RDM-only state.
+ * Allocated from efa_rdm_av->conn_pool when the remote first enters the AV,
+ * either explicitly through fi_av_insert() or implicitly when a packet arrives
+ * from an unknown sender, and freed when it leaves the AV. The same object
+ * represents the remote while it is implicit, across promotion to the explicit
+ * AV, and while it is explicit, so a peer's av_entry pointer never changes.
  *
  * efa_av_entry.fi_addr and implicit_fi_addr are written under the AV locks but
  * read on the data path without them (completion source addresses, SRX
- * matching, logging), so readers go through the atomic accessors below.
+ * matching, logging), so every access goes through the atomic accessors below.
  */
 struct efa_rdm_av_entry {
 	struct efa_av_entry	efa_av_entry;
 	struct efa_rdm_av	*av;
 	fi_addr_t		implicit_fi_addr;
 	fi_addr_t		shm_fi_addr;
-	struct dlist_entry	implicit_av_lru_entry;
+	/*
+	 * Index of this conn in conn_pool. Assigned at allocation and
+	 * immutable until the conn is freed.
+	 */
+	uint32_t		peer_idx;
+	struct dlist_entry	implicit_av_lru_entry OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
 	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
 #if ENABLE_DEBUG
 	enum efa_rdm_av_entry_publish_state publish_state;
@@ -124,7 +162,7 @@ struct efa_rdm_av_entry {
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");
 
-/* fi_addr of the entry in the explicit AV, or FI_ADDR_NOTAVAIL if it is not in
+/* fi_addr of the conn in the explicit AV, or FI_ADDR_NOTAVAIL if it is not in
  * the explicit AV. Safe without any lock. */
 static inline fi_addr_t
 efa_rdm_av_entry_fi_addr(const struct efa_rdm_av_entry *av_entry)
@@ -132,7 +170,7 @@ efa_rdm_av_entry_fi_addr(const struct efa_rdm_av_entry *av_entry)
 	return __atomic_load_n(&av_entry->efa_av_entry.fi_addr, __ATOMIC_ACQUIRE);
 }
 
-/* fi_addr of the entry in the implicit AV, or FI_ADDR_NOTAVAIL. Safe without any
+/* fi_addr of the conn in the implicit AV, or FI_ADDR_NOTAVAIL. Safe without any
  * lock, but only stable under util_av_implicit.lock. */
 static inline fi_addr_t
 efa_rdm_av_entry_implicit_fi_addr(const struct efa_rdm_av_entry *av_entry)

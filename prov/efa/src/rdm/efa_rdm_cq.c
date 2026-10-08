@@ -583,10 +583,11 @@ out:
 		return NULL;
 	}
 
-	assert((efa_rdm_av_entry_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL &&
-		efa_rdm_av_entry_implicit_fi_addr(peer->av_entry) == FI_ADDR_NOTAVAIL) ||
-	       (efa_rdm_av_entry_implicit_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL &&
-		efa_rdm_av_entry_fi_addr(peer->av_entry) == FI_ADDR_NOTAVAIL));
+	/* The conn is in the explicit or the implicit AV. Promotion sets the
+	 * explicit fi_addr before it clears the implicit one, so a reader racing
+	 * with a promotion can see both set, but never neither. */
+	assert(efa_rdm_av_entry_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL ||
+	       efa_rdm_av_entry_implicit_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL);
 	return peer;
 
 unlock_insert_err:

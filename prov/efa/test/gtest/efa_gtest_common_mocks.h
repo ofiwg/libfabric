@@ -118,6 +118,8 @@ struct dlist_entry;
 	  (struct efa_av * av, uint16_t ahn, uint16_t qpn,                      \
 	   struct efa_rdm_pke *pkt_entry),                                     \
 	  (av, ahn, qpn, pkt_entry))                                           \
+	X(int, efa_av_array_reserve,                                           \
+	  (struct efa_av_array * arr, uint64_t index), (arr, index))            \
 	X(fi_addr_t, ofi_av_lookup_fi_addr,                                    \
 	  (struct util_av * av, const void *addr), (av, addr))                 \
 	X(int, ofi_mr_map_insert,                                              \

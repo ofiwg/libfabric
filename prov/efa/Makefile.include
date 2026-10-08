@@ -373,6 +373,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=ibv_destroy_ah \
 	-Wl,--wrap=efadv_query_ah \
 	-Wl,--wrap=efa_av_reverse_av_add \
+	-Wl,--wrap=efa_av_array_reserve \
 	-Wl,--wrap=ofi_mr_map_insert \
 	-Wl,--wrap=cuda_set_sync_memops \
 	-Wl,--wrap=ofi_cuDevicePrimaryCtxGetState \
