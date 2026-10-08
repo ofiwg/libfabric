@@ -905,6 +905,8 @@ struct util_av {
 };
 
 #define OFI_AV_DYN_ADDRLEN (1 << 0)
+/* Grow the AV entry pool to its full initial size at init instead of lazily. */
+#define OFI_AV_ENTRY_POOL_EAGER_GROW  (1 << 1)
 
 struct util_av_attr {
 	/* Must be a multiple of 8 bytes */
