@@ -735,6 +735,9 @@ static void ofi_find_prov_libs(void)
 			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);
 		} else if (ofi_has_offload_prefix(prov->prov_name)) {
 			short_prov_name = prov->prov_name + strlen(OFI_OFFLOAD_PREFIX);
+		} else if (!strcasecmp(prov->prov_name, "psm2")) {
+			/* The psm2 provider is built as libpsmx2-fi.so */
+			short_prov_name = "psmx2";
 		} else {
 			short_prov_name = prov->prov_name;
 		}
