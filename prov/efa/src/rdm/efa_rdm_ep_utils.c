@@ -23,6 +23,7 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_rtw.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longcts.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -1262,35 +1263,34 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			continue;
 
+		/*
+		 * The long CTS message protocol owns its CTSDATA packets: its
+		 * construct_tx_pkes() reads ope->bytes_sent and ope->window and
+		 * builds the next burst from there, so a partially completed ope
+		 * needs nothing from this loop beyond the call. The emulated long
+		 * CTS write and read sub-protocols share this list and have not
+		 * moved, so they still go through the legacy post.
+		 *
+		 * efa_rdm_msg_post_rtm_proto() rather than
+		 * efa_rdm_msg_repost_rtm_proto(): the latter is for an ope queued
+		 * before the handshake and re-runs the zero-copy reselection,
+		 * neither of which applies to an ope whose REQ the peer has
+		 * already answered with a CTS.
+		 *
+		 * Future protocols that need to send packets in response to a
+		 * received packet should NOT maintain an ope list like the long
+		 * CTS does. Instead, they should handle the packet construction
+		 * and sending in the receive completion callback itself.
+		 */
 		if (ope->window > 0) {
-			if (efa_rdm_mr_gen_check_ope(ope)) {
-				/* TODO: When moving the Long CTS protocol, make
-				 * sure that construct_tx_pkes can correctly
-				 * generate CTSDATA packets for a partially
-				 * processed OPE. Verify that this entire code
-				 * path works end-to-end.
-				 *
-				 * Future protocols that need to send packets in
-				 * response to a received packet should NOT
-				 * maintain an ope list like the long CTS does.
-				 * Instead, they should handle the packet
-				 * construction and sending in the receive
-				 * completion callback itself.
-				 */
-				if (ope->proto) {
-					assert(ope->type == EFA_RDM_TXE);
-					if (efa_rdm_ep_get_available_tx_pkts(
-						    ope->ep) == 0)
-						ret = -FI_EAGAIN;
-					else
-						ret = efa_rdm_msg_post_rtm_proto(
-							ope->ep, ope,
-							ope->proto);
-				}
-				ret = efa_rdm_ope_post_send(
-					ope, EFA_RDM_CTSDATA_PKT);
-			} else
+			if (!efa_rdm_mr_gen_check_ope(ope))
 				ret = -FI_ECANCELED;
+			else if (ope->proto == &efa_rdm_proto_longcts)
+				ret = efa_rdm_msg_post_rtm_proto(ope->ep, ope,
+								 ope->proto);
+			else
+				ret = efa_rdm_ope_post_send(ope,
+							    EFA_RDM_CTSDATA_PKT);
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
 				efa_rdm_txe_handle_error(ope, -ret,

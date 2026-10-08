@@ -354,7 +354,8 @@ class EfaRdmProtoForceTest : public TestWithParam<EfaRdmProtoForceCase>
 /**
  * @brief FI_EFA_RDM_FORCE_SEND_PROTO replaces the size decision with a name
  * match, so the named protocol is selected whether or not the size suits it,
- * and a name no registered protocol answers to fails the send.
+ * and a name no registered protocol answers to fails the send with
+ * -FI_EOPNOTSUPP -- there is no legacy path left to fall back to.
  *
  * Overriding the size decision is the point: no threshold can steer a message
  * that fits in one packet away from eager, which claims it first.
@@ -369,10 +370,8 @@ TEST_P(EfaRdmProtoForceTest, forced_name_replaces_the_size_decision)
 						   c.len, &res),
 		  0);
 
-	// TODO: after all protocols are migrated, protocol selection should
-	// fail with -FI_EINVAL
 	if (!c.expected_proto) {
-		EXPECT_EQ(res.ret, FI_SUCCESS);
+		EXPECT_EQ(res.ret, -FI_EOPNOTSUPP);
 		EXPECT_STREQ(res.proto_name, "");
 		return;
 	}
@@ -391,8 +390,13 @@ INSTANTIATE_TEST_SUITE_P(
 				    EFA_TEST_PROTO_MEDIUM_LEN, "eager"},
 	       EfaRdmProtoForceCase{"medium_ignores_zero_length", "medium", 0,
 				    "medium"},
-	       /* Not on the interface yet, so nothing in the registry answers. */
-	       EfaRdmProtoForceCase{"longread_fails", "longread", 64, nullptr},
+	       /* A read protocol's predicate would decline a 64 byte send. */
+	       EfaRdmProtoForceCase{"runtread_picks_runtread", "runtread", 64,
+				    "runtread"},
+	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
+				    "longread"},
+	       EfaRdmProtoForceCase{"longcts_picks_longcts", "longcts", 64,
+				    "longcts"},
 	       /* A write protocol's name is not a send protocol's name. */
 	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
 				    nullptr},
