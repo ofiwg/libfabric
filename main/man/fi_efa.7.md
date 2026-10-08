@@ -280,6 +280,28 @@ requires peer to peer transaction support between the EFA and the FI_HMEM
 device. Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
 provider for AWS Neuron or Habana SynapseAI.
 
+## CUDA VMM synchronization
+
+For CUDA memory regions, the `efa` fabric normally sets
+`CU_POINTER_ATTRIBUTE_SYNC_MEMOPS` before the first transmit operation. CUDA
+VMM allocations (`cuMemCreate` and `cuMemMap`) do not support this attribute,
+so on CUDA 12.1 or later the provider instead sets `CU_CTX_SYNC_MEMOPS` on the
+memory region's device primary context. This also works when the calling thread
+has no current CUDA context.
+
+Both pointer- and context-level synchronization are performed only when
+`FI_OPT_CUDA_API_PERMITTED` is set to `true`, which is the default.
+Applications that do not want the provider to modify CUDA buffer or context
+state can set this option to `false`. Doing so also disables the SHM provider
+for intra-node communication, intra-node traffic then uses the EFA device instead,
+which may reduce performance.
+
+The context-level fallback only covers synchronous CUDA memory operations
+initiated on the device's primary context. Applications using VMM buffers from
+contexts created with `cuCtxCreate` must either enable `CU_CTX_SYNC_MEMOPS` on
+those contexts or explicitly order CUDA work and EFA transfers using CUDA
+synchronization APIs.
+
 ## CUDA memory registration on the P6e-GB200 instance type
 
 A CUDA dmabuf file descriptor encodes one DMA path to GPU memory, and that
