@@ -161,6 +161,10 @@ static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
 	if (ret)
 		return ret;
 
+	ret = efa_rdm_ep_peer_map_init(&ep->tx_peer_cache);
+	if (ret)
+		return ret;
+
 	ret = ofi_bufpool_create(&ep->peer_robuf_pool,
 				(sizeof(struct efa_rdm_pke*) * (roundup_power_of_two(efa_env.recvwin_size)) +
 				sizeof(struct recvwin_cirq)),
@@ -176,6 +180,8 @@ static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
 static void efa_rdm_ep_destroy_peer_resources(struct efa_rdm_ep *ep)
 	OFI_TSA_NO_ANALYSIS
 {
+	efa_av_array_destroy(ep->tx_peer_cache);
+	ep->tx_peer_cache = NULL;
 	efa_av_array_destroy(ep->peer_map);
 	ep->peer_map = NULL;
 

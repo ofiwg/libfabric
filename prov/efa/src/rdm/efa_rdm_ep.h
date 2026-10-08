@@ -165,6 +165,15 @@ struct efa_rdm_ep {
 	 * efa_rdm_peer_pool.
 	 */
 	struct efa_av_array *peer_map;
+	/*
+	 * TX-path cache of peer_map, indexed by explicit fi_addr, so that the
+	 * TX path reaches the peer in one lookup instead of going through
+	 * addr_to_entry_map first. It never decides whether a peer exists:
+	 * entries are copied from peer_map by efa_rdm_ep_get_peer_explicit
+	 * under ctrl_lock, and cleared under ctrl_lock when the peer is
+	 * destroyed, before the fi_addr can be reused. Reads are lock free.
+	 */
+	struct efa_av_array *tx_peer_cache;
 	struct ofi_bufpool *efa_rdm_peer_pool OFI_TSA_GUARDED_BY(efa_ctrl_lock_sym);
 	/*
 	 * Serializes peer creation (data path, this endpoint's thread) against

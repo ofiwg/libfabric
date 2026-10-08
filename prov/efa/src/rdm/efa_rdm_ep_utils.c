@@ -191,28 +191,80 @@ void efa_rdm_ep_destroy_peer(struct efa_rdm_ep *ep,
 	struct efa_rdm_peer *peer;
 	int err;
 
+	fi_addr_t fi_addr = efa_rdm_av_entry_fi_addr(av_entry);
+
 	assert(efa_rdm_av_entry_is_released(av_entry));
 
 	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	peer = efa_rdm_ep_peer_lookup(ep, av_entry);
 	if (peer) {
-		/* The slot is occupied, so clearing it allocates nothing. */
+		/*
+		 * Clear the TX cache first: the explicit fi_addr is freed after
+		 * this returns and can then be handed to a different address.
+		 * Occupied slots allocate nothing when cleared.
+		 */
+		if (fi_addr != FI_ADDR_NOTAVAIL &&
+		    efa_av_array_at(ep->tx_peer_cache, fi_addr) == peer) {
+			err = efa_av_array_insert(ep->tx_peer_cache, fi_addr, NULL);
+			assert(!err);
+		}
 		err = efa_av_array_insert(ep->peer_map, av_entry->peer_idx, NULL);
 		assert(!err);
 		(void) err;
 		efa_rdm_peer_destruct(peer, ep);
 		ofi_buf_free(peer);
 	}
+	assert(fi_addr == FI_ADDR_NOTAVAIL ||
+	       !efa_av_array_at(ep->tx_peer_cache, fi_addr));
 	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+}
+
+/**
+ * @brief slow path of efa_rdm_ep_get_peer_explicit: resolve through
+ * addr_to_entry_map, then remember the peer in tx_peer_cache
+ *
+ * The cache is filled under ctrl_lock, from the peer_map slot that decided the
+ * peer exists, and only while the AV entry is not being released. The release
+ * marks the entry before it takes each endpoint's ctrl_lock to destroy the peer
+ * and clear the cache slot, so a fill either happens first and is cleared, or
+ * sees the mark and does not happen.
+ */
+static struct efa_rdm_peer *
+efa_rdm_ep_get_peer_explicit_slow(struct efa_rdm_ep *ep, fi_addr_t addr)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym)
+{
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_peer *peer;
+
+	av_entry = efa_rdm_av_addr_to_entry(ep->base_ep.av, addr);
+	if (OFI_UNLIKELY(!av_entry))
+		return NULL;
+
+	peer = efa_rdm_ep_get_peer(ep, av_entry);
+	if (OFI_UNLIKELY(!peer))
+		return NULL;
+
+	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+	if (!efa_rdm_av_entry_is_released(av_entry) &&
+	    efa_rdm_ep_peer_lookup(ep, av_entry) == peer &&
+	    !efa_av_array_at(ep->tx_peer_cache, addr)) {
+		/* A failure only costs the next send another slow path. */
+		(void) efa_av_array_insert(ep->tx_peer_cache, addr, peer);
+	}
+	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+
+	return peer;
 }
 
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
  * the explicit AV, creating the peer on first use
  *
- * The TX path's only AV access: one lock-free read of addr_to_entry_map. The
- * libfabric spec requires fi_av_insert to have returned addr before addr is
- * used, and from then on the conn and its peer_idx are fixed.
+ * The TX path's common case is one lock-free read of tx_peer_cache. On a miss
+ * it resolves the AV entry through addr_to_entry_map and gets (or creates) the
+ * peer through efa_rdm_ep_get_peer, which is what decides whether a peer exists.
+ * The libfabric spec requires fi_av_insert to have returned addr before addr is
+ * used, and from then on the AV entry and its peer_idx are fixed.
  *
  * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
@@ -221,13 +273,18 @@ void efa_rdm_ep_destroy_peer(struct efa_rdm_ep *ep,
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym)
 {
-	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_peer *peer;
 
-	av_entry = efa_rdm_av_addr_to_entry(ep->base_ep.av, addr);
-	if (OFI_UNLIKELY(!av_entry))
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL || addr == FI_ADDR_UNSPEC))
 		return NULL;
 
-	return efa_rdm_ep_get_peer(ep, av_entry);
+	peer = efa_av_array_at(ep->tx_peer_cache, addr);
+	if (OFI_LIKELY(!!peer)) {
+		assert(efa_rdm_av_entry_fi_addr(peer->av_entry) == addr);
+		return peer;
+	}
+
+	return efa_rdm_ep_get_peer_explicit_slow(ep, addr);
 }
 
 /**
