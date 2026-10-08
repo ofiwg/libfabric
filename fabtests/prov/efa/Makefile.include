@@ -37,6 +37,7 @@ bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_rdm_remote_exit_early \
 		prov/efa/src/fi_efa_implicit_av_test \
 		prov/efa/src/fi_efa_multi_ep_stress \
+		prov/efa/src/fi_efa_av_insert_race \
 		prov/efa/src/fi_efa_mr_test \
 		prov/efa/src/fi_efa_runt_read_no_handshake \
 		prov/efa/src/fi_mr_abort
@@ -99,6 +100,10 @@ prov_efa_src_fi_efa_multi_ep_stress_SOURCES = \
 	prov/efa/src/efa_shared.c \
 	$(efa_rnr_srcs)
 prov_efa_src_fi_efa_multi_ep_stress_LDADD = libfabtests.la
+
+prov_efa_src_fi_efa_av_insert_race_SOURCES = \
+	prov/efa/src/efa_av_insert_race.c
+prov_efa_src_fi_efa_av_insert_race_LDADD = libfabtests.la
 
 prov_efa_src_fi_efa_implicit_av_test_SOURCES = \
 	prov/efa/src/efa_shared.h \
