@@ -7,8 +7,8 @@
 #include "efa_av.h"
 
 /*
- * efa_rdm_av_insert_one_implicit requires its caller to hold the util_domain and
- * implicit AV locks, as the CQ read path does.
+ * efa_rdm_av_insert_one_implicit requires its caller to hold the util_domain,
+ * util_av and implicit AV locks, as the CQ read path does.
  */
 static int test_av_insert_one_implicit(struct efa_av *av,
 				       struct efa_ep_addr *raw_addr,
@@ -18,9 +18,11 @@ static int test_av_insert_one_implicit(struct efa_av *av,
 	int err;
 
 	ofi_genlock_lock(&av->domain->util_domain.lock);
+	ofi_genlock_lock(&av->util_av.lock);
 	ofi_genlock_lock(&rdm_av->util_av_implicit.lock);
 	err = efa_rdm_av_insert_one_implicit(av, raw_addr, fi_addr, 0, NULL);
 	ofi_genlock_unlock(&rdm_av->util_av_implicit.lock);
+	ofi_genlock_unlock(&av->util_av.lock);
 	ofi_genlock_unlock(&av->domain->util_domain.lock);
 
 	return err;

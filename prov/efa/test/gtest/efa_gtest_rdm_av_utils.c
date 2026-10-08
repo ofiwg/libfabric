@@ -46,7 +46,10 @@ int efa_test_av_publish_ordering_setup(struct fid_ep *ep, struct fid_av *av)
 	test_raw_addr.qpn = next_qpn++;
 	test_raw_addr.qkey = 0x5678;
 
+	/* The CQ read path's lock order; inserting implicitly requires all
+	 * three, since it must be atomic with respect to explicit inserts. */
 	ofi_genlock_lock(&efa_av->domain->util_domain.lock);
+	ofi_genlock_lock(&efa_av->util_av.lock);
 	ofi_genlock_lock(&rdm_av->util_av_implicit.lock);
 	err = efa_rdm_av_insert_one_implicit(efa_av, &test_raw_addr,
 					     &implicit_fi_addr, 0, NULL);
@@ -61,6 +64,7 @@ int efa_test_av_publish_ordering_setup(struct fid_ep *ep, struct fid_av *av)
 	}
 
 	ofi_genlock_unlock(&rdm_av->util_av_implicit.lock);
+	ofi_genlock_unlock(&efa_av->util_av.lock);
 	ofi_genlock_unlock(&efa_av->domain->util_domain.lock);
 	if (err)
 		return err;

@@ -8,6 +8,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
+#include "efa_thread_annotations.h"
 
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16)
 
@@ -261,9 +262,12 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 
 struct efa_rdm_av_entry;
 
-int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry);
+/* Both use the endpoint's peer pools, which ctrl_lock guards. */
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_ctrl_lock_sym);
 
-void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
+void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_ctrl_lock_sym);
 
 int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 

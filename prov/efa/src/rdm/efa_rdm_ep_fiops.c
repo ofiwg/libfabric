@@ -133,6 +133,67 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 	return ofi_bufpool_create_attr(&wiredata_attr, pke_pool);
 }
 
+/*
+ * The peer pools and the peer maps are guarded by ctrl_lock once the endpoint
+ * is reachable from other threads (see efa_rdm_ep_get_peer_explicit). They are
+ * created before fi_enable and destroyed after the endpoint has been unbound
+ * from its AV, when no other thread can reach them, so no lock is taken here.
+ */
+static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
+	OFI_TSA_NO_ANALYSIS
+{
+	int ret;
+
+	ret = ofi_bufpool_create(&ep->efa_rdm_peer_pool,
+				 sizeof(struct efa_rdm_peer),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 0, /* no limit to max_cnt */
+				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
+				 0);
+	if (ret)
+		return ret;
+
+	ret = ofi_bufpool_grow(ep->efa_rdm_peer_pool);
+	if (ret)
+		return ret;
+
+	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map);
+	if (ret)
+		return ret;
+
+	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map_implicit);
+	if (ret)
+		return ret;
+
+	ret = ofi_bufpool_create(&ep->peer_robuf_pool,
+				(sizeof(struct efa_rdm_pke*) * (roundup_power_of_two(efa_env.recvwin_size)) +
+				sizeof(struct recvwin_cirq)),
+				EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
+				EFA_RDM_EP_MIN_PEER_POOL_SIZE,
+				0);
+	if (ret)
+		return ret;
+
+	return ofi_bufpool_grow(ep->peer_robuf_pool);
+}
+
+static void efa_rdm_ep_destroy_peer_resources(struct efa_rdm_ep *ep)
+	OFI_TSA_NO_ANALYSIS
+{
+	efa_av_array_destroy(ep->fi_addr_to_peer_map);
+	ep->fi_addr_to_peer_map = NULL;
+	efa_av_array_destroy(ep->fi_addr_to_peer_map_implicit);
+	ep->fi_addr_to_peer_map_implicit = NULL;
+
+	if (ep->efa_rdm_peer_pool)
+		ofi_bufpool_destroy(ep->efa_rdm_peer_pool);
+	ep->efa_rdm_peer_pool = NULL;
+
+	if (ep->peer_robuf_pool)
+		ofi_bufpool_destroy(ep->peer_robuf_pool);
+	ep->peer_robuf_pool = NULL;
+}
+
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
  * Grow the pools to avoid memory allocations during the first communication
  * that add latency overhead to the fast path. RX pools growth is delayed until
@@ -305,38 +366,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_create(&ep->efa_rdm_peer_pool,
-				 sizeof(struct efa_rdm_peer),
-				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 0, /* no limit to max_cnt */
-				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
-				 0);
-	if (ret)
-		goto err_free;
-
-	ret = ofi_bufpool_grow(ep->efa_rdm_peer_pool);
-	if (ret)
-		goto err_free;
-
-	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map);
-	if (ret)
-		goto err_free;
-
-	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map_implicit);
-	if (ret)
-		goto err_free;
-
-	ret = ofi_bufpool_create(&ep->peer_robuf_pool,
-				(sizeof(struct efa_rdm_pke*) * (roundup_power_of_two(efa_env.recvwin_size)) +
-				sizeof(struct recvwin_cirq)),
-				EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
-				EFA_RDM_EP_MIN_PEER_POOL_SIZE,
-				0);
-
-	if (ret)
-		goto err_free;
-
-	ret = ofi_bufpool_grow(ep->peer_robuf_pool);
+	ret = efa_rdm_ep_create_peer_resources(ep);
 	if (ret)
 		goto err_free;
 
@@ -355,8 +385,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	return 0;
 
 err_free:
-	efa_av_array_destroy(ep->fi_addr_to_peer_map);
-	efa_av_array_destroy(ep->fi_addr_to_peer_map_implicit);
+	efa_rdm_ep_destroy_peer_resources(ep);
 	if (ep->rx_atomrsp_pool)
 		ofi_bufpool_destroy(ep->rx_atomrsp_pool);
 
@@ -386,12 +415,6 @@ err_free:
 
 	if (ep->efa_tx_pkt_pool)
 		ofi_bufpool_destroy(ep->efa_tx_pkt_pool);
-
-	if (ep->efa_rdm_peer_pool)
-		ofi_bufpool_destroy(ep->efa_rdm_peer_pool);
-
-	if (ep->peer_robuf_pool)
-		ofi_bufpool_destroy(ep->peer_robuf_pool);
 
 #if ENABLE_DEBUG
 	if (ep->pke_debug_info_pool)
@@ -823,8 +846,9 @@ static int efa_rdm_ep_release_peer_overflow_pke(struct efa_av_array *arr,
 	return 0;
 }
 
-static int efa_rdm_ep_destroy_peer(struct efa_av_array *arr, void *entry,
-				   void *context)
+static int efa_rdm_ep_destroy_peer_cb(struct efa_av_array *arr, void *entry,
+				      void *context)
+	OFI_TSA_REQUIRES(efa_ctrl_lock_sym)
 {
 	struct efa_rdm_ep *ep = context;
 	struct efa_rdm_peer *peer = entry;
@@ -889,13 +913,18 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		}
 	}
 
-	/* free every peer this endpoint created, then release the maps and pools */
+	/*
+	 * Free every peer this endpoint created, then release the maps and
+	 * pools. The endpoint has been unbound from its AV, so no AV operation
+	 * can reach the peer maps any more; ctrl_lock is taken for the contract
+	 * on efa_rdm_peer_destruct, not for exclusion.
+	 */
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->ctrl_lock, efa_ctrl_lock_sym);
 	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map, efa_rdm_ep,
-		       efa_rdm_ep_destroy_peer);
+		       efa_rdm_ep_destroy_peer_cb);
 	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
-		       efa_rdm_ep_destroy_peer);
-	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map);
-	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map_implicit);
+		       efa_rdm_ep_destroy_peer_cb);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	if (efa_rdm_ep->base_ep.txe_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->base_ep.txe_pool);
@@ -933,11 +962,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	if (efa_rdm_ep->rx_atomrsp_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->rx_atomrsp_pool);
 
-	if (efa_rdm_ep->efa_rdm_peer_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->efa_rdm_peer_pool);
-
-	if (efa_rdm_ep->peer_robuf_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->peer_robuf_pool);
+	efa_rdm_ep_destroy_peer_resources(efa_rdm_ep);
 
 #if ENABLE_DEBUG
 	if (efa_rdm_ep->pke_debug_info_pool)

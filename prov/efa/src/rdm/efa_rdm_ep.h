@@ -161,12 +161,16 @@ struct efa_rdm_ep {
 	 * allocated from efa_rdm_peer_pool and the maps hold pointers to them. */
 	struct efa_av_array *fi_addr_to_peer_map;
 	struct efa_av_array *fi_addr_to_peer_map_implicit;
-	struct ofi_bufpool *efa_rdm_peer_pool;
-	/* Serializes configuration-path ep-level operations. */
+	struct ofi_bufpool *efa_rdm_peer_pool OFI_TSA_GUARDED_BY(efa_ctrl_lock_sym);
+	/*
+	 * Serializes peer creation (data path, this endpoint's thread) against
+	 * peer destruction (fi_av_remove and implicit AV eviction, any thread)
+	 * and against promotion moving peers between the two maps. A leaf lock.
+	 */
 	struct ofi_genlock ctrl_lock;
 
 	/* buffer pool for peer reorder circular buffer */
-	struct ofi_bufpool *peer_robuf_pool;
+	struct ofi_bufpool *peer_robuf_pool OFI_TSA_GUARDED_BY(efa_ctrl_lock_sym);
 
 #if ENABLE_DEBUG
 	/* buffer pool for packet debug info */
@@ -261,13 +265,15 @@ void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe);
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep);
 
-struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr);
+struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
 
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
 
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
 							 fi_addr_t addr)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
 
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr);
 

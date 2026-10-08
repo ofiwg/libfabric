@@ -83,6 +83,7 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
  * @returns pointer to #efa_rdm_peer
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym)
 {
 	struct efa_av_entry *entry;
 	struct efa_rdm_peer *peer;
@@ -175,6 +176,7 @@ unlock:
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
 							 fi_addr_t addr)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym)
 {
 	struct efa_rdm_av_entry *av_entry;
 	struct efa_rdm_peer *peer;

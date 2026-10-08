@@ -274,8 +274,7 @@ static bool efa_rdm_av_is_local_peer(struct efa_av *av, const void *addr)
  */
 static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 						    struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	size_t cur_size;
@@ -418,7 +417,7 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 
 	/* since an av entry is all connections to a specific remote ep, we must
 	 * walk all local ep peer maps and remove the connection to the remote ep */
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_LOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 	dlist_foreach_safe(&av->util_av.ep_list, entry, tmp) {
 		ep = container_of(entry, struct efa_rdm_ep,
 				  base_ep.util_ep.av_entry);
@@ -437,7 +436,7 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 		}
 		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	}
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 
 	/* Set the publish state to unpublished before returning the entry back
 	 * to the pool. The util AV pool does not zero out buffers after freeing,
@@ -562,8 +561,7 @@ err_remove_addr:
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,
 						   uint64_t flags, void *context)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct util_av *util_av_implicit = &rdm_av->util_av_implicit;
@@ -654,8 +652,7 @@ err_release:
  */
 void efa_rdm_av_entry_release_explicit(struct efa_av *av,
 				 struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
@@ -678,8 +675,7 @@ void efa_rdm_av_entry_release_explicit(struct efa_av *av,
  * @param[in]	av_entry	efa_rdm_av_entry
  */
 void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
@@ -708,8 +704,7 @@ void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entr
  */
 void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
 					   struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
@@ -987,8 +982,7 @@ fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
  */
 void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
 				     struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
@@ -1221,7 +1215,7 @@ static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
 	struct efa_rdm_peer *peer;
 	int err = 0;
 
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_LOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep,
@@ -1254,7 +1248,7 @@ static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
 	}
 
 out:
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 	return err;
 }
 
@@ -1347,9 +1341,8 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 					   struct efa_ep_addr *raw_addr,
 					   fi_addr_t implicit_fi_addr,
 					   fi_addr_t *fi_addr)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym,
+			 efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	int cleanup_err, err;
@@ -1466,13 +1459,13 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	 *
 	 * util_ep is bound to the explicit util_av, so the explicit util_av's
 	 * ep_list contains all of the endpoints bound to this AV */
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_LOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_rdm_av_get_addr_from_peer_rx_entry);
 	}
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 
 	return FI_SUCCESS;
 }
@@ -1566,15 +1559,17 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
  * Unconditionally allocates a new connection entry in the implicit AV. The
  * caller must have already established, while holding the locks below, that
  * the address is in neither the explicit nor the implicit AV. Otherwise a
- * duplicate entry for the same address is created.
+ * duplicate entry for the same address is created. util_av.lock is required
+ * for that reason even though this function does not touch the explicit AV.
  *
- * The caller owns both locks for the whole call; this function neither
+ * The caller owns the locks for the whole call; this function neither
  * acquires nor releases them.
  */
 int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 				   fi_addr_t *fi_addr, uint64_t flags,
 				   void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym,
+			 efa_implicit_av_lock_sym)
 {
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	struct efa_rdm_av_entry *av_entry;
@@ -1587,6 +1582,8 @@ int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 	EFA_INFO(FI_LOG_AV,
 		 "Inserting address GID[%s] QP[%u] QKEY[%u] to implicit AV\n",
 		 raw_gid_str, addr->qpn, addr->qkey);
+
+	assert(ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr) == FI_ADDR_NOTAVAIL);
 
 	av_entry = efa_rdm_av_entry_alloc_implicit(av, addr, flags, context);
 	if (!av_entry) {
@@ -1723,8 +1720,7 @@ static struct fi_ops_av efa_rdm_av_ops = {
  */
 static int efa_rdm_av_close_release_explicit(struct efa_av_array *arr,
 					     void *entry, void *context)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
 {
 	struct efa_av *av = context;
 
@@ -1737,8 +1733,7 @@ static int efa_rdm_av_close_release_explicit(struct efa_av_array *arr,
 /* Implicit AV counterpart of efa_rdm_av_close_release_explicit. */
 static int efa_rdm_av_close_release_implicit(struct efa_av_array *arr,
 					     void *entry, void *context)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_av *av = context;
 
