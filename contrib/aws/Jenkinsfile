@@ -382,6 +382,10 @@ def prci_instance_configuration(cluster_key) {
         "c7i-ub22": [
             "instance_type": "c7i.16xlarge", "os": "ubuntu2204", "region": "us-west-2",
             "cluster_name": "LibfabricPRCI-PersistentManualCluster-c7i-ub22", "lock_label": "c7i-ub22-pdx"
+        ],
+        "trn2": [
+            "instance_type": "trn2.48xlarge", "os": "alinux2023", "region": "ap-south-2",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-trn2", "lock_label": "trn2-al2023-hyd"
         ]
     ]
     return cluster_configs.get(cluster_key, null)
@@ -451,6 +455,7 @@ def build_pmc_test_stages() {
     stages["pmc_2_hpc8a_alinux2023_efa"]            = get_test_stage_with_lock_persistent("pmc_2_hpc8a_alinux2023_efa",            "hpc8a",      2, efa_hpc_addl_args)
     stages["pmc_2_hpc6a_rhel8_efa"]                 = get_test_stage_with_lock_persistent("pmc_2_hpc6a_rhel8_efa",                 "hpc6a",      2, efa_hpc_dso_addl_args)
     stages["pmc_2_c8gn_alinux2023_efa"]             = get_test_stage_with_lock_persistent("pmc_2_c8gn_alinux2023_efa",             "c8gn",       2, efa_addl_args)
+    stages["pmc_2_trn2_alinux2023_efa"]             = get_test_stage_with_lock_persistent("pmc_2_trn2_alinux2023_efa",             "trn2",       2, efa_addl_args)
     stages["pmc_2_c7i_alinux2023_tcp"]              = get_test_stage_with_lock_persistent("pmc_2_c7i_alinux2023_tcp",              "c7i-al2023", 2, tcp_addl_args)
     stages["pmc_2_c7i_ubuntu2204_sockets"]          = get_test_stage_with_lock_persistent("pmc_2_c7i_ubuntu2204_sockets",          "c7i-ub22",   2, sockets_addl_args)
     stages["pmc_1_g4dn_alinux2023_sm2"]             = get_test_stage_with_lock_persistent("pmc_1_g4dn_alinux2023_sm2",             "g4dn16x",    1, sm2_addl_args)
