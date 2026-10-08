@@ -388,9 +388,8 @@ generate an efficient jump table rather than a chain of comparisons.
 
 ## Scope
 
-The scope parameter specifies the concurrency of the operation. All threads
-in the scope are required to issue the same operation. This allows the
-implementation to optimize.
+The scope parameter specifies the set of threads that make the call together.
+This allows the implementation to optimize.
 
 | Scope | CUDA | SYCL |
 |-------|------|------|
@@ -398,6 +397,31 @@ implementation to optimize.
 | FI_XPU_SUBGROUP | Warp | Subgroup |
 | FI_XPU_WORK_GROUP | Thread block | Work group |
 | FI_XPU_DEVICE | Device | Device |
+
+At FI_XPU_WORK_ITEM a call is the calling thread's own, with arguments of its
+own, the object included: the threads of a subgroup may each post to an
+endpoint of their own, read a completion queue of their own or read a counter
+of their own. At FI_XPU_SUBGROUP or FI_XPU_WORK_GROUP the threads of the scope
+make the call together and pass identical arguments, the object included. This
+holds alike for data transfer, completion queue and counter calls.
+
+A data transfer call submits one operation for its scope. At FI_XPU_WORK_ITEM
+an implementation may submit concurrent operations of different threads
+together, but each completes as if it had been made alone. At a wider scope
+every thread of the scope reaches the call and returns the same value, and
+memory written by the threads of the scope before the call is visible to the
+operation, so that they can prepare a buffer together and transfer it with one
+call.
+
+A completion queue read polls the queue once for its scope, taking up to count
+completions into its buffer. At a wider scope every thread of the scope
+reaches the call and returns the same value. Reads of one completion queue may
+overlap, and each takes completions of its own: none is reported to more than
+one read.
+
+A counter read or error read returns the value the counter holds, and a wait
+returns once the counter reaches its threshold. The threads of a scope need not
+reach a counter call together.
 
 ## Data Transfer Operations
 
