@@ -1286,9 +1286,10 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 						ret = efa_rdm_msg_post_rtm_proto(
 							ope->ep, ope,
 							ope->proto);
+				} else {
+					ret = efa_rdm_ope_post_send(
+						ope, EFA_RDM_CTSDATA_PKT);
 				}
-				ret = efa_rdm_ope_post_send(
-					ope, EFA_RDM_CTSDATA_PKT);
 			} else
 				ret = -FI_ECANCELED;
 
