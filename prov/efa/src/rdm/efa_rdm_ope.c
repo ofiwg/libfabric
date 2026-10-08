@@ -2490,14 +2490,15 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 	 * correctly  */
 	if (ope->proto) {
 		assert(ope->type == EFA_RDM_TXE);
-		/* post_rtm_proto reads txe->req_pkt_type, not pkt_type. */
+		/* The proto post functions read txe->req_pkt_type, not pkt_type. */
 		assert(pkt_type == ope->req_pkt_type);
-		assert(efa_rdm_pkt_type_is_rtm(pkt_type));
 		/* construct_tx_pkes() only asserts there is room, and unlike
 		 * the other callers we have no earlier check to lean on. */
 		if (efa_rdm_ep_get_available_tx_pkts(ope->ep) == 0)
 			return -FI_EAGAIN;
-		return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
+		if (efa_rdm_pkt_type_is_rtm(pkt_type))
+			return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
+		return efa_rdm_rma_post_write_proto(ope->ep, ope, ope->proto);
 	}
 
 	/* TODO: drop this fallback once every protocol is registered. */

@@ -11,6 +11,8 @@
 #include "efa_rdm_peer.h"
 
 #include "efa_rdm_tracepoint.h"
+#include "efa_rdm_rma.h"
+#include "protocols/efa_rdm_proto_longcts_write.h"
 
 /* This file define functons for the following packet type:
  *       HANDSHAKE
@@ -760,6 +762,7 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_read_nack_hdr *nack_hdr;
 	struct efa_rdm_ope *txe;
 	bool delivery_complete_requested;
+	ssize_t err;
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 
@@ -785,7 +788,10 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_RTW_PKT :
 				EFA_RDM_LONGCTS_RTW_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		txe->proto = &efa_rdm_proto_longcts_write;
+		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		if (OFI_UNLIKELY(err))
+			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
 	} else if (txe->op == ofi_op_tagged) {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS tagged "
@@ -794,7 +800,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_TAGRTM_PKT :
 				EFA_RDM_LONGCTS_TAGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		if (OFI_UNLIKELY(err))
+			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS untagged "
@@ -803,7 +811,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_MSGRTM_PKT :
 				EFA_RDM_LONGCTS_MSGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		if (OFI_UNLIKELY(err))
+			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
 	}
 }
 
