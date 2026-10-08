@@ -54,8 +54,8 @@ int efa_test_av_publish_ordering_setup(struct fid_ep *ep, struct fid_av *av)
 	err = efa_rdm_av_insert_one_implicit(efa_av, &test_raw_addr,
 					     &implicit_fi_addr, 0, NULL);
 
-	/* Give the implicit fi_addr a peer, so the promotion has one to re-key.
-	 * Both implicit AV accessors require these locks to be held. */
+	/* Give the implicit fi_addr a peer, so the promotion has one that it
+	 * must leave in place. */
 	if (!err) {
 		test_implicit_peer = efa_rdm_ep_get_peer_implicit_unsafe(
 			efa_rdm_ep, implicit_fi_addr);
@@ -84,8 +84,10 @@ int efa_test_av_publish_ordering_promote(struct fid_av *av,
 void efa_test_av_publish_ordering_probe(struct efa_av_entry *entry)
 	OFI_TSA_NO_ANALYSIS
 {
+	struct efa_rdm_av_entry *av_entry =
+		container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
 	struct efa_rdm_peer *peer;
-	fi_addr_t fi_addr = entry->fi_addr;
+	fi_addr_t fi_addr = efa_rdm_av_entry_fi_addr(av_entry);
 	uint16_t ahn = entry->ah->ahn;
 	uint16_t qpn = efa_av_entry_ep_addr(entry)->qpn;
 
@@ -98,8 +100,9 @@ void efa_test_av_publish_ordering_probe(struct efa_av_entry *entry)
 		efa_rdm_av_reverse_lookup_unsafe(test_av, ahn, qpn, NULL) !=
 		FI_ADDR_NOTAVAIL;
 
-	/* Lookup 2: must already hit, which is the ordering under test */
-	peer = efa_rdm_ep_peer_map_lookup(test_ep->fi_addr_to_peer_map, fi_addr);
+	/* Lookup 2: must already hit. Promotion leaves the conn and its peer
+	 * where they are, so this holds at every point of the promotion. */
+	peer = efa_rdm_ep_peer_lookup(test_ep, av_entry);
 	test_observation.peer_map_resolves = !!peer;
 	test_observation.peer_is_migrated_peer = peer == test_implicit_peer;
 }
@@ -112,10 +115,8 @@ efa_test_av_publish_ordering_observation(void)
 
 bool efa_test_av_publish_ordering_single_peer(fi_addr_t explicit_fi_addr)
 {
-	return !efa_rdm_ep_peer_map_lookup(test_ep->fi_addr_to_peer_map_implicit,
-					   test_implicit_fi_addr) &&
-	       efa_rdm_ep_peer_map_lookup(test_ep->fi_addr_to_peer_map,
-					  explicit_fi_addr) ==
+	return !efa_rdm_ep_peer_lookup_implicit(test_ep, test_implicit_fi_addr) &&
+	       efa_rdm_ep_peer_lookup_explicit(test_ep, explicit_fi_addr) ==
 		       test_implicit_peer;
 }
 

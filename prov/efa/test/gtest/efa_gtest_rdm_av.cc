@@ -99,17 +99,19 @@ TEST_F(EfaConnTest, alloc_reserve_failure_explicit_insert)
 }
 
 /**
- * @brief The implicit -> explicit promotion re-keys the peer maps before the
- * entry becomes visible to the CQ read path's lock-free reverse AV lookup.
+ * @brief The implicit -> explicit promotion leaves the existing peer in place,
+ * so it is found the instant the entry becomes visible to the CQ read path's
+ * lock-free reverse AV lookup.
  *
- * The CQ read path resolves (GID, QPN) -> fi_addr without a lock and only then
- * looks up fi_addr -> peer, so an fi_addr must not appear in the reverse AV
- * while the peer map would still miss for a peer that already exists. This test
- * runs those two lookups from inside the wrapped efa_rdm_av_reverse_av_add,
- * which is the instant a racing CQ read could first see the entry, so the
- * ordering is checked deterministically rather than by winning a race.
+ * The CQ read path resolves (GID, QPN) -> conn without a lock and only then
+ * looks up the conn's peer, so a conn must never be visible in the reverse AV
+ * while the peer lookup would miss for a peer that already exists. Promotion
+ * does not touch peers at all, which this test checks at the most exposed
+ * point: it runs both lookups from inside the wrapped efa_av_reverse_av_add,
+ * the instant a racing CQ read could first see the entry, so it is checked
+ * deterministically rather than by winning a race.
  */
-TEST_F(EfaConnTest, promotion_rekeys_peer_map_before_publishing_reverse_av)
+TEST_F(EfaConnTest, promotion_keeps_peer_when_publishing_reverse_av)
 {
 	fi_addr_t explicit_fi_addr;
 	int num_addr;
@@ -158,11 +160,10 @@ TEST_F(EfaConnTest, promotion_rekeys_peer_map_before_publishing_reverse_av)
 /**
  * @brief The promotion leaves exactly one peer for the promoted address.
  *
- * The observable damage from publishing before re-keying is a second peer
- * created by a CQ read for the new fi_addr, so pin the post-condition too: the
- * implicit slot is vacated and the explicit slot holds the same peer.
+ * Pin the post-condition: the implicit fi_addr no longer resolves, and the
+ * explicit fi_addr resolves to the same peer the implicit one had.
  */
-TEST_F(EfaConnTest, promotion_moves_peer_without_duplicating_it)
+TEST_F(EfaConnTest, promotion_keeps_single_peer)
 {
 	fi_addr_t explicit_fi_addr;
 	int num_addr;
@@ -182,14 +183,13 @@ TEST_F(EfaConnTest, promotion_moves_peer_without_duplicating_it)
 }
 
 /**
- * @brief The publish ordering holds on a recycled AV entry too.
+ * @brief Promotion into a recycled explicit fi_addr keeps the peer too.
  *
- * The util AV entry pool is indexed and does not zero recycled buffers, so a
- * reused entry starts out holding the previous occupant's publish state. Freeing
- * a slot first and then promoting into it proves the ordering checks are not
- * passing only because they happened to run against a fresh entry.
+ * Freeing an explicit slot first and then promoting into it proves the checks
+ * are not passing only because they happened to run against a fresh fi_addr
+ * and a fresh conn slot.
  */
-TEST_F(EfaConnTest, promotion_publish_ordering_holds_on_recycled_entry)
+TEST_F(EfaConnTest, promotion_keeps_peer_on_recycled_fi_addr)
 {
 	fi_addr_t recycled_fi_addr, explicit_fi_addr;
 	int num_addr;
@@ -218,8 +218,8 @@ TEST_F(EfaConnTest, promotion_publish_ordering_holds_on_recycled_entry)
 	MockEfa::set(nullptr);
 	ASSERT_EQ(num_addr, 1);
 
-	/* Guards the test itself: without buffer reuse this adds no coverage
-	 * over promotion_rekeys_peer_map_before_publishing_reverse_av. */
+	/* Guards the test itself: without fi_addr reuse this adds no coverage
+	 * over promotion_keeps_peer_when_publishing_reverse_av. */
 	ASSERT_EQ(explicit_fi_addr, recycled_fi_addr);
 
 	const struct efa_test_av_publish_observation *obs =

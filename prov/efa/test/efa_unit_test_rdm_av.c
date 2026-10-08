@@ -1010,7 +1010,7 @@ void test_av_rdm_insert_remove_with_peer(void **state)
 	/* Verify peer map on the ep itself */
 	entry = (struct efa_rdm_av_entry *) efa_av_addr_to_entry(av, fi_addr);
 	assert_non_null(entry);
-	assert_ptr_equal(efa_rdm_ep_peer_map_lookup(efa_rdm_ep->fi_addr_to_peer_map, fi_addr), peer);
+	assert_ptr_equal(efa_rdm_ep_peer_lookup_explicit(efa_rdm_ep, fi_addr), peer);
 
 	/* Remove — peer is destroyed during av_remove */
 	fi_av_remove(resource->av, &fi_addr, 1, 0);

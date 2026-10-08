@@ -134,10 +134,10 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 }
 
 /*
- * The peer pools and the peer maps are guarded by ctrl_lock once the endpoint
- * is reachable from other threads (see efa_rdm_ep_get_peer_explicit). They are
- * created before fi_enable and destroyed after the endpoint has been unbound
- * from its AV, when no other thread can reach them, so no lock is taken here.
+ * The peer pools and the peer map are guarded by ctrl_lock once the endpoint is
+ * reachable from other threads (see efa_rdm_ep_get_peer). They are created
+ * before fi_enable and destroyed after the endpoint has been unbound from its
+ * AV, when no other thread can reach them, so no lock is taken here.
  */
 static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
 	OFI_TSA_NO_ANALYSIS
@@ -157,11 +157,7 @@ static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
 	if (ret)
 		return ret;
 
-	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map);
-	if (ret)
-		return ret;
-
-	ret = efa_rdm_ep_peer_map_init(&ep->fi_addr_to_peer_map_implicit);
+	ret = efa_rdm_ep_peer_map_init(&ep->peer_map);
 	if (ret)
 		return ret;
 
@@ -180,10 +176,8 @@ static int efa_rdm_ep_create_peer_resources(struct efa_rdm_ep *ep)
 static void efa_rdm_ep_destroy_peer_resources(struct efa_rdm_ep *ep)
 	OFI_TSA_NO_ANALYSIS
 {
-	efa_av_array_destroy(ep->fi_addr_to_peer_map);
-	ep->fi_addr_to_peer_map = NULL;
-	efa_av_array_destroy(ep->fi_addr_to_peer_map_implicit);
-	ep->fi_addr_to_peer_map_implicit = NULL;
+	efa_av_array_destroy(ep->peer_map);
+	ep->peer_map = NULL;
 
 	if (ep->efa_rdm_peer_pool)
 		ofi_bufpool_destroy(ep->efa_rdm_peer_pool);
@@ -866,9 +860,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	 * Overflow pkes sit on both peer->overflow_pke_list and (in debug mode) rx_pkt_list.
 	 * Release them before: rx_pkt_list debug sweep & efa_rdm_peer_destruct to avoid a double-free.
 	 */
-	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map, efa_rdm_ep,
-		       efa_rdm_ep_release_peer_overflow_pke);
-	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
+	efa_av_array_iter(efa_rdm_ep->peer_map, efa_rdm_ep,
 		       efa_rdm_ep_release_peer_overflow_pke);
 
 #if ENABLE_DEBUG
@@ -914,15 +906,13 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	}
 
 	/*
-	 * Free every peer this endpoint created, then release the maps and
+	 * Free every peer this endpoint created, then release the map and
 	 * pools. The endpoint has been unbound from its AV, so no AV operation
-	 * can reach the peer maps any more; ctrl_lock is taken for the contract
-	 * on efa_rdm_peer_destruct, not for exclusion.
+	 * can reach peer_map any more; ctrl_lock is taken for the contract on
+	 * efa_rdm_peer_destruct, not for exclusion.
 	 */
 	EFA_GENLOCK_LOCK(&efa_rdm_ep->ctrl_lock, efa_ctrl_lock_sym);
-	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map, efa_rdm_ep,
-		       efa_rdm_ep_destroy_peer_cb);
-	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
+	efa_av_array_iter(efa_rdm_ep->peer_map, efa_rdm_ep,
 		       efa_rdm_ep_destroy_peer_cb);
 	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->ctrl_lock, efa_ctrl_lock_sym);
 

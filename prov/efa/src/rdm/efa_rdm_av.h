@@ -71,49 +71,6 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
 	       "efa_av must be the first member of efa_rdm_av");
 
 /**
- * @brief Publication state of a conn, tracked in debug builds only
- *
- * The CQ read fast path resolves a peer with three lookups, the first two of
- * which are lock free:
- *
- *   1. (GID, QPN) -> fi_addr	cur_reverse_av (lock free)
- *   2. fi_addr -> peer		ep->fi_addr_to_peer_map (lock free)
- *   3. raw address -> fi_addr	util_av hash (under util_av.lock)
- *
- * Lookup 1 or 3 runs first and lookup 2 second, so an fi_addr must never become
- * visible to lookup 1 or 3 while lookup 2 would still miss for a peer that
- * already exists. The TX path depends on addr_to_entry_map and lookup 2 in the
- * same way. Promoting a conn to the explicit AV therefore has to move its peers
- * to the explicit fi_addr before the conn is added to the explicit maps; see
- * efa_rdm_av_entry_implicit_to_explicit.
- *
- * For an explicit conn, these states record where it is in that sequence so
- * the ordering can be checked with asserts and unit tests.
- *
- *   UNPUBLISHED  allocated, invisible to lookups 1 and 3
- *   PEERS_READY  peer maps updated, still invisible to lookups 1 and 3
- *   PUBLISHED    visible to lookups 1 and 3, so lookup 2 must resolve
- *
- * An implicit conn is in the IMPLICIT state until it is promoted, which takes
- * it through PEERS_READY to PUBLISHED. A new explicit conn has no peers to move
- * and goes straight to PUBLISHED.
- *
- * The same hazard does exist on the implicit side, in the opposite direction.
- * When a conn moves from the implicit AV to the explicit AV, the peer maps are
- * updated before the implicit reverse AV. But all accesses to the implicit AV
- * take the util_av_implicit.lock, so the issue is benign.
- *
- * Conns are zeroed when they are allocated from conn_pool, so a recycled conn
- * starts out UNPUBLISHED.
- */
-enum efa_rdm_av_entry_publish_state {
-	EFA_RDM_AV_ENTRY_UNPUBLISHED = 0,
-	EFA_RDM_AV_ENTRY_PEERS_READY,
-	EFA_RDM_AV_ENTRY_PUBLISHED,
-	EFA_RDM_AV_ENTRY_IMPLICIT,
-};
-
-/**
  * @brief RDM AV entry ("conn"): one remote endpoint known to the AV
  *
  * Allocated from efa_rdm_av->conn_pool when the remote first enters the AV,
@@ -132,32 +89,19 @@ struct efa_rdm_av_entry {
 	fi_addr_t		implicit_fi_addr;
 	fi_addr_t		shm_fi_addr;
 	/*
-	 * Index of this conn in conn_pool. Assigned at allocation and
-	 * immutable until the conn is freed.
+	 * Index of this conn in every endpoint's peer_map. Assigned at
+	 * allocation and immutable until the conn is freed.
 	 */
 	uint32_t		peer_idx;
+	/*
+	 * Set when the conn has been unpublished and its peers are being
+	 * destroyed. Read by efa_rdm_ep_get_peer under ctrl_lock so that a
+	 * creator that raced with the release does not leave a peer behind.
+	 */
+	bool			released;
 	struct dlist_entry	implicit_av_lru_entry OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
 	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
-#if ENABLE_DEBUG
-	enum efa_rdm_av_entry_publish_state publish_state;
-#endif
 };
-
-/*
- * Advance and check the publication state. Both are no-ops outside debug
- * builds, so callers must not depend on them for anything but the assertions.
- */
-#if ENABLE_DEBUG
-#define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)                    \
-	do {                                                                   \
-		(av_entry)->publish_state = (state);                            \
-	} while (0)
-#define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)                 \
-	assert((av_entry)->publish_state == (state))
-#else
-#define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)	do {} while (0)
-#define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)	do {} while (0)
-#endif
 
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");
@@ -176,6 +120,12 @@ static inline fi_addr_t
 efa_rdm_av_entry_implicit_fi_addr(const struct efa_rdm_av_entry *av_entry)
 {
 	return __atomic_load_n(&av_entry->implicit_fi_addr, __ATOMIC_ACQUIRE);
+}
+
+static inline bool
+efa_rdm_av_entry_is_released(const struct efa_rdm_av_entry *av_entry)
+{
+	return __atomic_load_n(&av_entry->released, __ATOMIC_ACQUIRE);
 }
 
 /**
@@ -217,8 +167,47 @@ int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym,
 			 efa_implicit_av_lock_sym);
 
+/* fi_addr -> conn in the explicit AV. Lock free. */
+static inline struct efa_rdm_av_entry *
+efa_rdm_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_av_entry *entry = efa_av_addr_to_entry(av, fi_addr);
+
+	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry) : NULL;
+}
+
+/* fi_addr -> conn in the implicit AV. Lock free. */
 struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
 							   fi_addr_t fi_addr);
+
+/*
+ * Reverse lookups. The _entry variants return the conn and are what the CQ read
+ * path uses; the fi_addr variants are thin wrappers kept for FI_SOURCE
+ * reporting and for tests.
+ */
+struct efa_rdm_av_entry *efa_rdm_av_reverse_lookup_entry(struct efa_av *av,
+							 uint16_t ahn, uint16_t qpn,
+							 struct efa_rdm_pke *pkt_entry);
+
+struct efa_rdm_av_entry *efa_rdm_av_reverse_lookup_entry_unsafe(struct efa_av *av,
+								uint16_t ahn, uint16_t qpn,
+								struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
+
+struct efa_rdm_av_entry *
+efa_rdm_av_reverse_lookup_entry_implicit_unsafe(struct efa_av *av,
+						uint16_t ahn, uint16_t qpn,
+						struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
+
+struct efa_rdm_av_entry *efa_rdm_av_addr_lookup_entry_unsafe(struct efa_av *av,
+							     struct efa_ep_addr *addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
+
+struct efa_rdm_av_entry *
+efa_rdm_av_addr_lookup_entry_implicit_unsafe(struct efa_av *av,
+					     struct efa_ep_addr *addr)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);
@@ -230,7 +219,7 @@ fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
 fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
 						    uint16_t ahn, uint16_t qpn,
 						    struct efa_rdm_pke *pkt_entry)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
 				     struct efa_rdm_av_entry *av_entry)

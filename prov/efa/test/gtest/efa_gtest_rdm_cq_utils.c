@@ -161,7 +161,7 @@ void efa_test_rdm_cq_peer_state(struct fid_ep *ep, fi_addr_t addr,
 	out->explicit_fi_addr = FI_ADDR_NOTAVAIL;
 	out->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
-	peer = efa_rdm_ep_peer_map_lookup(efa_rdm_ep->fi_addr_to_peer_map, addr);
+	peer = efa_rdm_ep_peer_lookup_explicit(efa_rdm_ep, addr);
 	if (!peer)
 		return;
 

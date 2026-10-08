@@ -156,16 +156,20 @@ struct efa_rdm_ep {
 	/* whether this EP is on the CQ's progress_ep_list */
 	bool needs_progress;
 
-	/* fi_addr-indexed maps from this endpoint to its peers,
-	 * one for the explicit AV and one for the implicit AV. Peers are
-	 * allocated from efa_rdm_peer_pool and the maps hold pointers to them. */
-	struct efa_av_array *fi_addr_to_peer_map;
-	struct efa_av_array *fi_addr_to_peer_map_implicit;
+	/*
+	 * This endpoint's peers, indexed by efa_rdm_av_entry->peer_idx. A
+	 * remote endpoint has one AV entry (conn) for as long as it is in the
+	 * AV, implicit or explicit, so it has at most one slot here and the
+	 * slot never moves. Reads are lock free; every insert and remove holds
+	 * ctrl_lock (see efa_rdm_ep_get_peer). Peers are allocated from
+	 * efa_rdm_peer_pool.
+	 */
+	struct efa_av_array *peer_map;
 	struct ofi_bufpool *efa_rdm_peer_pool OFI_TSA_GUARDED_BY(efa_ctrl_lock_sym);
 	/*
 	 * Serializes peer creation (data path, this endpoint's thread) against
-	 * peer destruction (fi_av_remove and implicit AV eviction, any thread)
-	 * and against promotion moving peers between the two maps. A leaf lock.
+	 * peer destruction (fi_av_remove and implicit AV eviction, any thread).
+	 * A leaf lock.
 	 */
 	struct ofi_genlock ctrl_lock;
 
@@ -265,6 +269,16 @@ void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe);
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep);
 
+struct efa_rdm_av_entry;
+
+struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep,
+					 struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
+
+void efa_rdm_ep_destroy_peer(struct efa_rdm_ep *ep,
+			     struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
+
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
 
@@ -275,15 +289,17 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 	OFI_TSA_EXCLUDES(efa_ctrl_lock_sym);
 
+/* Lock-free lookups that never create a peer. */
+struct efa_rdm_peer *efa_rdm_ep_peer_lookup(struct efa_rdm_ep *ep,
+					    struct efa_rdm_av_entry *av_entry);
+
+struct efa_rdm_peer *efa_rdm_ep_peer_lookup_explicit(struct efa_rdm_ep *ep,
+						     fi_addr_t addr);
+
+struct efa_rdm_peer *efa_rdm_ep_peer_lookup_implicit(struct efa_rdm_ep *ep,
+						     fi_addr_t addr);
+
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr);
-
-struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_av_array *arr, fi_addr_t addr);
-
-int efa_rdm_ep_peer_map_insert(struct efa_av_array *arr, fi_addr_t addr, struct efa_rdm_peer *peer)
-	OFI_TSA_REQUIRES(efa_ctrl_lock_sym);
-
-struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_addr_t addr)
-	OFI_TSA_REQUIRES(efa_ctrl_lock_sym);
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer, uint32_t op);
