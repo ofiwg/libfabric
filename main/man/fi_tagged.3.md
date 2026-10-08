@@ -59,7 +59,7 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t tag);
 
-ssize_t fi_trecv_flush(struct fid_ep *ep, uint64_t flags);
+int fi_trecv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -271,6 +271,11 @@ the queued work has been initiated.  Its primary use is to start tagged receives
 deferred by the FI_MORE flag.  A provider that does not maintain a separate
 tagged receive queue services this the same as fi_recv_flush.  Flags are
 reserved for future use and must be 0.
+
+A flush call fails only on a fatal error, such as a PCIe write error, that
+prevents the deferred work from being initiated.  Per-request errors are
+reported by the individual post calls, not by flush.  On failure, the number of
+receives initiated is undefined and the endpoint should be considered unusable.
 
 ## fi_xpu_tsend / fi_xpu_trecv
 
