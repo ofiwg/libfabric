@@ -452,7 +452,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 					 "] fi_addr: %" PRIu64 " implicit AV: false\n",
 					 gid_str_cdesc, efa_ep_addr.qpn,
 					 efa_ep_addr.qkey,
-					 peer->av_entry->efa_av_entry.fi_addr);
+					 efa_rdm_av_entry_fi_addr(peer->av_entry));
 				goto out;
 			}
 		}
@@ -525,7 +525,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 				 "] fi_addr: %" PRIu64 " implicit AV: true\n",
 				 gid_str_cdesc, efa_ep_addr.qpn,
 				 efa_ep_addr.qkey,
-				 peer->av_entry->implicit_fi_addr);
+				 efa_rdm_av_entry_implicit_fi_addr(peer->av_entry));
 		}
 		goto unlock;
 	}
@@ -583,10 +583,10 @@ out:
 		return NULL;
 	}
 
-	assert((peer->av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->av_entry->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
-	       (peer->av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL));
+	assert((efa_rdm_av_entry_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL &&
+		efa_rdm_av_entry_implicit_fi_addr(peer->av_entry) == FI_ADDR_NOTAVAIL) ||
+	       (efa_rdm_av_entry_implicit_fi_addr(peer->av_entry) != FI_ADDR_NOTAVAIL &&
+		efa_rdm_av_entry_fi_addr(peer->av_entry) == FI_ADDR_NOTAVAIL));
 	return peer;
 
 unlock_insert_err:
@@ -675,8 +675,8 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		EFA_WARN(FI_LOG_CQ,
 			 "Peer fi_addr: %ld implicit fi_addr %ld is requesting "
 			 "feature %d, which this EP does not support.\n",
-			 pkt_entry->peer->av_entry->efa_av_entry.fi_addr,
-			 pkt_entry->peer->av_entry->implicit_fi_addr,
+			 efa_rdm_av_entry_fi_addr(pkt_entry->peer->av_entry),
+			 efa_rdm_av_entry_implicit_fi_addr(pkt_entry->peer->av_entry),
 			 base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
@@ -792,7 +792,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? efa_rdm_av_entry_fi_addr(pkt_entry->ope->peer->av_entry) : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
@@ -864,7 +864,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? efa_rdm_av_entry_fi_addr(pkt_entry->ope->peer->av_entry) : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif

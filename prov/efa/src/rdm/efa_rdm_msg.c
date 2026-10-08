@@ -404,7 +404,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	EFA_DBG(FI_LOG_EP_DATA,
 		"peer: %" PRIu64
 		": size %lu tag: %lx op: %x flags: %lx msg_id: %" PRIu32 "\n",
-		peer->av_entry->efa_av_entry.fi_addr, txe->total_len, tag, op, fi_flags, txe->msg_id);
+		efa_rdm_av_entry_fi_addr(peer->av_entry), txe->total_len, tag, op, fi_flags, txe->msg_id);
 
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
@@ -959,7 +959,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 
 	peer = (*pkt_entry_ptr)->peer;
-	attr.addr = peer->av_entry->efa_av_entry.fi_addr;
+	attr.addr = efa_rdm_av_entry_fi_addr(peer->av_entry);
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = 0;
 	ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &peer_rxe);
@@ -1004,7 +1004,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 		efa_rdm_tracepoint(msg_recv_unexpected_nontagged, (uint64_t) orig_pke_ptr,
 				   (*pkt_entry_ptr)->pkt_size, rxe->msg_id,
 				   (size_t) rxe->cq_entry.op_context,
-				   rxe->total_len, rxe->tag, rxe->peer->av_entry->efa_av_entry.fi_addr);
+				   rxe->total_len, rxe->tag, efa_rdm_av_entry_fi_addr(rxe->peer->av_entry));
 #endif
 
 	} else { /* Unexpected errors */
@@ -1054,7 +1054,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 	peer = (*pkt_entry_ptr)->peer;
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
-	attr.addr = peer->av_entry->efa_av_entry.fi_addr;
+	attr.addr = efa_rdm_av_entry_fi_addr(peer->av_entry);
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr);
 
@@ -1106,7 +1106,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		efa_rdm_tracepoint(msg_recv_unexpected_tagged, (uint64_t) orig_pke_ptr,
 				   (*pkt_entry_ptr)->pkt_size, rxe->msg_id,
 				   (size_t) rxe->cq_entry.op_context,
-				   rxe->total_len, rxe->tag, rxe->peer->av_entry->efa_av_entry.fi_addr);
+				   rxe->total_len, rxe->tag, efa_rdm_av_entry_fi_addr(rxe->peer->av_entry));
 #endif
 
 	} else { /* Unexpected errors */

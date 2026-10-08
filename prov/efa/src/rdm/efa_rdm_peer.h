@@ -284,6 +284,6 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_e
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->av_entry->efa_av_entry.fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, efa_rdm_av_entry_fi_addr(peer->av_entry), peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */

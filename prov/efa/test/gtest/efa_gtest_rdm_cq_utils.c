@@ -171,8 +171,8 @@ void efa_test_rdm_cq_peer_state(struct fid_ep *ep, fi_addr_t addr,
 	out->nextra_p3 = peer->nextra_p3;
 	out->extra_info0 = peer->extra_info[0];
 	out->device_version = peer->device_version;
-	out->explicit_fi_addr = peer->av_entry->efa_av_entry.fi_addr;
-	out->implicit_fi_addr = peer->av_entry->implicit_fi_addr;
+	out->explicit_fi_addr = efa_rdm_av_entry_fi_addr(peer->av_entry);
+	out->implicit_fi_addr = efa_rdm_av_entry_implicit_fi_addr(peer->av_entry);
 }
 
 size_t efa_test_rdm_cq_implicit_av_count(struct fid_av *av)

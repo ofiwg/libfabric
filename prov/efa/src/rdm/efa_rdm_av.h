@@ -88,6 +88,10 @@ enum efa_rdm_av_entry_publish_state {
  * @brief RDM address vector entry
  *
  * Embeds the base efa_av_entry as its first member and adds the RDM-only state.
+ *
+ * efa_av_entry.fi_addr and implicit_fi_addr are written under the AV locks but
+ * read on the data path without them (completion source addresses, SRX
+ * matching, logging), so readers go through the atomic accessors below.
  */
 struct efa_rdm_av_entry {
 	struct efa_av_entry	efa_av_entry;
@@ -119,6 +123,22 @@ struct efa_rdm_av_entry {
 
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");
+
+/* fi_addr of the entry in the explicit AV, or FI_ADDR_NOTAVAIL if it is not in
+ * the explicit AV. Safe without any lock. */
+static inline fi_addr_t
+efa_rdm_av_entry_fi_addr(const struct efa_rdm_av_entry *av_entry)
+{
+	return __atomic_load_n(&av_entry->efa_av_entry.fi_addr, __ATOMIC_ACQUIRE);
+}
+
+/* fi_addr of the entry in the implicit AV, or FI_ADDR_NOTAVAIL. Safe without any
+ * lock, but only stable under util_av_implicit.lock. */
+static inline fi_addr_t
+efa_rdm_av_entry_implicit_fi_addr(const struct efa_rdm_av_entry *av_entry)
+{
+	return __atomic_load_n(&av_entry->implicit_fi_addr, __ATOMIC_ACQUIRE);
+}
 
 /**
  * @brief RDM address handle
