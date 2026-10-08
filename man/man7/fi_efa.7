@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-10\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-10\-08" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -366,6 +366,32 @@ provider requires peer to peer transaction support between the EFA and
 the FI_HMEM device.
 Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
 provider for AWS Neuron or Habana SynapseAI.
+.SS CUDA VMM synchronization
+.PP
+For CUDA memory regions, the \f[V]efa\f[R] fabric normally sets
+\f[V]CU_POINTER_ATTRIBUTE_SYNC_MEMOPS\f[R] before the first transmit
+operation.
+CUDA VMM allocations (\f[V]cuMemCreate\f[R] and \f[V]cuMemMap\f[R]) do
+not support this attribute, so on CUDA 12.1 or later the provider
+instead sets \f[V]CU_CTX_SYNC_MEMOPS\f[R] on the memory region\[cq]s
+device primary context.
+This also works when the calling thread has no current CUDA context.
+.PP
+Both pointer- and context-level synchronization are performed only when
+\f[V]FI_OPT_CUDA_API_PERMITTED\f[R] is set to \f[V]true\f[R], which is
+the default.
+Applications that do not want the provider to modify CUDA buffer or
+context state can set this option to \f[V]false\f[R].
+Doing so also disables the SHM provider for intra-node communication,
+intra-node traffic then uses the EFA device instead, which may reduce
+performance.
+.PP
+The context-level fallback only covers synchronous CUDA memory
+operations initiated on the device\[cq]s primary context.
+Applications using VMM buffers from contexts created with
+\f[V]cuCtxCreate\f[R] must either enable \f[V]CU_CTX_SYNC_MEMOPS\f[R] on
+those contexts or explicitly order CUDA work and EFA transfers using
+CUDA synchronization APIs.
 .SS CUDA memory registration on the P6e-GB200 instance type
 .PP
 A CUDA dmabuf file descriptor encodes one DMA path to GPU memory, and
