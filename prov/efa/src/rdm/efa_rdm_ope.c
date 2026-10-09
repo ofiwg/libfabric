@@ -2408,7 +2408,8 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	assert(pkt_entry);
+	if (OFI_UNLIKELY(!pkt_entry))
+		return -FI_EAGAIN;
 
 	/* Staged here, not in a local, because callers read back slot 0. */
 	ep->send_pkt_entry_vec[0] = pkt_entry;
