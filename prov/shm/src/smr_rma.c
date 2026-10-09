@@ -105,8 +105,8 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 }
 
 static inline bool smr_do_fast_rma(struct smr_ep *ep, uint64_t op_flags,
-				   size_t rma_count, size_t total_len,
-				   struct smr_region *peer_smr)
+				   size_t iov_count, size_t rma_count,
+				   void **desc, struct smr_region *peer_smr)
 {
 	struct smr_domain *domain;
 
@@ -115,7 +115,9 @@ static inline bool smr_do_fast_rma(struct smr_ep *ep, uint64_t op_flags,
 
 	return domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1 && smr_vma_enabled(ep, peer_smr);
+		     rma_count == 1 && smr_vma_enabled(ep, peer_smr) &&
+		     !(peer_smr->flags & SMR_FLAG_HMEM_ENABLED) &&
+		     (!desc || ofi_mr_all_host((struct ofi_mr **) desc, iov_count));
 
 }
 
@@ -151,7 +153,8 @@ static ssize_t smr_generic_rma(
 		goto unlock;
 
 	total_len = ofi_total_iov_len(iov, iov_count);
-	if (smr_do_fast_rma(ep, op_flags, rma_count, total_len, peer_smr)) {
+	if (smr_do_fast_rma(ep, op_flags, iov_count, rma_count, desc,
+			    peer_smr)) {
 		ret = smr_rma_fast(ep, peer_smr, iov, iov_count, rma_iov,
 				   rma_count, desc, rx_id, tx_id, context, op,
 				   op_flags);

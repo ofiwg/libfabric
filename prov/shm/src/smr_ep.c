@@ -401,7 +401,8 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 		*smr_flags |= SMR_RETURN_CMD;
 		if (use_ipc)
 			return smr_proto_ipc;
-		if (vma_avail && FI_HMEM_SYSTEM == iface)
+		if (vma_avail &&
+		    (!desc || ofi_mr_all_host((struct ofi_mr **) desc, iov_count)))
 			return smr_proto_iov;
 		return smr_proto_sar;
 	}
@@ -428,7 +429,9 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 	}
 
 	*smr_flags |= SMR_RETURN_CMD;
-	return vma_avail ? smr_proto_iov: smr_proto_sar;
+	return vma_avail && (!desc || ofi_mr_all_host((struct ofi_mr **) desc,
+						      iov_count)) ?
+			smr_proto_iov : smr_proto_sar;
 }
 
 static ssize_t smr_do_inline(struct smr_ep *ep, struct smr_region *peer_smr,
