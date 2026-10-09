@@ -738,6 +738,17 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 		}
 		ipc_signal->addr = dst;
 		agents[1] = agents[0];
+	/* host to device */
+	} else if (src_local && !dst_local) {
+		hsa_ret = ofi_hsa_amd_memory_lock((void *) src, size, NULL, 0,
+						  &src_hsa_ptr);
+		if (hsa_ret != HSA_STATUS_SUCCESS) {
+			ret = -FI_EINVAL;
+			goto fail;
+		}
+		src_offset = 0;
+		ipc_signal->addr = (void *) src;
+		agents[0] = agents[1];
 	}
 
 	dst_copy_ptr = (void *)((uintptr_t)dst_hsa_ptr + dst_offset);
