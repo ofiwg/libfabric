@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
@@ -14,6 +15,7 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longcts_rtr.h"
 #include "ofi_util.h"
 
 #define EFA_TEST_CTRL_SOURCE_LEN 64
@@ -503,4 +505,86 @@ size_t efa_test_ctrl_readrsp_max_payload(struct fid_ep *ep)
 	struct efa_rdm_ep *efa_rdm_ep = efa_test_ctrl_ep(ep);
 
 	return efa_rdm_ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr);
+}
+
+int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
+					     struct fid_av *av,
+					     struct efa_test_cont_result *out)
+{
+	struct efa_rdm_ope *rxe;
+	size_t len = 128;
+	int ret;
+
+	memset(&g_ctrl, 0, sizeof(g_ctrl));
+	g_ctrl.ep = efa_test_ctrl_ep(ep);
+
+	ret = efa_test_ctrl_setup_peer(ep, av);
+	if (ret)
+		return ret;
+
+	rxe = efa_rdm_ep_alloc_rxe(g_ctrl.ep, g_ctrl.peer, ofi_op_read_rsp);
+	if (!rxe)
+		return -FI_ENOMEM;
+	g_ctrl.ope = rxe;
+
+	efa_test_ctrl_set_source(rxe, len);
+	rxe->proto = &efa_rdm_proto_longcts_rtr;
+	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+
+	/*
+	 * Mid-transfer: the first half was already sent, and the peer's CTS
+	 * granted a window for the rest. The remaining window is one packet's
+	 * worth, so the continuation posts exactly one CTSDATA.
+	 */
+	rxe->bytes_sent = len / 2;
+	rxe->window = len - rxe->bytes_sent;
+	assert(rxe->window <= g_ctrl.ep->max_data_payload_size);
+	rxe->state = EFA_RDM_OPE_SEND;
+	dlist_insert_tail(&rxe->entry, &g_ctrl.ep->ope_longcts_send_list);
+
+	out->on_longcts_send_list = 1;
+	out->ope_bytes_sent = rxe->bytes_sent;
+	return 0;
+}
+
+void efa_test_ctrl_drive_continuation(struct fid_ep *ep, int tx_full,
+				      struct efa_test_cont_result *out)
+{
+	struct efa_rdm_ep *efa_rdm_ep = efa_test_ctrl_ep(ep);
+	struct efa_rdm_cq *cq;
+
+	if (tx_full) {
+		g_ctrl.saved_outstanding_tx_ops =
+			efa_rdm_ep->efa_outstanding_tx_ops;
+		g_ctrl.saved_outstanding_valid = 1;
+		efa_rdm_ep->efa_outstanding_tx_ops =
+			efa_rdm_ep->efa_max_outstanding_tx_ops;
+	}
+
+	cq = efa_rdm_ep->base_ep.util_ep.tx_cq ?
+		     container_of(efa_rdm_ep->base_ep.util_ep.tx_cq,
+				  struct efa_rdm_cq, efa_cq.util_cq) :
+		     container_of(efa_rdm_ep->base_ep.util_ep.rx_cq,
+				  struct efa_rdm_cq, efa_cq.util_cq);
+
+	EFA_GENLOCK_LOCK(&cq->progress_ep_list_lock,
+			 efa_progress_ep_list_lock_sym);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
+
+	efa_rdm_ep_progress_peers_and_queues(efa_rdm_ep);
+
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
+	EFA_GENLOCK_UNLOCK(&cq->progress_ep_list_lock,
+			   efa_progress_ep_list_lock_sym);
+
+	if (g_ctrl.saved_outstanding_valid) {
+		efa_rdm_ep->efa_outstanding_tx_ops =
+			g_ctrl.saved_outstanding_tx_ops;
+		g_ctrl.saved_outstanding_valid = 0;
+	}
+
+	out->on_longcts_send_list =
+		efa_test_ctrl_on_list(&efa_rdm_ep->ope_longcts_send_list,
+				      &g_ctrl.ope->entry);
+	out->ope_bytes_sent = g_ctrl.ope->bytes_sent;
 }

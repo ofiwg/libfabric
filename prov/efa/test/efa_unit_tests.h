@@ -22,6 +22,7 @@
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
+#include "protocols/efa_rdm_proto_longcts_rtr.h"
 
 /**
  * Maximum value of hardware completion counters on the EFA device.
