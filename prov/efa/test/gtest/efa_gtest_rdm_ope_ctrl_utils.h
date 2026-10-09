@@ -159,6 +159,17 @@ int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
 void efa_test_ctrl_drive_continuation(struct fid_ep *ep, int tx_full,
 				      struct efa_test_cont_result *out);
 
+/**
+ * @brief Build a long CTS write initiator txe mid-transfer and place it on the
+ * endpoint's ope_longcts_send_list, as a received CTS would. The txe carries
+ * the long CTS write protocol and a window with data still to send.
+ *
+ * @return 0 on success, negative on setup failure.
+ */
+int efa_test_ctrl_setup_longcts_write_continuation(
+	struct fid_ep *ep, struct fid_av *av,
+	struct efa_test_cont_result *out);
+
 #ifdef __cplusplus
 }
 #endif

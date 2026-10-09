@@ -16,6 +16,7 @@
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longcts_rtr.h"
+#include "rdm/protocols/efa_rdm_proto_longcts_write.h"
 #include "ofi_util.h"
 
 #define EFA_TEST_CTRL_SOURCE_LEN 64
@@ -587,4 +588,51 @@ void efa_test_ctrl_drive_continuation(struct fid_ep *ep, int tx_full,
 		efa_test_ctrl_on_list(&efa_rdm_ep->ope_longcts_send_list,
 				      &g_ctrl.ope->entry);
 	out->ope_bytes_sent = g_ctrl.ope->bytes_sent;
+}
+
+int efa_test_ctrl_setup_longcts_write_continuation(
+	struct fid_ep *ep, struct fid_av *av,
+	struct efa_test_cont_result *out)
+{
+	struct efa_rdm_ope *txe;
+	size_t len = 128;
+	struct iovec iov;
+	struct fi_msg msg = {0};
+	int ret;
+
+	memset(&g_ctrl, 0, sizeof(g_ctrl));
+	g_ctrl.ep = efa_test_ctrl_ep(ep);
+
+	ret = efa_test_ctrl_setup_peer(ep, av);
+	if (ret)
+		return ret;
+
+	txe = ofi_buf_alloc(g_ctrl.ep->base_ep.txe_pool);
+	if (!txe)
+		return -FI_ENOMEM;
+	iov.iov_base = g_ctrl.source;
+	iov.iov_len = len;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	efa_rdm_txe_construct(txe, g_ctrl.ep, g_ctrl.peer, &msg, ofi_op_write,
+			      0, 0);
+	g_ctrl.ope = txe;
+
+	efa_test_ctrl_set_source(txe, len);
+	txe->proto = &efa_rdm_proto_longcts_write;
+
+	/*
+	 * Mid-transfer: the first half was already sent, and the peer's CTS
+	 * granted a window for the rest. The remaining window is one packet's
+	 * worth, so the continuation posts exactly one CTSDATA.
+	 */
+	txe->bytes_sent = len / 2;
+	txe->window = len - txe->bytes_sent;
+	assert(txe->window <= g_ctrl.ep->max_data_payload_size);
+	txe->state = EFA_RDM_OPE_SEND;
+	dlist_insert_tail(&txe->entry, &g_ctrl.ep->ope_longcts_send_list);
+
+	out->on_longcts_send_list = 1;
+	out->ope_bytes_sent = txe->bytes_sent;
+	return 0;
 }
