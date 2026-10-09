@@ -334,6 +334,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_ope_ctrl.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_proto_utils.c \
 	prov/efa/test/gtest/efa_gtest_rdm_proto.cc \
+	prov/efa/test/gtest/efa_gtest_fi_more_helpers.c \
+	prov/efa/test/gtest/efa_gtest_fi_more.cc \
 	prov/efa/test/gtest/efa_gtest_cq.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_cq_utils.c \
 	prov/efa/test/gtest/efa_gtest_rdm_cq.cc \
@@ -398,6 +400,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_rdm_av_reverse_lookup \
 	-Wl,--wrap=efa_rdm_av_reverse_lookup_unsafe \
 	-Wl,--wrap=ofi_av_lookup_fi_addr \
+	-Wl,--wrap=efa_ibv_cq_wc_is_unsolicited \
 	-Wl,--wrap=efa_rdm_pke_clone \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \
