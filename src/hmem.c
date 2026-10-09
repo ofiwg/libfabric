@@ -887,10 +887,10 @@ int ofi_hmem_dev_alloc(enum fi_hmem_iface iface, uint64_t device,
 }
 
 int ofi_hmem_dev_import(enum fi_hmem_iface iface, uint64_t device,
-			void *host_addr, uint64_t size, uint64_t flags,
+			void *host_addr, uint64_t size, int fd, uint64_t flags,
 			void **dev_addr)
 {
-	return hmem_ops[iface].dev_import(device, host_addr, size, flags,
+	return hmem_ops[iface].dev_import(device, host_addr, size, fd, flags,
 					  dev_addr);
 }
 

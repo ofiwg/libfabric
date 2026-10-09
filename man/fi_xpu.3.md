@@ -79,7 +79,7 @@ struct fi_xpu_ops {
                  uint64_t alignment, uint64_t flags,
                  void **addr, int *fd, uint64_t *offset);
     int (*import)(uint64_t device, void *host_addr,
-                  uint64_t size, uint64_t flags,
+                  uint64_t size, int fd, uint64_t flags,
                   void **dev_addr);
     int (*unimport)(uint64_t device, void *host_addr);
     void (*free)(uint64_t device, void *addr);
@@ -122,7 +122,11 @@ unimport or free device memory on behalf of the XPU context.
 *import*
 : Map a host virtual address into the XPU address space. The provider calls
   this when it has a host-side address (BAR MMIO or host RAM) that the XPU
-  kernel needs to access. Flags indicate the memory type:
+  kernel needs to access. If the `FI_XPU_IMPORT_DMABUF` flag is set, the
+  provider must also pass a DMA-BUF file descriptor that the consumer can
+  use to set up the mapping. This is used for consumers that can only import
+  certain address types (e.g. MMIO) as a DMA-BUF object. Other flags indicate
+  the memory type:
   `FI_XPU_IMPORT_IOMEMORY` for PCIe BAR MMIO regions,
   `FI_XPU_IMPORT_DEVICEMAP` for addresses that must be accessible from
   XPU kernels.
@@ -148,6 +152,10 @@ unimport or free device memory on behalf of the XPU context.
 *FI_XPU_IMPORT_DEVICEMAP*
 : Passed to the import callback. Indicates the resulting pointer must be
   accessible from XPU kernel code.
+
+*FI_XPU_IMPORT_DMABUF*
+: Passed to the import callback. Indicates the host address has been exported
+  as a DMA-BUF fd passed via the *fd* parameter.
 
 # fi_xpu_ctx_attr
 

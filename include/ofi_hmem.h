@@ -161,7 +161,7 @@ struct ofi_hmem_ops {
 			 uint64_t flags, void **addr, int *fd,
 			 uint64_t *offset);
 	int (*dev_import)(uint64_t device, void *host_addr, uint64_t size,
-			  uint64_t flags, void **dev_addr);
+			  int fd, uint64_t flags, void **dev_addr);
 	int (*dev_unimport)(uint64_t device, void *host_addr);
 	void (*dev_free)(uint64_t device, void *addr);
 };
@@ -236,7 +236,7 @@ int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
 int cuda_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
 		   uint64_t flags, void **addr, int *fd, uint64_t *offset);
-int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
 		    uint64_t flags, void **dev_addr);
 int cuda_dev_unimport(uint64_t device, void *host_addr);
 void cuda_dev_free(uint64_t device, void *addr);
@@ -429,7 +429,7 @@ static inline int ofi_hmem_no_dev_alloc(uint64_t device, uint64_t size,
 }
 
 static inline int ofi_hmem_no_dev_import(uint64_t device, void *host_addr,
-					 uint64_t size, uint64_t flags,
+					 uint64_t size, int fd, uint64_t flags,
 					 void **dev_addr)
 {
 	return -FI_ENOSYS;
@@ -563,7 +563,7 @@ int ofi_hmem_dev_alloc(enum fi_hmem_iface iface, uint64_t device,
 		       uint64_t size, uint64_t alignment, uint64_t flags,
 		       void **addr, int *fd, uint64_t *offset);
 int ofi_hmem_dev_import(enum fi_hmem_iface iface, uint64_t device,
-			void *host_addr, uint64_t size, uint64_t flags,
+			void *host_addr, uint64_t size, int fd, uint64_t flags,
 			void **dev_addr);
 int ofi_hmem_dev_unimport(enum fi_hmem_iface iface, uint64_t device,
 			  void *host_addr);
