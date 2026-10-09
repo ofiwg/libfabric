@@ -401,7 +401,7 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 		*smr_flags |= SMR_RETURN_CMD;
 		if (use_ipc)
 			return smr_proto_ipc;
-		if (vma_avail &&
+		if (vma_avail && total_len > SMR_INJECT_SIZE &&
 		    (!desc || ofi_mr_all_host((struct ofi_mr **) desc, iov_count)))
 			return smr_proto_iov;
 		return smr_proto_sar;
