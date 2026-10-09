@@ -465,7 +465,7 @@ void test_efa_rma_writemsg_with_inject(void **state)
 		efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 1, dest_addr, &rma_iov,
 						1, NULL, 0);
 		ret = fi_writemsg(resource->ep, &msg, FI_INJECT);
-		assert_int_equal(ret, -FI_EINVAL);
+		assert_int_equal(ret, -FI_EMSGSIZE);
 		efa_unit_test_buff_destruct(&local_buff);
 		return;
 	}
