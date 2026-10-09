@@ -266,4 +266,43 @@ TEST_F(EfaRdmOpeCtrlQueueTest, fi_more_is_not_propagated_to_the_qp)
 	EXPECT_FALSE(seen_flags & FI_MORE);
 }
 
+class EfaRdmOpeContinuationTest : public EfaRdmOpeCtrlBase
+{
+};
+
+TEST_F(EfaRdmOpeContinuationTest, eagain_leaves_ope_queued)
+{
+	struct efa_test_cont_result res = {};
+	uint64_t bytes_sent_before;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+
+	ASSERT_EQ(efa_test_ctrl_setup_longcts_continuation(
+			  resource.ep, resource.av, &res),
+		  0);
+	bytes_sent_before = res.ope_bytes_sent;
+
+	efa_test_ctrl_drive_continuation(resource.ep, 1 /* tx_full */, &res);
+
+	EXPECT_TRUE(res.on_longcts_send_list);
+	EXPECT_EQ(res.ope_bytes_sent, bytes_sent_before);
+}
+
+TEST_F(EfaRdmOpeContinuationTest, success_posts_continuation_and_advances)
+{
+	struct efa_test_cont_result res = {};
+	uint64_t bytes_sent_before;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_ctrl_setup_longcts_continuation(
+			  resource.ep, resource.av, &res),
+		  0);
+	bytes_sent_before = res.ope_bytes_sent;
+
+	efa_test_ctrl_drive_continuation(resource.ep, 0 /* tx_full */, &res);
+
+	EXPECT_GT(res.ope_bytes_sent, bytes_sent_before);
+}
+
 } /* namespace */

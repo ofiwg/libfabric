@@ -134,6 +134,31 @@ uint64_t efa_test_ctrl_expected_cts_recv_length(struct fid_ep *ep,
 /** @brief Largest READRSP payload that still fits one packet. */
 size_t efa_test_ctrl_readrsp_max_payload(struct fid_ep *ep);
 
+/** @brief Observable state of the long CTS continuation drain. */
+struct efa_test_cont_result {
+	int on_longcts_send_list;
+	uint64_t ope_bytes_sent;
+};
+
+/**
+ * @brief Build a long CTS read responder rxe mid-transfer and place it on the
+ * endpoint's ope_longcts_send_list, as a received CTS would. The rxe carries
+ * the long CTS read protocol and a window with data still to send.
+ *
+ * @return 0 on success, negative on setup failure.
+ */
+int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
+					     struct fid_av *av,
+					     struct efa_test_cont_result *out);
+
+/**
+ * @brief Run the progress engine's long CTS send-list drain once. When
+ * @p tx_full is set, the TX pool is exhausted for the duration of the drain so
+ * the continuation post yields -FI_EAGAIN. Reports the post-drain state.
+ */
+void efa_test_ctrl_drive_continuation(struct fid_ep *ep, int tx_full,
+				      struct efa_test_cont_result *out);
+
 #ifdef __cplusplus
 }
 #endif
