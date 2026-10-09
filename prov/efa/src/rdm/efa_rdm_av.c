@@ -110,8 +110,8 @@ static int efa_rdm_ah_implicit_av_evict_ah(struct efa_domain *domain,
 				      struct efa_rdm_av_entry, av_entry_to_release,
 				      ah_implicit_conn_list_entry, tmp) {
 
-		assert(av_entry_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		       av_entry_to_release->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL);
+		assert(efa_rdm_av_entry_implicit_fi_addr(av_entry_to_release) != FI_ADDR_NOTAVAIL &&
+		       efa_rdm_av_entry_fi_addr(av_entry_to_release) == FI_ADDR_NOTAVAIL);
 
 		/*
 		 * The implicit insert path already holds util_av_implicit.lock.
@@ -265,6 +265,107 @@ static bool efa_rdm_av_is_local_peer(struct efa_av *av, const void *addr)
 }
 
 
+/*
+ * Conn lifetime.
+ *
+ * A conn (struct efa_rdm_av_entry) represents one remote endpoint for as long
+ * as it is in the AV, implicit or explicit; see the struct comment in
+ * efa_rdm_av.h and prov/efa/docs/efa_rdm_av_locking.md.
+ */
+
+static inline void efa_rdm_av_entry_set_fi_addr(struct efa_rdm_av_entry *av_entry,
+						fi_addr_t fi_addr)
+{
+	__atomic_store_n(&av_entry->efa_av_entry.fi_addr, fi_addr, __ATOMIC_RELEASE);
+}
+
+static inline void
+efa_rdm_av_entry_set_implicit_fi_addr(struct efa_rdm_av_entry *av_entry,
+				      fi_addr_t fi_addr)
+{
+	__atomic_store_n(&av_entry->implicit_fi_addr, fi_addr, __ATOMIC_RELEASE);
+}
+
+/**
+ * @brief allocate and initialize a conn that is in neither AV yet
+ *
+ * @param[in]	rdm_av		RDM address vector
+ * @param[in]	raw_addr	raw address of the remote endpoint
+ * @return	the conn, or NULL on allocation failure
+ */
+static struct efa_rdm_av_entry *efa_rdm_av_conn_alloc(struct efa_rdm_av *rdm_av,
+						      struct efa_ep_addr *raw_addr)
+	OFI_TSA_EXCLUDES(efa_av_conn_pool_lock_sym)
+{
+	struct efa_rdm_av_entry *av_entry;
+
+	EFA_GENLOCK_LOCK(&rdm_av->conn_pool_lock, efa_av_conn_pool_lock_sym);
+	av_entry = ofi_ibuf_alloc(rdm_av->conn_pool);
+	EFA_GENLOCK_UNLOCK(&rdm_av->conn_pool_lock, efa_av_conn_pool_lock_sym);
+	if (OFI_UNLIKELY(!av_entry)) {
+		EFA_WARN(FI_LOG_AV, "Cannot allocate AV entry\n");
+		return NULL;
+	}
+
+	/* Not reachable by any other thread until it is published. */
+	memset(av_entry, 0, sizeof(*av_entry));
+	memcpy(av_entry->efa_av_entry.ep_addr, raw_addr, EFA_EP_ADDR_LEN);
+	av_entry->efa_av_entry.fi_addr = FI_ADDR_NOTAVAIL;
+	av_entry->av = rdm_av;
+	av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
+	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	av_entry->peer_idx = (uint32_t) ofi_buf_index(av_entry);
+	av_entry->released = false;
+	return av_entry;
+}
+
+/**
+ * @brief return a conn to the pool
+ *
+ * The conn must already be unpublished from every map and have no peers. Its
+ * peer_idx can be handed out again from here on, which is safe because every
+ * endpoint's slot for it was cleared by efa_rdm_av_entry_destroy_peers.
+ */
+static void efa_rdm_av_conn_free(struct efa_rdm_av *rdm_av,
+				 struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_EXCLUDES(efa_av_conn_pool_lock_sym)
+{
+	memset(av_entry->efa_av_entry.ep_addr, 0, EFA_EP_ADDR_LEN);
+	EFA_GENLOCK_LOCK(&rdm_av->conn_pool_lock, efa_av_conn_pool_lock_sym);
+	ofi_ibuf_free(av_entry);
+	EFA_GENLOCK_UNLOCK(&rdm_av->conn_pool_lock, efa_av_conn_pool_lock_sym);
+}
+
+/**
+ * @brief destroy every bound endpoint's peer for a conn that is leaving the AV
+ *
+ * The caller has already unpublished the conn from every map, so no new lookup
+ * can find it. Marking the conn released before visiting the endpoints makes a
+ * creator that read the conn before it was unpublished skip creating a peer once
+ * it gets the endpoint's ctrl_lock (see efa_rdm_ep_create_peer).
+ *
+ * @param[in]	av		address vector
+ * @param[in]	av_entry	conn
+ */
+static void efa_rdm_av_entry_destroy_peers(struct efa_av *av,
+					   struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_EXCLUDES(efa_av_ep_list_lock_sym, efa_ctrl_lock_sym)
+{
+	struct dlist_entry *entry;
+	struct efa_rdm_ep *ep;
+
+	__atomic_store_n(&av_entry->released, true, __ATOMIC_RELEASE);
+
+	EFA_GENLOCK_LOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
+	dlist_foreach(&av->util_av.ep_list, entry) {
+		ep = container_of(entry, struct efa_rdm_ep,
+				  base_ep.util_ep.av_entry);
+		efa_rdm_ep_destroy_peer(ep, av_entry);
+	}
+	EFA_GENLOCK_UNLOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
+}
+
+
 /**
  * @brief Add the entry to the implicit AV LRU list; if the list is full, evict
  * the least recently used entry at the front and add the latest one.
@@ -274,8 +375,7 @@ static bool efa_rdm_av_is_local_peer(struct efa_av *av, const void *addr)
  */
 static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 						    struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	size_t cur_size;
@@ -292,25 +392,29 @@ static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 		goto out;
 
 	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(!dlist_empty(&rdm_av->implicit_av_lru_list));
 
-	dlist_pop_front(&rdm_av->implicit_av_lru_list, struct efa_rdm_av_entry,
-			av_entry_to_release, implicit_av_lru_entry);
+	av_entry_to_release = container_of(rdm_av->implicit_av_lru_list.next,
+					   struct efa_rdm_av_entry,
+					   implicit_av_lru_entry);
 	EFA_INFO(FI_LOG_AV,
 		 "Evicting AV entry for peer implicit fi_addr %" PRIu64
 		 " AHN %" PRIu16 " QPN %" PRIu16 " QKEY %" PRIu32 " from "
 		 "implicit AV\n",
-		 av_entry_to_release->implicit_fi_addr,
+		 efa_rdm_av_entry_implicit_fi_addr(av_entry_to_release),
 		 av_entry_to_release->efa_av_entry.ah->ahn,
 		 efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry)->qpn,
 		 efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry)->qkey);
 
-	/* Add to hashset with list of evicted peers */
+	/* Remember the evicted peer, so that its packets are dropped. */
 	ep_addr_hashable = malloc(sizeof(struct efa_ep_addr_hashable));
 	if (!ep_addr_hashable) {
 		EFA_WARN(FI_LOG_AV, "Could not allocate memory for LRU AV entry hashset entry\n");
-		return FI_ENOMEM;
+		return -FI_ENOMEM;
 	}
-	memcpy(ep_addr_hashable, efa_av_entry_ep_addr(&av_entry->efa_av_entry), sizeof(struct efa_ep_addr));
+	memcpy(ep_addr_hashable,
+	       efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry),
+	       sizeof(struct efa_ep_addr));
 	HASH_ADD(hh, rdm_av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
 
 	efa_rdm_av_entry_release_implicit(av, av_entry_to_release);
@@ -331,6 +435,7 @@ out:
  * @param[in]	av_entry	efa_rdm_av_entry
  */
 static int efa_rdm_av_entry_insert_shm_av(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct efa_ep_addr *ep_addr = efa_av_entry_ep_addr(&av_entry->efa_av_entry);
@@ -356,18 +461,19 @@ static int efa_rdm_av_entry_insert_shm_av(struct efa_av *av, struct efa_rdm_av_e
 			return err;
 		}
 
-		av_entry->shm_fi_addr = av_entry->efa_av_entry.fi_addr;
+		av_entry->shm_fi_addr = efa_rdm_av_entry_fi_addr(av_entry);
 		ret = fi_av_insert(rdm_av->shm_rdm_av, smr_name, 1, &av_entry->shm_fi_addr, FI_AV_USER_ID, NULL);
 		if (OFI_UNLIKELY(ret != 1)) {
 			EFA_WARN(FI_LOG_AV,
 				 "Failed to insert address to shm provider's av: %s\n",
 				 fi_strerror(-ret));
+			av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
 			return ret;
 		}
 
 		EFA_INFO(FI_LOG_AV,
 			"Successfully inserted %s to shm provider's av. efa_fiaddr: %ld shm_fiaddr = %ld\n",
-			smr_name, av_entry->efa_av_entry.fi_addr, av_entry->shm_fi_addr);
+			smr_name, efa_rdm_av_entry_fi_addr(av_entry), av_entry->shm_fi_addr);
 
 		assert(av_entry->shm_fi_addr < efa_env.shm_av_size);
 		rdm_av->shm_used++;
@@ -378,617 +484,29 @@ static int efa_rdm_av_entry_insert_shm_av(struct efa_av *av, struct efa_rdm_av_e
 
 
 /**
- * @brief release the rdm related resources of an efa_rdm_av_entry (shm + peers)
+ * @brief remove a conn from the SHM AV, if it was inserted there
  *
  * @param[in]	av	efa address vector
  * @param[in]	av_entry	efa_rdm_av_entry
  */
-static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	int err;
-	struct dlist_entry *entry, *tmp;
-	struct efa_rdm_ep *ep;
-	struct efa_av_array *peer_map;
-	struct efa_rdm_peer *peer;
-	fi_addr_t fi_addr;
-
-	assert(av->domain->info_type == EFA_INFO_RDM);
-
-	assert((av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL &&
-		av_entry->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
-	       (av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL));
-
-	if (av_entry->shm_fi_addr != FI_ADDR_NOTAVAIL && rdm_av->shm_rdm_av) {
-		err = fi_av_remove(rdm_av->shm_rdm_av, &av_entry->shm_fi_addr, 1, 0);
-		if (err) {
-			EFA_WARN(FI_LOG_AV,
-				 "remove address from shm av failed! err=%d\n",
-				 err);
-		} else {
-			rdm_av->shm_used--;
-			assert(av_entry->shm_fi_addr < efa_env.shm_av_size);
-		}
-	}
-
-	/* since an av entry is all connections to a specific remote ep, we must
-	 * walk all local ep peer maps and remove the connection to the remote ep */
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
-	dlist_foreach_safe(&av->util_av.ep_list, entry, tmp) {
-		ep = container_of(entry, struct efa_rdm_ep,
-				  base_ep.util_ep.av_entry);
-		if (av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL) {
-			peer_map = ep->fi_addr_to_peer_map;
-			fi_addr = av_entry->efa_av_entry.fi_addr;
-		} else {
-			peer_map = ep->fi_addr_to_peer_map_implicit;
-			fi_addr = av_entry->implicit_fi_addr;
-		}
-		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-		peer = efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
-		if (peer) {
-			efa_rdm_peer_destruct(peer, ep);
-			ofi_buf_free(peer);
-		}
-		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-	}
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
-
-	/* Set the publish state to unpublished before returning the entry back
-	 * to the pool. The util AV pool does not zero out buffers after freeing,
-	 * so doing this makes sure that the state of the AV entry after it is
-	 * re-allocated is unpublished.
-	 */
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
-}
-
-
-static int efa_rdm_av_entry_publish(struct efa_av *av,
-				    struct efa_rdm_av_entry *av_entry,
-				    fi_addr_t implicit_fi_addr)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
-
-/**
- * @brief allocate an explicit efa_rdm_av_entry (base entry + rdm state + shm).
- * caller of this function must hold av->util_av.lock
- *
- * @param[in]	av	efa address vector
- * @param[in]	raw_addr	raw endpoint address being inserted
- * @param[in]	flags	flags passed to fi_av_insert
- * @param[in]	context	user context associated with the address
- */
-struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
-						   struct efa_ep_addr *raw_addr,
-						   uint64_t flags, void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct util_av *util_av = &av->util_av;
-	struct util_av_entry *util_av_entry;
-	struct efa_av_entry *entry;
-	struct efa_rdm_av_entry *av_entry;
-	struct efa_ah *ah;
-	fi_addr_t fi_addr;
-	int err;
-
-	assert(ofi_genlock_held(&av->util_av.lock));
-
-	if (flags & FI_SYNC_ERR)
-		memset(context, 0, sizeof(int));
-
-	err = ofi_av_insert_addr(util_av, raw_addr, &fi_addr);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
-		return NULL;
-	}
-
-	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
-	entry = (struct efa_av_entry *)util_av_entry->data;
-	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(entry)));
-	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
-
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
-
-	ah = efa_rdm_ah_alloc(av->domain, raw_addr->raw, false);
-	if (!ah)
-		goto err_remove_addr;
-
-	if (efa_av_entry_base_construct(av, entry, ah, fi_addr))
-		goto err_release_ah;
-
-	av_entry->av = rdm_av;
-	av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
-	dlist_init(&av_entry->implicit_av_lru_entry);
-	dlist_init(&av_entry->ah_implicit_conn_list_entry);
-
-	/* Use efa_rdm_av_entry_publish to update the reverse AV
-	 * efa_rdm_av_entry_publish enforces the ordering between the reverse
-	 * AV and the peer map.
-	 */
-	if (efa_rdm_av_entry_publish(av, av_entry, FI_ADDR_NOTAVAIL)) {
-		efa_rdm_ah_release(av->domain, entry->ah, false);
-		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
-						 entry, fi_addr);
-		return NULL;
-	}
-
-	/*
-	 * The explicit AV insertion is triggered by the application calling the
-	 * fi_av_insert API. Attempt shm av insertion; efa_rdm_av_entry_insert_shm_av is
-	 * a no-op for peers that are not local.
-	 */
-	err = efa_rdm_av_entry_insert_shm_av(av, av_entry);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert fi_addr %" PRIu64
-			" into shm provider's AV: %s\n", fi_addr, fi_strerror(-err));
-		efa_rdm_av_reverse_av_remove(av->cur_reverse_av,
-					     &rdm_av->prv_reverse_av, entry);
-		efa_rdm_ah_release(av->domain, entry->ah, false);
-		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
-						 entry, fi_addr);
-		return NULL;
-	}
-
-	return av_entry;
-
-err_release_ah:
-	efa_rdm_ah_release(av->domain, entry->ah, false);
-err_remove_addr:
-	err = ofi_av_remove_addr(util_av, fi_addr);
-	if (err)
-		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for fi_addr %" PRIu64
-			": %s\n", fi_addr, fi_strerror(-err));
-	return NULL;
-}
-
-
-/**
- * @brief allocate an efa_rdm_av_entry in the implicit AV (RDM only).
- * caller of this function must hold av->util_av_implicit.lock
- *
- * @param[in]	av	efa address vector
- * @param[in]	raw_addr	raw endpoint address being inserted
- * @param[in]	flags	flags passed to fi_av_insert
- * @param[in]	context	user context associated with the address
- */
-struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
-						   struct efa_ep_addr *raw_addr,
-						   uint64_t flags, void *context)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct util_av *util_av_implicit = &rdm_av->util_av_implicit;
-	struct util_av_entry *util_av_entry;
-	struct efa_av_entry *efa_av_entry;
-	struct efa_rdm_av_entry *av_entry;
-	fi_addr_t fi_addr;
-	int err;
-
-	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	assert(av->domain->info_type == EFA_INFO_RDM);
-
-	if (flags & FI_SYNC_ERR)
-		memset(context, 0, sizeof(int));
-
-	err = ofi_av_insert_addr(util_av_implicit, raw_addr, &fi_addr);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
-		return NULL;
-	}
-
-	util_av_entry = ofi_bufpool_get_ibuf(util_av_implicit->av_entry_pool, fi_addr);
-	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
-	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(efa_av_entry)));
-	assert(av->type == FI_AV_TABLE);
-
-	av_entry = container_of(efa_av_entry, struct efa_rdm_av_entry, efa_av_entry);
-
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, EFA_RDM_AV_ENTRY_IMPLICIT);
-
-	av_entry->av = rdm_av;
-	av_entry->efa_av_entry.fi_addr = FI_ADDR_NOTAVAIL;
-	av_entry->implicit_fi_addr = fi_addr;
-	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
-	dlist_init(&av_entry->implicit_av_lru_entry);
-	dlist_init(&av_entry->ah_implicit_conn_list_entry);
-
-	err = efa_rdm_av_implicit_av_lru_insert(av, av_entry);
-	if (err)
-		return NULL;
-
-	av_entry->efa_av_entry.ah = efa_rdm_ah_alloc(av->domain, raw_addr->raw, true);
-	if (!av_entry->efa_av_entry.ah)
-		goto err_release;
-
-	dlist_insert_tail(&av_entry->ah_implicit_conn_list_entry,
-			  &((struct efa_rdm_ah *)(av_entry->efa_av_entry.ah))->implicit_conn_list);
-
-	err = efa_rdm_av_reverse_av_add(rdm_av->cur_reverse_av_implicit,
-					&rdm_av->prv_reverse_av_implicit, efa_av_entry);
-	if (err) {
-		efa_rdm_av_entry_deinit(av, av_entry);
-		goto err_release;
-	}
-
-	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, fi_addr, efa_av_entry);
-	if (err) {
-		efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
-					     &rdm_av->prv_reverse_av_implicit, efa_av_entry);
-		efa_rdm_av_entry_deinit(av, av_entry);
-		goto err_release;
-	}
-	return av_entry;
-
-err_release:
-	dlist_remove(&av_entry->implicit_av_lru_entry);
-	if (av_entry->efa_av_entry.ah) {
-		dlist_remove(&av_entry->ah_implicit_conn_list_entry);
-		efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, true);
-	}
-
-	memset(av_entry->efa_av_entry.ep_addr, 0, EFA_EP_ADDR_LEN);
-	err = ofi_av_remove_addr(util_av_implicit, fi_addr);
-	if (err)
-		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for implicit fi_addr %" PRIu64
-			": %s\n", fi_addr, fi_strerror(-err));
-
-	return NULL;
-}
-
-
-/**
- * @brief release an explicit efa_rdm_av_entry (rdm teardown + base teardown).
- * Caller must hold util_domain + util_av.
- *
- * @param[in]	av	efa address vector
- * @param[in]	av_entry	efa_rdm_av_entry
- */
-void efa_rdm_av_entry_release_explicit(struct efa_av *av,
-				 struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-
-	assert(ofi_genlock_held(&av->util_av.lock));
-
-	efa_rdm_av_reverse_av_remove(av->cur_reverse_av, &rdm_av->prv_reverse_av,
-				     &av_entry->efa_av_entry);
-	efa_rdm_av_entry_deinit(av, av_entry);
-	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, false);
-	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
-					 &av_entry->efa_av_entry,
-					 av_entry->efa_av_entry.fi_addr);
-}
-
-
-/**
- * @brief release an efa_rdm_av_entry from the implicit AV
- *
- * @param[in]	av	efa address vector
- * @param[in]	av_entry	efa_rdm_av_entry
- */
-void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-
-	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
-				     &rdm_av->prv_reverse_av_implicit,
-				     &av_entry->efa_av_entry);
-
-	efa_rdm_av_entry_deinit(av, av_entry);
-
-	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
-	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, true);
-	efa_av_entry_remove_from_util_av(rdm_av->addr_to_entry_map_implicit,
-					 &rdm_av->util_av_implicit,
-					 &av_entry->efa_av_entry,
-					 av_entry->implicit_fi_addr);
-}
-
-
-/**
- * @brief release an implicit efa_rdm_av_entry during AH eviction
- *
- * @param[in]	av	efa address vector
- * @param[in]	av_entry	efa_rdm_av_entry
- */
-void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
+static void efa_rdm_av_entry_remove_shm_av(struct efa_av *av,
 					   struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-
-	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
-				     &rdm_av->prv_reverse_av_implicit,
-				     &av_entry->efa_av_entry);
-
-	efa_rdm_av_entry_deinit(av, av_entry);
-
-	assert(ofi_genlock_held(&av->domain->util_domain.lock));
-	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
-
-	efa_av_entry_remove_from_util_av(rdm_av->addr_to_entry_map_implicit,
-					 &rdm_av->util_av_implicit,
-					 &av_entry->efa_av_entry,
-					 av_entry->implicit_fi_addr);
-	((struct efa_rdm_ah *)(av_entry->efa_av_entry.ah))->implicit_refcnt--;
-	/* Mirror the base reference drop that efa_rdm_ah_release would do; the
-	 * caller (eviction) destroys the AH once its refcnt reaches zero. */
-	av_entry->efa_av_entry.ah->refcnt--;
-}
-
-
-/**
- * @brief find the efa_rdm_av_entry using fi_addr in the implicit AV
- */
-struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
-							   fi_addr_t fi_addr)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct efa_av_entry *entry;
-
-	entry = efa_av_addr_to_entry_impl(rdm_av->addr_to_entry_map_implicit, fi_addr);
-	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry) : NULL;
-}
-
-
-/**
- * @brief lock-free reverse lookup in the current reverse AV
- *
- * Reads the entry currently registered for (ahn, qpn) and validates it against
- * the packet's connection ID. cur_reverse_av is an efa_av_array, so this needs
- * no lock (see the concurrency notes on struct efa_av).
- *
- * @param[in]	cur_reverse_av	reverse AV indexed by efa_av_reverse_av_key()
- * @param[in]	ahn		address handle number
- * @param[in]	qpn		QP number
- * @param[in]	pkt_entry	NULL or rdm packet entry, used to extract connid
- * @param[out]	prv_connid	set to the connid the caller must look up in
- *				prv_reverse_av when this function returns NULL
- *				because the packet is from a previous connection
- *				on this (ahn, qpn); left untouched otherwise
- * @return	the matching efa_av_entry, or NULL. NULL with *prv_connid unset
- *		means no peer is known for (ahn, qpn) at all.
- */
-static inline struct efa_av_entry *
-efa_rdm_av_reverse_lookup_cur(struct efa_av_array *cur_reverse_av, uint16_t ahn,
-			      uint16_t qpn, struct efa_rdm_pke *pkt_entry,
-			      bool *check_prv, uint32_t *prv_connid)
-{
-	uint32_t *connid;
-	struct efa_av_entry *cur_entry;
-
-	*check_prv = false;
-
-	cur_entry = efa_av_array_at(cur_reverse_av,
-				    efa_av_reverse_av_key(ahn, qpn));
-	if (OFI_UNLIKELY(!cur_entry))
-		return NULL;
-
-	if (!pkt_entry) {
-		/**
-		 * There is no packet entry to extract connid from when we get
-		 * an IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. Or
-		 * the pkt_entry is allocated from a buffer user posted that
-		 * doesn't expect any pkt hdr.
-		 */
-		return cur_entry;
-	}
-
-	connid = efa_rdm_pke_connid_ptr(pkt_entry);
-	if (!connid) {
-		EFA_WARN_ONCE(FI_LOG_EP_CTRL,
-			      "An incoming packet does NOT have connection ID "
-			      "in its header.\n"
-			      "This means the peer is using an older version "
-			      "of libfabric.\n"
-			      "The communication can continue but it is "
-			      "encouraged to use\n"
-			      "a newer version of libfabric\n");
-		return cur_entry;
-	}
-
-	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry)->qkey))
-		return cur_entry;
-
-	*check_prv = true;
-	*prv_connid = *connid;
-	return NULL;
-}
-
-
-/**
- * @brief reverse lookup of a previous connection on a reused (ahn, qpn)
- *
- * Slow path taken only when a QP number was reused: prv_reverse_av is a hash map
- * and the caller must hold the lock that guards it.
- *
- * @param[in]	prv_reverse_av	reverse AV keyed by (ahn, qpn, connid)
- * @param[in]	ahn		address handle number
- * @param[in]	qpn		QP number
- * @param[in]	connid		connection ID taken from the incoming packet
- * @return	the matching efa_av_entry, or NULL
- */
-static struct efa_av_entry *
-efa_rdm_av_reverse_lookup_prv(struct efa_prv_reverse_av **prv_reverse_av,
-			      uint16_t ahn, uint16_t qpn, uint32_t connid)
-{
-	struct efa_prv_reverse_av *prv_entry;
-	struct efa_prv_reverse_av_key prv_key;
-
-	memset(&prv_key, 0, sizeof(prv_key));
-	prv_key.ahn = ahn;
-	prv_key.qpn = qpn;
-	prv_key.connid = connid;
-	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
-
-	return OFI_LIKELY(!!prv_entry) ? prv_entry->entry : NULL;
-}
-
-
-/**
- * @brief find fi_addr for rdm endpoint in the explicit AV (connid aware)
- *
- * The common case -- the packet comes from the current connection on its
- * (ahn, qpn) -- is served lock free out of cur_reverse_av. Only a reused QP
- * number falls through to the lock-protected prv_reverse_av hash map.
- *
- * @param[in]	av	address vector
- * @param[in]	ahn	address handle number
- * @param[in]	qpn	QP number
- * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
- * @return	On success, return fi_addr to the peer who sent the packet.
- * 		If no such peer exists, return FI_ADDR_NOTAVAIL
- */
-fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
-				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct efa_av_entry *entry;
-	uint32_t prv_connid = 0;
-	bool check_prv;
-	fi_addr_t fi_addr;
-
-	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
-					      pkt_entry, &check_prv,
-					      &prv_connid);
-	if (OFI_LIKELY(!!entry))
-		return entry->fi_addr;
-
-	if (!check_prv)
-		return FI_ADDR_NOTAVAIL;
-
-	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
-					      prv_connid);
-	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
-	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
-
-	return fi_addr;
-}
-
-/**
- * @brief Same as efa_rdm_av_reverse_lookup but does not take the util_av
- * lock. The caller is expected to hold the util_av lock.
- *
- * @param[in]	av	address vector
- * @param[in]	ahn	address handle number
- * @param[in]	qpn	QP number
- * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
- * @return	On success, return fi_addr to the peer who sent the packet.
- * 		If no such peer exists, return FI_ADDR_NOTAVAIL
- */
-fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
-				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
 	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct efa_av_entry *entry;
-	uint32_t prv_connid = 0;
-	bool check_prv;
-	fi_addr_t fi_addr;
+	int err;
 
-	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
-					      pkt_entry, &check_prv,
-					      &prv_connid);
-	if (OFI_LIKELY(!!entry))
-		return entry->fi_addr;
+	if (av_entry->shm_fi_addr == FI_ADDR_NOTAVAIL || !rdm_av->shm_rdm_av)
+		return;
 
-	if (!check_prv)
-		return FI_ADDR_NOTAVAIL;
-
-	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
-					      prv_connid);
-	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
-
-	return fi_addr;
-}
-
-/**
- * @brief find fi_addr for rdm endpoint in the implicit AV (connid aware)
- *
- * This function does not take any locks. The caller is expected to hold the
- * util_domain and implicit AV locks.
- *
- * @param[in]	av	address vector
- * @param[in]	ahn	address handle number
- * @param[in]	qpn	QP number
- * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
- * @return	On success, return fi_addr to the peer who sent the packet.
- * 		If no such peer exists, return FI_ADDR_NOTAVAIL
- */
-fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
-						    uint16_t ahn, uint16_t qpn,
-						    struct efa_rdm_pke *pkt_entry)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	struct efa_av_entry *entry;
-	struct efa_rdm_av_entry *av_entry;
-	uint32_t prv_connid = 0;
-	bool check_prv;
-
-	assert(EFA_GENLOCK_HELD(&av->domain->util_domain.lock, efa_util_domain_lock_sym));
-	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-
-	entry = efa_rdm_av_reverse_lookup_cur(rdm_av->cur_reverse_av_implicit,
-					      ahn, qpn, pkt_entry, &check_prv,
-					      &prv_connid);
-	if (!entry && !check_prv)
-		return FI_ADDR_NOTAVAIL;
-
-	if (!entry)
-		entry = efa_rdm_av_reverse_lookup_prv(
-			&rdm_av->prv_reverse_av_implicit, ahn, qpn, prv_connid);
-
-	if (OFI_UNLIKELY(!entry))
-		return FI_ADDR_NOTAVAIL;
-
-	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
-
-	return av_entry->implicit_fi_addr;
-}
-
-
-/**
- * @brief Move the entry to the end of the implicit AV LRU list and bump its AH
- *
- * Moving the entry to the tail marks it as the most recently used implicit AV
- * entry.
- *
- * @param[in]	av	efa address vector
- * @param[in]	av_entry	efa_rdm_av_entry
- */
-void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
-				     struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-
-	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	assert(rdm_av->implicit_av_size == 0 ||
-	       HASH_CNT(hh, rdm_av->util_av_implicit.hash) <= rdm_av->implicit_av_size);
-	assert(dlist_entry_in_list(&rdm_av->implicit_av_lru_list,
-				   &av_entry->implicit_av_lru_entry));
-
-	dlist_remove(&av_entry->implicit_av_lru_entry);
-	dlist_insert_tail(&av_entry->implicit_av_lru_entry,
-			  &rdm_av->implicit_av_lru_list);
-
-	assert(ofi_genlock_held(&av->domain->util_domain.lock));
-	efa_rdm_ah_implicit_av_lru_ah_move(av->domain, av_entry->efa_av_entry.ah);
+	err = fi_av_remove(rdm_av->shm_rdm_av, &av_entry->shm_fi_addr, 1, 0);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "remove address from shm av failed! err=%d\n",
+			 err);
+	} else {
+		rdm_av->shm_used--;
+		assert(av_entry->shm_fi_addr < efa_env.shm_av_size);
+	}
 }
 
 
@@ -1000,8 +518,9 @@ void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
  * entry gets demoted into. The reverse AV is left untouched, so a caller that
  * fails here has nothing to unwind.
  *
- * Every writer of cur_reverse_av holds util_av.lock, so the slot cannot become
- * occupied (or be vacated) between the reservation and the matching add.
+ * Every writer of a reverse AV holds the lock that guards it, so the slot
+ * cannot become occupied (or be vacated) between the reservation and the
+ * matching add as long as the caller holds that lock throughout.
  *
  * @param[in]		cur_reverse_av	Reverse AV keyed by efa_av_reverse_av_key()
  * @param[in]		entry		efa_av_entry object to be added later
@@ -1057,6 +576,7 @@ static void efa_rdm_av_prv_reverse_av_add(struct efa_prv_reverse_av **prv_revers
 					  struct efa_av_entry *entry,
 					  struct efa_av_entry *cur_entry)
 {
+	memset(&prv_entry->key, 0, sizeof(prv_entry->key));
 	prv_entry->key.ahn = entry->ah->ahn;
 	prv_entry->key.qpn = efa_av_entry_ep_addr(entry)->qpn;
 	prv_entry->key.connid = efa_av_entry_ep_addr(cur_entry)->qkey;
@@ -1068,8 +588,7 @@ static void efa_rdm_av_prv_reverse_av_add(struct efa_prv_reverse_av **prv_revers
  * @brief RDM reverse-AV add using a reservation, which cannot fail
  *
  * For callers that have already taken an irreversible step and so cannot report
- * a failure here; see efa_rdm_av_entry_publish. Callers that can unwind should
- * use efa_rdm_av_reverse_av_add instead.
+ * a failure here. Callers that can unwind may use efa_rdm_av_reverse_av_add.
  *
  * @param[in,out]	cur_reverse_av	Reverse AV keyed by efa_av_reverse_av_key()
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
@@ -1083,6 +602,7 @@ static void efa_rdm_av_reverse_av_add_reserved(struct efa_av_array *cur_reverse_
 					       struct efa_prv_reverse_av *prv_entry)
 {
 	struct efa_av_entry *cur_entry;
+	int err;
 
 	cur_entry = efa_av_array_at(cur_reverse_av,
 				    efa_av_entry_reverse_av_key(entry));
@@ -1094,7 +614,9 @@ static void efa_rdm_av_reverse_av_add_reserved(struct efa_av_array *cur_reverse_
 					      cur_entry);
 
 	/* The slot was reserved, so this cannot fail */
-	efa_av_reverse_av_add(cur_reverse_av, entry);
+	err = efa_av_reverse_av_add(cur_reverse_av, entry);
+	assert(!err);
+	(void) err;
 }
 
 /*
@@ -1110,26 +632,19 @@ static void efa_rdm_av_reverse_av_add_reserved(struct efa_av_array *cur_reverse_
  * 			Otherwise, return a negative libfabric error code
  */
 int efa_rdm_av_reverse_av_add(struct efa_av_array *cur_reverse_av,
-				     struct efa_prv_reverse_av **prv_reverse_av,
-				     struct efa_av_entry *entry)
+			      struct efa_prv_reverse_av **prv_reverse_av,
+			      struct efa_av_entry *entry)
 {
-	struct efa_av_entry *cur_entry;
 	struct efa_prv_reverse_av *prv_entry;
+	int err;
 
-	cur_entry = efa_av_array_at(cur_reverse_av,
-				    efa_av_entry_reverse_av_key(entry));
-	if (cur_entry) {
-		prv_entry = malloc(sizeof(*prv_entry));
-		if (!prv_entry) {
-			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
-			return -FI_ENOMEM;
-		}
+	err = efa_rdm_av_reverse_av_reserve(cur_reverse_av, entry, &prv_entry);
+	if (err)
+		return err;
 
-		efa_rdm_av_prv_reverse_av_add(prv_reverse_av, prv_entry, entry,
-					      cur_entry);
-	}
-
-	return efa_av_reverse_av_add(cur_reverse_av, entry);
+	efa_rdm_av_reverse_av_add_reserved(cur_reverse_av, prv_reverse_av,
+					   entry, prv_entry);
+	return 0;
 }
 
 
@@ -1145,8 +660,8 @@ int efa_rdm_av_reverse_av_add(struct efa_av_array *cur_reverse_av,
  * @param[in]		entry		efa_av_entry object
  */
 void efa_rdm_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
-					 struct efa_prv_reverse_av **prv_reverse_av,
-					 struct efa_av_entry *entry)
+				  struct efa_prv_reverse_av **prv_reverse_av,
+				  struct efa_av_entry *entry)
 {
 	struct efa_prv_reverse_av *prv_reverse_av_entry;
 	struct efa_prv_reverse_av_key prv_key;
@@ -1162,10 +677,636 @@ void efa_rdm_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
 		  prv_reverse_av_entry);
 	assert(prv_reverse_av_entry &&
 	       prv_reverse_av_entry->entry == entry);
+	if (!prv_reverse_av_entry)
+		return;
 	HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
 	free(prv_reverse_av_entry);
 }
 
+
+/**
+ * @brief allocate a conn for a new address and insert it into the explicit AV
+ *
+ * Everything that can fail -- the util AV slot, the conn, the AH, the map slot
+ * reservations and the SHM insertion -- happens before the conn is published,
+ * so a failure has nothing visible to unwind. The two publications at the end
+ * may happen in either order: the conn is new, no endpoint has a peer for its
+ * peer_idx, and every reader creates peers only through efa_rdm_ep_get_peer.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	raw_addr	raw endpoint address being inserted
+ * @param[in]	flags	flags passed to fi_av_insert
+ * @param[in]	context	user context associated with the address
+ */
+struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
+						   struct efa_ep_addr *raw_addr,
+						   uint64_t flags, void *context)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_prv_reverse_av *prv_entry = NULL;
+	struct efa_rdm_av_entry *av_entry;
+	fi_addr_t fi_addr;
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&av->util_av.lock, efa_util_av_lock_sym));
+	assert(av->type == FI_AV_TABLE);
+
+	if (flags & FI_SYNC_ERR)
+		memset(context, 0, sizeof(int));
+
+	err = ofi_av_insert_addr(&av->util_av, raw_addr, &fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
+		return NULL;
+	}
+
+	av_entry = efa_rdm_av_conn_alloc(rdm_av, raw_addr);
+	if (!av_entry)
+		goto err_remove_addr;
+
+	av_entry->efa_av_entry.ah = efa_rdm_ah_alloc(av->domain, raw_addr->raw, false);
+	if (!av_entry->efa_av_entry.ah)
+		goto err_free_conn;
+
+	/* Set before the conn is reachable; SHM insertion reads it too. */
+	efa_rdm_av_entry_set_fi_addr(av_entry, fi_addr);
+
+	err = efa_av_array_reserve(av->addr_to_entry_map, fi_addr);
+	if (err)
+		goto err_release_ah;
+
+	err = efa_rdm_av_reverse_av_reserve(av->cur_reverse_av,
+					    &av_entry->efa_av_entry, &prv_entry);
+	if (err)
+		goto err_release_ah;
+
+	/*
+	 * The explicit AV insertion is triggered by the application calling the
+	 * fi_av_insert API. Attempt shm av insertion; efa_rdm_av_entry_insert_shm_av is
+	 * a no-op for peers that are not local.
+	 */
+	err = efa_rdm_av_entry_insert_shm_av(av, av_entry);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "Failed to insert fi_addr %" PRIu64
+			" into shm provider's AV: %s\n", fi_addr, fi_strerror(-err));
+		goto err_free_prv;
+	}
+
+	/* Publish. Nothing below can fail. */
+	efa_rdm_av_reverse_av_add_reserved(av->cur_reverse_av,
+					   &rdm_av->prv_reverse_av,
+					   &av_entry->efa_av_entry, prv_entry);
+	err = efa_av_array_insert(av->addr_to_entry_map, fi_addr,
+				  &av_entry->efa_av_entry);
+	assert(!err);
+
+	return av_entry;
+
+err_free_prv:
+	free(prv_entry);
+err_release_ah:
+	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, false);
+err_free_conn:
+	efa_rdm_av_conn_free(rdm_av, av_entry);
+err_remove_addr:
+	err = ofi_av_remove_addr(&av->util_av, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for fi_addr %" PRIu64
+			": %s\n", fi_addr, fi_strerror(-err));
+	return NULL;
+}
+
+
+/**
+ * @brief allocate a conn for a new address and insert it into the implicit AV
+ *
+ * The caller must hold util_av.lock as well, and must already have established
+ * under it that the address is in neither AV (efa_rdm_av_insert_one_implicit
+ * enforces this contract).
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	raw_addr	raw endpoint address being inserted
+ * @param[in]	flags	flags passed to fi_av_insert
+ * @param[in]	context	user context associated with the address
+ */
+struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
+						   struct efa_ep_addr *raw_addr,
+						   uint64_t flags, void *context)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct util_av *util_av_implicit = &rdm_av->util_av_implicit;
+	struct efa_prv_reverse_av *prv_entry = NULL;
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_ah *rdm_ah;
+	fi_addr_t fi_addr;
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(av->domain->info_type == EFA_INFO_RDM);
+	assert(av->type == FI_AV_TABLE);
+
+	if (flags & FI_SYNC_ERR)
+		memset(context, 0, sizeof(int));
+
+	err = ofi_av_insert_addr(util_av_implicit, raw_addr, &fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
+		return NULL;
+	}
+
+	av_entry = efa_rdm_av_conn_alloc(rdm_av, raw_addr);
+	if (!av_entry)
+		goto err_remove_addr;
+
+	efa_rdm_av_entry_set_implicit_fi_addr(av_entry, fi_addr);
+	dlist_init(&av_entry->implicit_av_lru_entry);
+
+	av_entry->efa_av_entry.ah = efa_rdm_ah_alloc(av->domain, raw_addr->raw, true);
+	if (!av_entry->efa_av_entry.ah)
+		goto err_free_conn;
+
+	rdm_ah = (struct efa_rdm_ah *) av_entry->efa_av_entry.ah;
+	dlist_insert_tail(&av_entry->ah_implicit_conn_list_entry,
+			  &rdm_ah->implicit_conn_list);
+
+	/*
+	 * The LRU insertion can evict another implicit conn, which can vacate
+	 * the (ahn, qpn) slot this conn is about to take. Do it before reserving
+	 * that slot so the reservation sees the final state.
+	 */
+	err = efa_rdm_av_implicit_av_lru_insert(av, av_entry);
+	if (err)
+		goto err_release_ah;
+
+	err = efa_av_array_reserve(rdm_av->addr_to_entry_map_implicit, fi_addr);
+	if (err)
+		goto err_lru_remove;
+
+	err = efa_rdm_av_reverse_av_reserve(rdm_av->cur_reverse_av_implicit,
+					    &av_entry->efa_av_entry, &prv_entry);
+	if (err)
+		goto err_lru_remove;
+
+	/* Publish. Nothing below can fail. */
+	efa_rdm_av_reverse_av_add_reserved(rdm_av->cur_reverse_av_implicit,
+					   &rdm_av->prv_reverse_av_implicit,
+					   &av_entry->efa_av_entry, prv_entry);
+	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, fi_addr,
+				  &av_entry->efa_av_entry);
+	assert(!err);
+
+	return av_entry;
+
+err_lru_remove:
+	dlist_remove(&av_entry->implicit_av_lru_entry);
+err_release_ah:
+	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
+	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, true);
+err_free_conn:
+	efa_rdm_av_conn_free(rdm_av, av_entry);
+err_remove_addr:
+	err = ofi_av_remove_addr(util_av_implicit, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for implicit fi_addr %" PRIu64
+			": %s\n", fi_addr, fi_strerror(-err));
+
+	return NULL;
+}
+
+
+/**
+ * @brief remove a conn from the explicit AV and free it
+ *
+ * Unpublish first, so no new lookup can reach the conn, then destroy every
+ * endpoint's peer for it, then release its resources.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
+ */
+void efa_rdm_av_entry_release_explicit(struct efa_av *av,
+				 struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	fi_addr_t fi_addr = efa_rdm_av_entry_fi_addr(av_entry);
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&av->util_av.lock, efa_util_av_lock_sym));
+	assert(fi_addr != FI_ADDR_NOTAVAIL);
+	assert(efa_rdm_av_entry_implicit_fi_addr(av_entry) == FI_ADDR_NOTAVAIL);
+
+	/* The slot is occupied, so clearing it allocates nothing. */
+	err = efa_av_array_insert(av->addr_to_entry_map, fi_addr, NULL);
+	assert(!err);
+	efa_rdm_av_reverse_av_remove(av->cur_reverse_av, &rdm_av->prv_reverse_av,
+				     &av_entry->efa_av_entry);
+
+	efa_rdm_av_entry_destroy_peers(av, av_entry);
+	efa_rdm_av_entry_remove_shm_av(av, av_entry);
+	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, false);
+
+	err = ofi_av_remove_addr(&av->util_av, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed for fi_addr %" PRIu64
+			 ": %s\n", fi_addr, fi_strerror(-err));
+
+	EFA_INFO(FI_LOG_AV, "Released explicit AV entry fi_addr %" PRIu64 "\n", fi_addr);
+	efa_rdm_av_conn_free(rdm_av, av_entry);
+}
+
+
+/**
+ * @brief remove a conn from the implicit AV and free it
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
+ * @param[in]	release_ah	release the AH reference; false when the caller
+ *				(AH eviction) drops the reference itself
+ */
+static void efa_rdm_av_entry_release_implicit_common(struct efa_av *av,
+						     struct efa_rdm_av_entry *av_entry,
+						     bool release_ah)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	fi_addr_t fi_addr = efa_rdm_av_entry_implicit_fi_addr(av_entry);
+	struct efa_rdm_ah *rdm_ah;
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(fi_addr != FI_ADDR_NOTAVAIL);
+	assert(efa_rdm_av_entry_fi_addr(av_entry) == FI_ADDR_NOTAVAIL);
+
+	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, fi_addr, NULL);
+	assert(!err);
+	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
+				     &rdm_av->prv_reverse_av_implicit,
+				     &av_entry->efa_av_entry);
+	dlist_remove(&av_entry->implicit_av_lru_entry);
+
+	efa_rdm_av_entry_destroy_peers(av, av_entry);
+
+	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
+	if (release_ah) {
+		efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, true);
+	} else {
+		rdm_ah = (struct efa_rdm_ah *) av_entry->efa_av_entry.ah;
+		rdm_ah->implicit_refcnt--;
+		/* Mirror the base reference drop that efa_rdm_ah_release would
+		 * do; the caller (eviction) destroys the AH once its refcnt
+		 * reaches zero. */
+		av_entry->efa_av_entry.ah->refcnt--;
+	}
+
+	err = ofi_av_remove_addr(&rdm_av->util_av_implicit, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed for implicit fi_addr %" PRIu64
+			 ": %s\n", fi_addr, fi_strerror(-err));
+
+	efa_rdm_av_entry_set_implicit_fi_addr(av_entry, FI_ADDR_NOTAVAIL);
+	efa_rdm_av_conn_free(rdm_av, av_entry);
+}
+
+/**
+ * @brief release an efa_rdm_av_entry from the implicit AV
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
+ */
+void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	efa_rdm_av_entry_release_implicit_common(av, av_entry, true);
+}
+
+
+/**
+ * @brief release an implicit efa_rdm_av_entry during AH eviction
+ *
+ * Like efa_rdm_av_entry_release_implicit but leaves the AH to the caller.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
+ */
+void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
+					   struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	efa_rdm_av_entry_release_implicit_common(av, av_entry, false);
+}
+
+
+/**
+ * @brief find the efa_rdm_av_entry using fi_addr in the implicit AV
+ */
+struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
+							   fi_addr_t fi_addr)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_av_entry *entry;
+
+	entry = efa_av_addr_to_entry_impl(rdm_av->addr_to_entry_map_implicit, fi_addr);
+	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry) : NULL;
+}
+
+
+/**
+ * @brief lock-free reverse lookup in a current reverse AV
+ *
+ * Reads the entry currently registered for (ahn, qpn) and validates it against
+ * the packet's connection ID. cur_reverse_av is an efa_av_array, so this needs
+ * no lock.
+ *
+ * @param[in]	cur_reverse_av	reverse AV indexed by efa_av_reverse_av_key()
+ * @param[in]	ahn		address handle number
+ * @param[in]	qpn		QP number
+ * @param[in]	pkt_entry	NULL or rdm packet entry, used to extract connid
+ * @param[out]	check_prv	set when the caller must look in prv_reverse_av
+ * @param[out]	prv_connid	the connid to look up there
+ * @return	the matching efa_av_entry, or NULL. NULL with *check_prv false
+ *		means no peer is known for (ahn, qpn) at all.
+ */
+static inline struct efa_av_entry *
+efa_rdm_av_reverse_lookup_cur(struct efa_av_array *cur_reverse_av, uint16_t ahn,
+			      uint16_t qpn, struct efa_rdm_pke *pkt_entry,
+			      bool *check_prv, uint32_t *prv_connid)
+{
+	uint32_t *connid;
+	struct efa_av_entry *cur_entry;
+
+	*check_prv = false;
+
+	cur_entry = efa_av_array_at(cur_reverse_av,
+				    efa_av_reverse_av_key(ahn, qpn));
+	if (OFI_UNLIKELY(!cur_entry))
+		return NULL;
+
+	if (!pkt_entry) {
+		/**
+		 * There is no packet entry to extract connid from when we get
+		 * an IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. Or
+		 * the pkt_entry is allocated from a buffer user posted that
+		 * doesn't expect any pkt hdr.
+		 */
+		return cur_entry;
+	}
+
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
+	if (!connid) {
+		EFA_WARN_ONCE(FI_LOG_EP_CTRL,
+			      "An incoming packet does NOT have connection ID "
+			      "in its header.\n"
+			      "This means the peer is using an older version "
+			      "of libfabric.\n"
+			      "The communication can continue but it is "
+			      "encouraged to use\n"
+			      "a newer version of libfabric\n");
+		return cur_entry;
+	}
+
+	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry)->qkey))
+		return cur_entry;
+
+	*check_prv = true;
+	*prv_connid = *connid;
+	return NULL;
+}
+
+
+/**
+ * @brief reverse lookup of a previous connection on a reused (ahn, qpn)
+ *
+ * Slow path taken only when a QP number was reused: prv_reverse_av is a hash map
+ * and the caller must hold the lock that guards it.
+ */
+static struct efa_av_entry *
+efa_rdm_av_reverse_lookup_prv(struct efa_prv_reverse_av **prv_reverse_av,
+			      uint16_t ahn, uint16_t qpn, uint32_t connid)
+{
+	struct efa_prv_reverse_av *prv_entry;
+	struct efa_prv_reverse_av_key prv_key;
+
+	memset(&prv_key, 0, sizeof(prv_key));
+	prv_key.ahn = ahn;
+	prv_key.qpn = qpn;
+	prv_key.connid = connid;
+	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
+
+	return OFI_LIKELY(!!prv_entry) ? prv_entry->entry : NULL;
+}
+
+static inline struct efa_rdm_av_entry *efa_rdm_av_entry_of(struct efa_av_entry *entry)
+{
+	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry) : NULL;
+}
+
+
+/**
+ * @brief lock-free connid-aware reverse lookup in the explicit AV
+ *
+ * Only the current connection on (ahn, qpn) is served here; a packet from a
+ * previous connection on a reused QP number returns NULL and must be resolved
+ * with efa_rdm_av_reverse_lookup_entry_unsafe under util_av.lock.
+ *
+ * @return	the conn, or NULL
+ */
+struct efa_rdm_av_entry *efa_rdm_av_reverse_lookup_entry(struct efa_av *av,
+							 uint16_t ahn, uint16_t qpn,
+							 struct efa_rdm_pke *pkt_entry)
+{
+	uint32_t prv_connid = 0;
+	bool check_prv;
+
+	return efa_rdm_av_entry_of(efa_rdm_av_reverse_lookup_cur(
+		av->cur_reverse_av, ahn, qpn, pkt_entry, &check_prv, &prv_connid));
+}
+
+
+/**
+ * @brief connid-aware reverse lookup in the explicit AV, current and previous
+ * connections
+ *
+ * @return	the conn, or NULL
+ */
+struct efa_rdm_av_entry *efa_rdm_av_reverse_lookup_entry_unsafe(struct efa_av *av,
+								uint16_t ahn, uint16_t qpn,
+								struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_av_entry *entry;
+	uint32_t prv_connid = 0;
+	bool check_prv;
+
+	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
+					      pkt_entry, &check_prv,
+					      &prv_connid);
+	if (!entry && check_prv)
+		entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av,
+						      ahn, qpn, prv_connid);
+	return efa_rdm_av_entry_of(entry);
+}
+
+
+/**
+ * @brief connid-aware reverse lookup in the implicit AV, current and previous
+ * connections
+ *
+ * @return	the conn, or NULL
+ */
+struct efa_rdm_av_entry *
+efa_rdm_av_reverse_lookup_entry_implicit_unsafe(struct efa_av *av,
+						uint16_t ahn, uint16_t qpn,
+						struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_av_entry *entry;
+	uint32_t prv_connid = 0;
+	bool check_prv;
+
+	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+
+	entry = efa_rdm_av_reverse_lookup_cur(rdm_av->cur_reverse_av_implicit,
+					      ahn, qpn, pkt_entry, &check_prv,
+					      &prv_connid);
+	if (!entry && check_prv)
+		entry = efa_rdm_av_reverse_lookup_prv(
+			&rdm_av->prv_reverse_av_implicit, ahn, qpn, prv_connid);
+	return efa_rdm_av_entry_of(entry);
+}
+
+
+/**
+ * @brief raw address -> conn in the explicit AV
+ */
+struct efa_rdm_av_entry *efa_rdm_av_addr_lookup_entry_unsafe(struct efa_av *av,
+							     struct efa_ep_addr *addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	fi_addr_t fi_addr;
+
+	fi_addr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
+	return fi_addr == FI_ADDR_NOTAVAIL ? NULL : efa_rdm_av_addr_to_entry(av, fi_addr);
+}
+
+
+/**
+ * @brief raw address -> conn in the implicit AV
+ */
+struct efa_rdm_av_entry *
+efa_rdm_av_addr_lookup_entry_implicit_unsafe(struct efa_av *av,
+					     struct efa_ep_addr *addr)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	fi_addr_t fi_addr;
+
+	fi_addr = ofi_av_lookup_fi_addr_unsafe(&rdm_av->util_av_implicit, addr);
+	return fi_addr == FI_ADDR_NOTAVAIL ? NULL : efa_rdm_av_addr_to_entry_implicit(av, fi_addr);
+}
+
+
+/**
+ * @brief find fi_addr for rdm endpoint in the explicit AV (connid aware)
+ *
+ * The common case -- the packet comes from the current connection on its
+ * (ahn, qpn) -- is served lock free out of cur_reverse_av. Only a reused QP
+ * number falls through to the lock-protected prv_reverse_av hash map.
+ *
+ * @return	On success, return fi_addr to the peer who sent the packet.
+ * 		If no such peer exists, return FI_ADDR_NOTAVAIL
+ */
+fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
+				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_av_entry *entry;
+	uint32_t prv_connid = 0;
+	bool check_prv;
+	fi_addr_t fi_addr;
+
+	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
+					      pkt_entry, &check_prv,
+					      &prv_connid);
+	if (OFI_LIKELY(!!entry))
+		return efa_rdm_av_entry_fi_addr(efa_rdm_av_entry_of(entry));
+
+	if (!check_prv)
+		return FI_ADDR_NOTAVAIL;
+
+	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
+	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
+					      prv_connid);
+	fi_addr = (OFI_LIKELY(!!entry)) ?
+		  efa_rdm_av_entry_fi_addr(efa_rdm_av_entry_of(entry)) :
+		  FI_ADDR_NOTAVAIL;
+	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
+
+	return fi_addr;
+}
+
+/**
+ * @brief Same as efa_rdm_av_reverse_lookup but does not take the util_av
+ * lock. The caller is expected to hold the util_av lock.
+ */
+fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
+				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	struct efa_rdm_av_entry *av_entry;
+
+	av_entry = efa_rdm_av_reverse_lookup_entry_unsafe(av, ahn, qpn, pkt_entry);
+	return av_entry ? efa_rdm_av_entry_fi_addr(av_entry) : FI_ADDR_NOTAVAIL;
+}
+
+/**
+ * @brief find the implicit fi_addr for rdm endpoint in the implicit AV
+ * (connid aware). The caller holds util_av_implicit.lock.
+ */
+fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
+						    uint16_t ahn, uint16_t qpn,
+						    struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av_entry *av_entry;
+
+	av_entry = efa_rdm_av_reverse_lookup_entry_implicit_unsafe(av, ahn, qpn,
+								   pkt_entry);
+	return av_entry ? efa_rdm_av_entry_implicit_fi_addr(av_entry) : FI_ADDR_NOTAVAIL;
+}
+
+
+/**
+ * @brief Move the entry to the end of the implicit AV LRU list and bump its AH
+ *
+ * Moving the entry to the tail marks it as the most recently used implicit AV
+ * entry.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
+ */
+void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
+				     struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+
+	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(rdm_av->implicit_av_size == 0 ||
+	       HASH_CNT(hh, rdm_av->util_av_implicit.hash) <= rdm_av->implicit_av_size);
+	assert(dlist_entry_in_list(&rdm_av->implicit_av_lru_list,
+				   &av_entry->implicit_av_lru_entry));
+
+	dlist_remove(&av_entry->implicit_av_lru_entry);
+	dlist_insert_tail(&av_entry->implicit_av_lru_entry,
+			  &rdm_av->implicit_av_lru_list);
+
+	assert(ofi_genlock_held(&av->domain->util_domain.lock));
+	efa_rdm_ah_implicit_av_lru_ah_move(av->domain, av_entry->efa_av_entry.ah);
+}
 
 
 static fi_addr_t
@@ -1175,176 +1316,44 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 
 	pke = (struct efa_rdm_pke *) rx_entry->peer_context;
 
-	return pke->peer->av_entry->efa_av_entry.fi_addr;
+	return efa_rdm_av_entry_fi_addr(pke->peer->av_entry);
 }
 
 
 /**
- * @brief Move every endpoint's peer from an implicit to an explicit fi_addr
+ * @brief promote a conn from the implicit to the explicit AV
  *
- * The explicit AV entry is a different object from the implicit one, so each
- * peer's av_entry pointer moves with it. Every explicit peer map slot is
- * reserved before the first peer is moved, so once moving starts it cannot fail
- * and no peer can be left out of both maps. A failure therefore means nothing
- * moved and the caller has nothing to unwind.
+ * The conn object, its peer_idx and therefore every endpoint's peer for it stay
+ * exactly where they are; only the maps that point at the conn change. No peer
+ * map is read or written here, so there is no ordering between this function
+ * and a concurrent lock-free reader to get right: any reader that finds the
+ * conn, through either AV, lands on the same peer_map slot.
  *
- * Both passes run under one ep_list_lock critical section, so an endpoint
- * cannot bind to the AV with an unreserved peer map in between.
+ * Everything that can fail is done (reserved) before the first visible change,
+ * so the function either leaves the AV untouched or completes.
  *
- * @param[in]	av		address vector
- * @param[in]	av_entry	explicit AV entry the peers now belong to
- * @param[in]	implicit_fi_addr	fi_addr the peers are keyed by today
+ * @param[in]	av			address vector
+ * @param[in]	raw_addr		address being inserted
+ * @param[in]	implicit_fi_addr	the conn's implicit fi_addr
+ * @param[out]	fi_addr			the conn's new explicit fi_addr
  * @return	0 on success, or a negative libfabric error code
  */
-static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
-					   struct efa_rdm_av_entry *av_entry,
-					   fi_addr_t implicit_fi_addr)
-{
-	fi_addr_t fi_addr = av_entry->efa_av_entry.fi_addr;
-	struct dlist_entry *entry;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
-	int err = 0;
-
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
-
-	dlist_foreach(&av->util_av.ep_list, entry) {
-		ep = container_of(entry, struct efa_rdm_ep,
-				  base_ep.util_ep.av_entry);
-
-		err = efa_av_array_reserve(ep->fi_addr_to_peer_map, fi_addr);
-		if (err) {
-			EFA_WARN(FI_LOG_AV,
-				 "Cannot reserve peer map slot for fi_addr %" PRIu64
-				 ": %s\n", fi_addr, fi_strerror(-err));
-			goto out;
-		}
-	}
-
-	dlist_foreach(&av->util_av.ep_list, entry) {
-		ep = container_of(entry, struct efa_rdm_ep,
-				  base_ep.util_ep.av_entry);
-
-		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-		peer = efa_rdm_ep_peer_map_remove(ep->fi_addr_to_peer_map_implicit,
-						  implicit_fi_addr);
-		if (peer) {
-			peer->av_entry = av_entry;
-			/* The slot was reserved above, so this cannot fail */
-			err = efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
-							 fi_addr, peer);
-			assert(!err);
-		}
-		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-	}
-
-out:
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
-	return err;
-}
-
-/**
- * @brief Publish an explicit AV entry to the lock-free CQ read lookups
- *
- * Updates the peer maps first and only then adds the entry to the reverse AV.
- * This ordering is required because the CQ read path reads the reverse AV
- * without a lock. Without this order, the CQ read path can see an entry in the
- * reverse AV but not in the peer map and try to create a new peer.
- *
- * The raw address -> fi_addr lookup is ordered by util_av.lock. Both readers
- * and writers hold the lock when accessing the util_av hashmap.
- *
- * When peers move here from an implicit fi_addr, everything the reverse AV add
- * needs is reserved before the peer maps are touched, so the add cannot fail
- * once the peers have moved. That is what keeps this function free of an unwind
- * path: moving the peers back would have to restore each peer's av_entry
- * pointer to the implicit entry, and the restore could itself fail and leave a
- * peer in neither map. A brand new entry has no peers yet, so there is nothing
- * to reserve against and the caller unwinds an add failure instead.
- *
- * @param[in]	av		address vector
- * @param[in]	av_entry	entry to publish, in state UNPUBLISHED
- * @param[in]	implicit_fi_addr	implicit fi_addr whose peers move to this
- *				entry, or FI_ADDR_NOTAVAIL when the entry is new
- *				and has no peers yet
- * @return	0 on success, or a negative libfabric error code
- */
-static int efa_rdm_av_entry_publish(struct efa_av *av,
-				    struct efa_rdm_av_entry *av_entry,
-				    fi_addr_t implicit_fi_addr)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *) (av));
-	struct efa_prv_reverse_av *prv_entry;
-	int err;
-
-	assert(EFA_GENLOCK_HELD(&av->util_av.lock, efa_util_av_lock_sym));
-	EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry,
-					      EFA_RDM_AV_ENTRY_UNPUBLISHED);
-
-	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
-		err = efa_rdm_av_reverse_av_reserve(av->cur_reverse_av,
-						    &av_entry->efa_av_entry,
-						    &prv_entry);
-		if (err)
-			return err;
-
-		err = efa_rdm_av_entry_move_peer_maps(av, av_entry,
-						      implicit_fi_addr);
-		if (err) {
-			free(prv_entry);
-			return err;
-		}
-
-		EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-						   EFA_RDM_AV_ENTRY_PEERS_READY);
-
-		efa_rdm_av_reverse_av_add_reserved(av->cur_reverse_av,
-						   &rdm_av->prv_reverse_av,
-						   &av_entry->efa_av_entry,
-						   prv_entry);
-	} else {
-		EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-						   EFA_RDM_AV_ENTRY_PEERS_READY);
-
-		err = efa_rdm_av_reverse_av_add(av->cur_reverse_av,
-						&rdm_av->prv_reverse_av,
-						&av_entry->efa_av_entry);
-		if (err) {
-			EFA_WARN(FI_LOG_AV,
-				 "Failed to insert explicit entry for fi_addr %" PRIu64
-				 " into reverse AV: %s\n",
-				 av_entry->efa_av_entry.fi_addr,
-				 fi_strerror(-err));
-			EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(
-				av_entry, EFA_RDM_AV_ENTRY_UNPUBLISHED);
-			return err;
-		}
-	}
-
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-					   EFA_RDM_AV_ENTRY_PUBLISHED);
-
-	return 0;
-}
-
 static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 					   struct efa_ep_addr *raw_addr,
 					   fi_addr_t implicit_fi_addr,
 					   fi_addr_t *fi_addr)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym,
+			 efa_implicit_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	int cleanup_err, err;
-	struct efa_ah *ah;
-	struct efa_rdm_av_entry *implicit_av_entry, *explicit_av_entry;
-	struct efa_rdm_ep *ep;
-	struct dlist_entry *entry;
-	struct util_av_entry *explicit_util_av_entry;
-	struct efa_av_entry *explicit_base_entry;
+	struct efa_prv_reverse_av *prv_entry = NULL;
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_ah *rdm_ah;
 	struct fid_peer_srx *peer_srx;
+	struct dlist_entry *entry;
+	struct efa_rdm_ep *ep;
+	fi_addr_t new_fi_addr;
+	int err, cleanup_err;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Moving peer with implicit fi_addr %" PRIu64
@@ -1353,17 +1362,16 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 
 	assert(EFA_GENLOCK_HELD(&av->util_av.lock, efa_util_av_lock_sym));
 	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(av->type == FI_AV_TABLE);
 
-	implicit_av_entry = efa_rdm_av_addr_to_entry_implicit(av, implicit_fi_addr);
-	assert(implicit_av_entry);
-	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(&implicit_av_entry->efa_av_entry)));
-	assert(implicit_av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL &&
-	       implicit_av_entry->implicit_fi_addr == implicit_fi_addr);
+	av_entry = efa_rdm_av_addr_to_entry_implicit(av, implicit_fi_addr);
+	assert(av_entry);
+	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(&av_entry->efa_av_entry)));
+	assert(efa_rdm_av_entry_fi_addr(av_entry) == FI_ADDR_NOTAVAIL &&
+	       efa_rdm_av_entry_implicit_fi_addr(av_entry) == implicit_fi_addr);
 
-	ah = implicit_av_entry->efa_av_entry.ah;
-
-	/* Create explicit util AV entry */
-	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
+	/* Reserve. */
+	err = ofi_av_insert_addr(&av->util_av, raw_addr, &new_fi_addr);
 	if (err) {
 		EFA_WARN(FI_LOG_AV,
 			 "Failed to insert implicit fi_addr %" PRIu64 " into explicit util AV: %s\n",
@@ -1371,95 +1379,80 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	explicit_util_av_entry =
-		ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, *fi_addr);
-	explicit_base_entry = (struct efa_av_entry *) explicit_util_av_entry->data;
-	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(explicit_base_entry)));
-	assert(av->type == FI_AV_TABLE);
+	err = efa_av_array_reserve(av->addr_to_entry_map, new_fi_addr);
+	if (err)
+		goto err_remove_addr;
 
-	/* Copy information from the implicit entry to the explicit entry */
-	explicit_av_entry = container_of(explicit_base_entry, struct efa_rdm_av_entry, efa_av_entry);
+	err = efa_rdm_av_reverse_av_reserve(av->cur_reverse_av,
+					    &av_entry->efa_av_entry, &prv_entry);
+	if (err)
+		goto err_remove_addr;
 
-	/* See the matching comment in efa_rdm_av_entry_alloc_explicit.
-	 * Set the state to unpublished before releasing the entry.
+	/*
+	 * Commit. Nothing below can fail.
+	 *
+	 * The explicit fi_addr is set before the conn becomes reachable through
+	 * the explicit maps, so a reader that finds it there also sees it as
+	 * explicit (efa_av_array publishes with release/acquire).
 	 */
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(explicit_av_entry,
-					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
-
-	explicit_base_entry->ah = implicit_av_entry->efa_av_entry.ah;
-	explicit_base_entry->fi_addr = *fi_addr;
-	explicit_av_entry->av = rdm_av;
-	explicit_av_entry->shm_fi_addr = implicit_av_entry->shm_fi_addr;
-	explicit_av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	dlist_init(&explicit_av_entry->implicit_av_lru_entry);
-	dlist_init(&explicit_av_entry->ah_implicit_conn_list_entry);
-
-	err = efa_av_array_insert(av->addr_to_entry_map, *fi_addr, explicit_base_entry);
-	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert explicit entry for fi_addr %" PRIu64 " into addr_to_entry_map: %s\n",
-			 *fi_addr, fi_strerror(-err));
-		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
-		if (cleanup_err)
-			EFA_WARN(FI_LOG_AV, "Failed to remove fi_addr %" PRIu64 " from explicit util AV during cleanup: %s\n",
-				 *fi_addr, fi_strerror(-cleanup_err));
-		return err;
-	}
-
-	err = efa_rdm_av_entry_publish(av, explicit_av_entry, implicit_fi_addr);
-	if (err) {
-		cleanup_err = efa_av_array_insert(av->addr_to_entry_map, *fi_addr, NULL);
-		assert(!cleanup_err);
-		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
-		if (cleanup_err)
-			EFA_WARN(FI_LOG_AV, "Failed to remove fi_addr %" PRIu64 " from explicit util AV during cleanup: %s\n",
-				 *fi_addr, fi_strerror(-cleanup_err));
-		return err;
-	}
-
-	/* Handle reverse AV and AV ref counts */
-	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
-				     &rdm_av->prv_reverse_av_implicit,
-				     &implicit_av_entry->efa_av_entry);
-
-	dlist_remove(&implicit_av_entry->implicit_av_lru_entry);
-	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, implicit_fi_addr, NULL);
+	efa_rdm_av_entry_set_fi_addr(av_entry, new_fi_addr);
+	efa_rdm_av_reverse_av_add_reserved(av->cur_reverse_av,
+					   &rdm_av->prv_reverse_av,
+					   &av_entry->efa_av_entry, prv_entry);
+	err = efa_av_array_insert(av->addr_to_entry_map, new_fi_addr,
+				  &av_entry->efa_av_entry);
 	assert(!err);
 
-	err = ofi_av_remove_addr(&rdm_av->util_av_implicit, implicit_fi_addr);
-	if (err) {
+	/* Leave the implicit AV. */
+	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit,
+				  implicit_fi_addr, NULL);
+	assert(!err);
+	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
+				     &rdm_av->prv_reverse_av_implicit,
+				     &av_entry->efa_av_entry);
+	cleanup_err = ofi_av_remove_addr(&rdm_av->util_av_implicit, implicit_fi_addr);
+	if (cleanup_err)
 		EFA_WARN(FI_LOG_AV, "Failed to remove implicit fi_addr %" PRIu64 " from implicit util AV: %s\n",
-			 implicit_fi_addr, fi_strerror(-err));
-		return err;
-	}
+			 implicit_fi_addr, fi_strerror(-cleanup_err));
+	efa_rdm_av_entry_set_implicit_fi_addr(av_entry, FI_ADDR_NOTAVAIL);
+	dlist_remove(&av_entry->implicit_av_lru_entry);
 
-	/* Handle AH LRU list and refcnt */
-	assert(ofi_genlock_held(&av->domain->util_domain.lock));
-	assert(!dlist_empty(&((struct efa_rdm_ah *)(ah))->implicit_conn_list));
-	dlist_remove(&implicit_av_entry->ah_implicit_conn_list_entry);
-	efa_rdm_ah_implicit_av_lru_ah_move(av->domain, ah);
-	((struct efa_rdm_ah *)(ah))->implicit_refcnt--;
-	((struct efa_rdm_ah *)(ah))->explicit_refcnt++;
+	/* Move the AH reference from implicit to explicit. */
+	rdm_ah = (struct efa_rdm_ah *) av_entry->efa_av_entry.ah;
+	assert(!dlist_empty(&rdm_ah->implicit_conn_list));
+	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
+	efa_rdm_ah_implicit_av_lru_ah_move(av->domain, &rdm_ah->efa_ah);
+	rdm_ah->implicit_refcnt--;
+	rdm_ah->explicit_refcnt++;
+
+	*fi_addr = new_fi_addr;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64
 		 " moved to explicit AV. Explicit fi_addr: %" PRIu64 "\n",
-		 implicit_fi_addr, *fi_addr);
+		 implicit_fi_addr, new_fi_addr);
 
 	/* Call foreach_unspec_addr to move unexpected messages
-	 * from the unspecified queue to the specified queues. The peer maps were
-	 * already updated by efa_rdm_av_entry_publish above.
+	 * from the unspecified queue to the specified queues.
 	 *
 	 * util_ep is bound to the explicit util_av, so the explicit util_av's
 	 * ep_list contains all of the endpoints bound to this AV */
-	ofi_genlock_lock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_LOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_rdm_av_get_addr_from_peer_rx_entry);
 	}
-	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&av->util_av.ep_list_lock, efa_av_ep_list_lock_sym);
 
 	return FI_SUCCESS;
+
+err_remove_addr:
+	cleanup_err = ofi_av_remove_addr(&av->util_av, new_fi_addr);
+	if (cleanup_err)
+		EFA_WARN(FI_LOG_AV, "Failed to remove fi_addr %" PRIu64 " from explicit util AV during cleanup: %s\n",
+			 new_fi_addr, fi_strerror(-cleanup_err));
+	return err;
 }
 
 
@@ -1515,7 +1508,7 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 			 implicit_fi_addr);
 
 		ret = efa_rdm_av_entry_implicit_to_explicit(av, addr, implicit_fi_addr,
-						      fi_addr);
+							  fi_addr);
 		if (ret)
 			*fi_addr = FI_ADDR_NOTAVAIL;
 
@@ -1533,7 +1526,7 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = av_entry->efa_av_entry.fi_addr;
+	*fi_addr = efa_rdm_av_entry_fi_addr(av_entry);
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
@@ -1551,15 +1544,17 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
  * Unconditionally allocates a new connection entry in the implicit AV. The
  * caller must have already established, while holding the locks below, that
  * the address is in neither the explicit nor the implicit AV. Otherwise a
- * duplicate entry for the same address is created.
+ * duplicate entry for the same address is created. util_av.lock is required
+ * for that reason even though this function does not touch the explicit AV.
  *
- * The caller owns both locks for the whole call; this function neither
+ * The caller owns the locks for the whole call; this function neither
  * acquires nor releases them.
  */
 int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 				   fi_addr_t *fi_addr, uint64_t flags,
 				   void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym,
+			 efa_implicit_av_lock_sym)
 {
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	struct efa_rdm_av_entry *av_entry;
@@ -1573,13 +1568,15 @@ int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 		 "Inserting address GID[%s] QP[%u] QKEY[%u] to implicit AV\n",
 		 raw_gid_str, addr->qpn, addr->qkey);
 
+	assert(ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr) == FI_ADDR_NOTAVAIL);
+
 	av_entry = efa_rdm_av_entry_alloc_implicit(av, addr, flags, context);
 	if (!av_entry) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = av_entry->implicit_fi_addr;
+	*fi_addr = efa_rdm_av_entry_implicit_fi_addr(av_entry);
 
 	EFA_INFO(FI_LOG_AV,
 		 "Successfully inserted address GID[%s] QP[%u] "
@@ -1654,7 +1651,7 @@ static int efa_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	int err = 0;
 	size_t i;
 	struct efa_av *av;
-	struct efa_av_entry *entry;
+	struct efa_rdm_av_entry *av_entry;
 
 	if (!fi_addr)
 		return -FI_EINVAL;
@@ -1669,13 +1666,13 @@ static int efa_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	for (i = 0; i < count; i++) {
-		entry = efa_av_addr_to_entry(av, fi_addr[i]);
-		if (!entry) {
+		av_entry = efa_rdm_av_addr_to_entry(av, fi_addr[i]);
+		if (!av_entry) {
 			err = -FI_EINVAL;
 			break;
 		}
 
-		efa_rdm_av_entry_release_explicit(av, container_of(entry, struct efa_rdm_av_entry, efa_av_entry));
+		efa_rdm_av_entry_release_explicit(av, av_entry);
 	}
 
 	if (i < count) {
@@ -1702,14 +1699,15 @@ static struct fi_ops_av efa_rdm_av_ops = {
 
 
 /*
- * Release an explicit AV entry reached through the current reverse AV. Called
+ * Release an explicit conn reached through the explicit forward map. Called
  * only from the close path, where clearing the slot from under the iteration is
- * safe because efa_av_array_iter has already loaded the pointer.
+ * safe because efa_av_array_iter has already loaded the pointer. Every live
+ * conn is in exactly one forward map, including conns that QPN reuse moved into
+ * a prv_reverse_av.
  */
 static int efa_rdm_av_close_release_explicit(struct efa_av_array *arr,
 					     void *entry, void *context)
-	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
 {
 	struct efa_av *av = context;
 
@@ -1722,8 +1720,7 @@ static int efa_rdm_av_close_release_explicit(struct efa_av_array *arr,
 /* Implicit AV counterpart of efa_rdm_av_close_release_explicit. */
 static int efa_rdm_av_close_release_implicit(struct efa_av_array *arr,
 					     void *entry, void *context)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
 	struct efa_av *av = context;
 
@@ -1738,7 +1735,6 @@ static int efa_rdm_av_close(struct fid *fid)
 {
 	struct efa_av *av;
 	struct efa_rdm_av *rdm_av;
-	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 	struct efa_ep_addr_hashable *ep_addr_hashable, *tmp;
 	int err = 0;
 
@@ -1749,23 +1745,19 @@ static int efa_rdm_av_close(struct fid *fid)
 	 * util_domain.lock -> util_av.lock -> util_av_implicit.lock
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
-
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	efa_av_array_iter(av->cur_reverse_av, av,
+	efa_av_array_iter(av->addr_to_entry_map, av,
 			  efa_rdm_av_close_release_explicit);
-	HASH_ITER(hh, rdm_av->prv_reverse_av, prv_entry, prvtmp) {
-		efa_rdm_av_entry_release_explicit(av, container_of(prv_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
-	}
-	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
+	assert(!rdm_av->prv_reverse_av);
 
 	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	efa_av_array_iter(rdm_av->cur_reverse_av_implicit, av,
+	efa_av_array_iter(rdm_av->addr_to_entry_map_implicit, av,
 			  efa_rdm_av_close_release_implicit);
-	HASH_ITER(hh, rdm_av->prv_reverse_av_implicit, prv_entry, prvtmp) {
-		efa_rdm_av_entry_release_implicit(av, container_of(prv_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
-	}
+	assert(!rdm_av->prv_reverse_av_implicit);
+	assert(dlist_empty(&rdm_av->implicit_av_lru_list));
 	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
+	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	err = ofi_av_close(&av->util_av);
@@ -1790,6 +1782,8 @@ static int efa_rdm_av_close(struct fid *fid)
 	efa_av_array_destroy(rdm_av->addr_to_entry_map_implicit);
 	efa_av_array_destroy(av->cur_reverse_av);
 	efa_av_array_destroy(rdm_av->cur_reverse_av_implicit);
+	ofi_bufpool_destroy(rdm_av->conn_pool);
+	ofi_genlock_destroy(&rdm_av->conn_pool_lock);
 
 	free(rdm_av);
 	return err;
@@ -1807,6 +1801,7 @@ static struct fi_ops efa_rdm_av_fi_ops = {
 
 int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		    struct fid_av **av_fid, void *context)
+	OFI_TSA_NO_ANALYSIS
 {
 	struct efa_domain *efa_domain;
 	struct efa_rdm_av *rdm_av;
@@ -1823,8 +1818,8 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 	av = &rdm_av->efa_av;
 
-	ret = efa_av_init_base(av, efa_domain, attr, context,
-			       sizeof(struct efa_rdm_av_entry) - EFA_EP_ADDR_LEN);
+	/* Conns live in conn_pool; the util AV entries carry no context. */
+	ret = efa_av_init_base(av, efa_domain, attr, context, 0);
 	if (ret)
 		goto err_free;
 
@@ -1836,10 +1831,24 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_destroy_implicit_map;
 
-	ret = efa_av_init_util_av(efa_domain, attr, &rdm_av->util_av_implicit, context,
-				  sizeof(struct efa_rdm_av_entry) - EFA_EP_ADDR_LEN);
+	ret = efa_av_init_util_av(efa_domain, attr, &rdm_av->util_av_implicit, context, 0);
 	if (ret)
 		goto err_destroy_implicit_reverse_av;
+
+	ret = ofi_genlock_init(&rdm_av->conn_pool_lock,
+			       efa_domain->util_domain.threading == FI_THREAD_DOMAIN &&
+			       efa_domain->util_domain.control_progress ==
+				       FI_PROGRESS_CONTROL_UNIFIED ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	if (ret)
+		goto err_close_util_av_implicit;
+
+	ret = ofi_bufpool_create(&rdm_av->conn_pool,
+				 sizeof(struct efa_rdm_av_entry), 16,
+				 0, /* no limit to max_cnt */
+				 1024, OFI_BUFPOOL_INDEXED);
+	if (ret)
+		goto err_destroy_conn_pool_lock;
 
 	if (efa_domain->fabric &&
 	    ((struct efa_rdm_fabric *) efa_domain->fabric)->shm_fabric) {
@@ -1857,14 +1866,14 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				 "The requested av size is beyond"
 				 " shm supported maximum av size: %s\n",
 				 fi_strerror(-ret));
-			goto err_close_util_av_implicit;
+			goto err_destroy_conn_pool;
 		}
 		av_attr.count = efa_env.shm_av_size;
 		assert(av_attr.type == FI_AV_TABLE);
 		ret = fi_av_open(rdm_domain->shm_domain, &av_attr,
 				 &rdm_av->shm_rdm_av, context);
 		if (ret)
-			goto err_close_util_av_implicit;
+			goto err_destroy_conn_pool;
 	}
 
 	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
@@ -1882,6 +1891,12 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	dlist_init(&rdm_av->implicit_av_lru_list);
 
 	return 0;
+
+err_destroy_conn_pool:
+	ofi_bufpool_destroy(rdm_av->conn_pool);
+
+err_destroy_conn_pool_lock:
+	ofi_genlock_destroy(&rdm_av->conn_pool_lock);
 
 err_close_util_av_implicit:
 	retv = ofi_av_close(&rdm_av->util_av_implicit);
@@ -1904,6 +1919,7 @@ err_destruct_base:
 	efa_av_array_destroy(av->cur_reverse_av);
 
 err_free:
+
 	free(rdm_av);
 	return ret;
 }

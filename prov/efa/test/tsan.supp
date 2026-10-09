@@ -1,0 +1,16 @@
+# ThreadSanitizer suppressions for the EFA multi-threaded fabtests
+# (fi_efa_multi_ep_stress, fi_efa_av_insert_race). Pass with
+#   TSAN_OPTIONS=suppressions=prov/efa/test/tsan.supp
+# Each entry is a known report that is not a data race in EFA provider state.
+
+# srx_lock -> progress_ep_list_lock when a send path queues work
+# (efa_rdm_ep_enqueue_progress_list), versus progress_ep_list_lock -> srx_lock
+# in efa_rdm_cq_poll_ibv_cq. The inversion is deliberate: needs_progress keeps
+# the two paths on disjoint endpoints, which TSan's lock-order graph cannot
+# see.
+deadlock:efa_rdm_ep_enqueue_progress_list
+
+# util_ep_srx_context stores the new SRX in util_domain.srx on every
+# fi_enable, so concurrent fi_enable calls race on that store. Nothing reads
+# util_domain.srx; the fix belongs in the util layer.
+race:util_ep_srx_context

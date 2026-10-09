@@ -96,15 +96,21 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 
 #endif /* OFI_THREAD_SAFETY_ANALYSIS */
 
-/* EFA lock symbols (one per lock role), declared outermost lock first. */
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_domain_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_av_lock_sym,
-					   efa_util_domain_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_implicit_av_lock_sym,
-					   efa_util_av_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_ctrl_lock_sym,
-					   efa_implicit_av_lock_sym);
-
+/*
+ * EFA lock symbols (one per lock role), declared outermost lock first.
+ *
+ * Data path: a CQ read holds the CQ's ep_list_lock and the endpoint's srx_lock
+ * while it processes completions; the TX path holds srx_lock. Both may then
+ * resolve a peer, which can take the AV locks and finally the endpoint's
+ * ctrl_lock. The AV control paths (insert, remove, close) take the AV locks in
+ * the same order without srx_lock. So the full order is
+ *
+ *   srx_lock -> util_domain.lock -> util_av.lock -> util_av_implicit.lock
+ *            -> util_av.ep_list_lock -> ctrl_lock
+ *
+ * and ctrl_lock is a leaf. The AV's conn_pool_lock is a separate leaf under
+ * the AV locks. See prov/efa/docs/efa_rdm_av_locking.md.
+ */
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_ibv_cq_poll_list_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_cq_ep_list_lock_sym,
@@ -115,5 +121,20 @@ OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_progress_ep_list_lock_sym,
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_srx_lock_sym,
 					   efa_cq_ep_list_lock_sym,
 					   efa_progress_ep_list_lock_sym);
+
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_domain_lock_sym,
+					   efa_srx_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_av_lock_sym,
+					   efa_util_domain_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_implicit_av_lock_sym,
+					   efa_util_av_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_av_ep_list_lock_sym,
+					   efa_implicit_av_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_ctrl_lock_sym,
+					   efa_av_ep_list_lock_sym,
+					   efa_srx_lock_sym);
+/* Leaf: held only around conn allocation and free. */
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_av_conn_pool_lock_sym,
+					   efa_implicit_av_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */
