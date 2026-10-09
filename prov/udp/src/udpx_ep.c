@@ -234,8 +234,8 @@ static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
 	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
 }
 
-static void udpx_rx_comp(struct udpx_ep *ep, void *context, size_t len,
-			 void *addr)
+static int udpx_rx_comp(struct udpx_ep *ep, void *context, size_t len,
+			void *addr, struct fi_cq_err_entry *err)
 {
 	struct fi_cq_tagged_entry *comp;
 
@@ -248,28 +248,49 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, size_t len,
 	comp->buf = NULL;
 	comp->data = 0;
 	ofi_cirque_commit(ep->util_ep.rx_cq->cirq);
+	return 0;
 }
 
-static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, size_t len,
-			     void *addr)
+static int udpx_rx_src_comp(struct udpx_ep *ep, void *context, size_t len,
+			    void *addr, struct fi_cq_err_entry *err)
 {
+	fi_addr_t src = ofi_ip_av_get_fi_addr(ep->util_ep.av, addr);
+
+	if (src == FI_ADDR_NOTAVAIL && (ep->util_ep.caps & FI_SOURCE_ERR)) {
+		*err = (struct fi_cq_err_entry) {
+			.op_context = context,
+			.flags = FI_RECV,
+			.len = len,
+			.err = FI_EADDRNOTAVAIL,
+			.err_data = addr,
+			.err_data_size = ofi_sizeofaddr(addr),
+			.src_addr = FI_ADDR_NOTAVAIL,
+		};
+		return -FI_EADDRNOTAVAIL;
+	}
+
 	ep->util_ep.rx_cq->src[ofi_cirque_windex(ep->util_ep.rx_cq->cirq)] =
-			ofi_ip_av_get_fi_addr(ep->util_ep.av, addr);
-	udpx_rx_comp(ep, context, len, addr);
+		src;
+	return udpx_rx_comp(ep, context, len, addr, err);
 }
 
-static void udpx_rx_comp_signal(struct udpx_ep *ep, void *context, size_t len,
-				void *addr)
+static int udpx_rx_comp_signal(struct udpx_ep *ep, void *context, size_t len,
+			       void *addr, struct fi_cq_err_entry *err)
 {
-	udpx_rx_comp(ep, context, len, addr);
-	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
+	int ret = udpx_rx_comp(ep, context, len, addr, err);
+	if (!ret)
+		ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
+	return ret;
 }
 
-static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
-				    size_t len, void *addr)
+static int udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
+				   size_t len, void *addr,
+				   struct fi_cq_err_entry *err)
 {
-	udpx_rx_src_comp(ep, context, len, addr);
-	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
+	int ret = udpx_rx_src_comp(ep, context, len, addr, err);
+	if (!ret)
+		ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
+	return ret;
 }
 
 static void udpx_ep_progress(struct util_ep *util_ep)
@@ -278,6 +299,7 @@ static void udpx_ep_progress(struct util_ep *util_ep)
 	struct udpx_ep_entry *entry;
 	struct msghdr hdr;
 	struct sockaddr_in6 addr;
+	struct fi_cq_err_entry err;
 	ssize_t ret;
 
 	ep = container_of(util_ep, struct udpx_ep, util_ep);
@@ -298,8 +320,13 @@ static void udpx_ep_progress(struct util_ep *util_ep)
 
 	ret = ofi_recvmsg_udp(ep->sock, &hdr, 0);
 	if (ret >= 0) {
-		ep->rx_comp(ep, entry->context, ret, &addr);
+		ret = ep->rx_comp(ep, entry->context, ret, &addr, &err);
 		ofi_cirque_discard(ep->rxq);
+		if (ret) {
+			ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
+			ofi_cq_write_error(ep->util_ep.rx_cq, &err);
+			return;
+		}
 	}
 out:
 	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
