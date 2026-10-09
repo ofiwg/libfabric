@@ -347,11 +347,10 @@ static int util_queue_msg(struct fi_peer_rx_entry *rx_entry)
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP_UNQUEUED);
 	util_entry->status = RX_ENTRY_UNEXP;
+	ofi_genlock_lock(&srx_ctx->unspec_lock);
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
-		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_msg_queue);
-		ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	} else {
 		unexp_peer = ofi_array_at(&srx_ctx->src_unexp_peers,
 					  rx_entry->addr);
@@ -361,6 +360,7 @@ static int util_queue_msg(struct fi_peer_rx_entry *rx_entry)
 			dlist_insert_tail(&unexp_peer->entry,
 					  &srx_ctx->unexp_peers);
 	}
+	ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	return FI_SUCCESS;
 }
 
@@ -375,11 +375,10 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP_UNQUEUED);
 	util_entry->status = RX_ENTRY_UNEXP;
+	ofi_genlock_lock(&srx_ctx->unspec_lock);
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
-		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_tag_queue);
-		ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	} else {
 		unexp_peer = ofi_array_at(&srx_ctx->src_unexp_peers,
 					  rx_entry->addr);
@@ -390,6 +389,7 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 					  &srx_ctx->unexp_peers);
 
 	}
+	ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	return FI_SUCCESS;
 }
 
@@ -423,7 +423,9 @@ static void util_free_entry(struct fi_peer_rx_entry *entry)
 	/* Only a queued entry carries RX_ENTRY_UNEXP, so an entry the peer
 	 * never queued needs nothing unwound here. */
 	if (util_entry->status == RX_ENTRY_UNEXP) {
-		if (util_entry->peer_entry.addr == FI_ADDR_UNSPEC) {
+		ofi_genlock_lock(&srx->unspec_lock);
+		if (!srx->dir_recv ||
+		    util_entry->peer_entry.addr == FI_ADDR_UNSPEC) {
 			dlist_remove(&util_entry->d_entry);
 		} else {
 			unexp_peer = ofi_array_at(&srx->src_unexp_peers,
@@ -443,6 +445,7 @@ static void util_free_entry(struct fi_peer_rx_entry *entry)
 				dlist_remove(&unexp_peer->entry);
 			}
 		}
+		ofi_genlock_unlock(&srx->unspec_lock);
 	}
 
 	ofi_buf_free(util_entry);
@@ -556,7 +559,11 @@ static struct util_rx_entry *util_search_unexp_msg(struct util_srx_ctx *srx,
 		return NULL;
 	}
 
-	return util_search_peer_msg(ofi_array_at(&srx->src_unexp_peers, addr));
+	ofi_genlock_lock(&srx->unspec_lock);
+	rx_entry = util_search_peer_msg(ofi_array_at(&srx->src_unexp_peers,
+						     addr));
+	ofi_genlock_unlock(&srx->unspec_lock);
+	return rx_entry;
 }
 
 static bool util_unexp_mrecv(struct util_srx_ctx *srx,
@@ -694,8 +701,11 @@ static struct util_rx_entry *util_search_unexp_tag(struct util_srx_ctx *srx,
 		return NULL;
 	}
 
-	return util_search_peer_tag(ofi_array_at(&srx->src_unexp_peers, addr),
-				    tag, ignore, remove);
+	ofi_genlock_lock(&srx->unspec_lock);
+	rx_entry = util_search_peer_tag(ofi_array_at(&srx->src_unexp_peers,
+						     addr), tag, ignore, remove);
+	ofi_genlock_unlock(&srx->unspec_lock);
+	return rx_entry;
 }
 
 static ssize_t util_srx_peek(struct util_srx_ctx *srx, const struct iovec *iov,
