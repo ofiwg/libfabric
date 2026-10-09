@@ -295,6 +295,12 @@ int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 int ze_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			  uint64_t *offset);
 bool ze_is_dmabuf_requested(void);
+int ze_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		 uint64_t flags, void **addr, int *fd, uint64_t *offset);
+int ze_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
+		  uint64_t flags, void **dev_addr);
+int ze_dev_unimport(uint64_t device, void *host_addr);
+void ze_dev_free(uint64_t device, void *addr);
 
 enum NEURON_OP {
 	NRT_TENSOR_ALLOCATE = 0,

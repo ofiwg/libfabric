@@ -147,6 +147,19 @@ struct libze_ops {
 						      void *ptr, size_t len);
 	ze_result_t (*zexDriverReleaseImportedPointer)(ze_driver_handle_t hDriver,
 						       void *ptr);
+	ze_result_t (*zeMemAllocDevice)(ze_context_handle_t hContext,
+					const ze_device_mem_alloc_desc_t* device_desc,
+					size_t size, size_t alignment,
+					ze_device_handle_t hDevice, void** pptr);
+	ze_result_t (*zeMemAllocHost)(ze_context_handle_t hContext,
+					const ze_host_mem_alloc_desc_t* host_desc,
+					size_t size, size_t alignment, void** pptr);
+	ze_result_t (*zeMemAllocShared)(ze_context_handle_t hContext,
+					const ze_device_mem_alloc_desc_t* device_desc,
+					const ze_host_mem_alloc_desc_t* host_desc,
+					size_t size, size_t alignment,
+					ze_device_handle_t hDevice, void** pptr);
+	ze_result_t (*zeMemFree)(ze_context_handle_t hContext, void* ptr);
 };
 
 #define DEVICE_MASK  ((1 << 16) - 1)
@@ -195,6 +208,10 @@ static struct libze_ops libze_ops = {
 	.zeMemCloseIpcHandle = zeMemCloseIpcHandle,
 	.zeDeviceGetProperties = zeDeviceGetProperties,
 	.zeDriverGetExtensionFunctionAddress = zeDriverGetExtensionFunctionAddress,
+	.zeMemAllocDevice = zeMemAllocDevice,
+	.zeMemAllocHost = zeMemAllocHost,
+	.zeMemAllocShared = zeMemAllocShared,
+	.zeMemFree = zeMemFree,
 };
 
 #endif /* ENABLE_ZE_DLOPEN */
@@ -369,6 +386,38 @@ ze_result_t ofi_zexDriverReleaseImportedPointer(ze_driver_handle_t hDriver,
 	return (*libze_ops.zexDriverReleaseImportedPointer)(hDriver, ptr);
 }
 
+ze_result_t ofi_zeMemAllocDevice(ze_context_handle_t hContext,
+				 const ze_device_mem_alloc_desc_t* device_desc,
+				 size_t size, size_t alignment,
+				 ze_device_handle_t hDevice, void** pptr)
+{
+	return (*libze_ops.zeMemAllocDevice)(hContext, device_desc, size,
+					     alignment, hDevice, pptr);
+}
+
+ze_result_t ofi_zeMemAllocHost(ze_context_handle_t hContext,
+			       const ze_host_mem_alloc_desc_t* host_desc,
+			       size_t size, size_t alignment, void** pptr)
+{
+	return (*libze_ops.zeMemAllocHost)(hContext, host_desc, size, alignment,
+					   pptr);
+}
+
+ze_result_t ofi_zeMemAllocShared(ze_context_handle_t hContext,
+				 const ze_device_mem_alloc_desc_t* device_desc,
+				 const ze_host_mem_alloc_desc_t* host_desc,
+				 size_t size, size_t alignment,
+				 ze_device_handle_t hDevice, void** pptr)
+{
+	return (*libze_ops.zeMemAllocShared)(hContext, device_desc, host_desc,
+					     size, alignment, hDevice, pptr);
+}
+
+ze_result_t ofi_zeMemFree(ze_context_handle_t hContext, void* ptr)
+{
+	return (*libze_ops.zeMemFree)(hContext, ptr);
+}
+
 #if HAVE_DRM || HAVE_LIBDRM
 
 #if HAVE_DRM
@@ -537,6 +586,30 @@ static int ze_hmem_dl_init(void)
 	if (!libze_ops.zeDriverGetExtensionFunctionAddress) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find zeDriverGetExtensionFunctionAddress\n");
+		goto err_dlclose;
+	}
+
+	libze_ops.zeMemAllocDevice = dlsym(libze_handle, "zeMemAllocDevice");
+	if (!libze_ops.zeMemAllocDevice) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeMemAllocDevice\n");
+		goto err_dlclose;
+	}
+
+	libze_ops.zeMemAllocHost = dlsym(libze_handle, "zeMemAllocHost");
+	if (!libze_ops.zeMemAllocHost) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeMemAllocHost\n");
+		goto err_dlclose;
+	}
+
+	libze_ops.zeMemAllocShared = dlsym(libze_handle, "zeMemAllocShared");
+	if (!libze_ops.zeMemAllocShared) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeMemAllocShared\n");
+		goto err_dlclose;
+	}
+
+	libze_ops.zeMemFree = dlsym(libze_handle, "zeMemFree");
+	if (!libze_ops.zeMemFree) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeMemFree\n");
 		goto err_dlclose;
 	}
 
@@ -1268,6 +1341,99 @@ int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 	return FI_SUCCESS;
 }
 
+int ze_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		 uint64_t flags, void **addr, int *fd, uint64_t *offset)
+{
+	int dev_id = ze_get_device_idx(device);
+        ze_device_mem_alloc_desc_t dev_desc = {
+		.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC,
+	};
+        ze_external_memory_export_desc_t export_desc = {
+		.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_DESC,
+		.flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF,
+	};
+	ze_result_t ze_ret;
+
+	if (flags & FI_XPU_ALLOC_DMABUF)
+		dev_desc.pNext = &export_desc;
+
+	ze_ret = ofi_zeMemAllocDevice(context, &dev_desc, size, alignment,
+				      devices[dev_id], addr);
+
+	if (ze_ret != ZE_RESULT_SUCCESS)
+		return -FI_ENOMEM;
+
+	if (flags & FI_XPU_ALLOC_DMABUF)
+		return ze_hmem_get_dmabuf_fd(*addr, size, fd, offset);
+
+	return 0;
+}
+
+void ze_dev_free(uint64_t device, void *addr)
+{
+	OFI_UNUSED(device);
+
+	ofi_zeMemFree(context, addr);
+}
+
+int ze_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
+		  uint64_t flags, void **dev_addr)
+{
+	ze_result_t ze_ret;
+
+	if (flags & FI_XPU_IMPORT_DMABUF) {
+		int dev_id = ze_get_device_idx(device);
+		ze_external_memory_import_fd_t import_fd = {
+			.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMPORT_FD,
+			.flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF,
+			.fd = fd,
+		};
+		ze_device_mem_alloc_desc_t dev_desc = {
+			.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC,
+			.pNext = &import_fd,
+		};
+
+		/*
+		 * host_addr must be the starting address of the DMA-BUF.
+		 * The resulting dev_addr will be the same. This ensure
+		 * the same host_addr works in ze_dev_unimport.
+		 */
+		ze_ret = ofi_zeMemAllocDevice(context, &dev_desc, size,
+					      4096, devices[dev_id],
+					      dev_addr);
+	} else if (flags & FI_XPU_IMPORT_IOMEMORY) {
+		/* Ze driver doesn't support importing MMIO address directly */
+		return -FI_EINVAL;
+	} else {
+#ifdef  ZE_STRUCTURE_TYPE_EXTERNAL_MEMMAP_SYSMEM_EXT_DESC
+		ze_external_memmap_sysmem_ext_desc_t sysmem_desc = {
+			.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMMAP_SYSMEM_EXT_DESC,
+			.pSystemMemory = host_addr,
+			.size = size,
+		};
+		ze_host_mem_alloc_desc_t host_desc = {
+			.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC,
+			.pNext = &sysmem_desc,
+		};
+		ze_ret = ofi_zeMemAllocHost(context, &host_desc, size, alignment, addr);
+#else
+		return -FI_EINVAL;
+#endif
+	}
+
+	return (ze_ret == ZE_RESULT_SUCCESS) ? 0 : -FI_ENOMEM;
+}
+
+int ze_dev_unimport(uint64_t device, void *host_addr)
+{
+	ze_result_t ze_ret;
+
+	/* Imported device addr is the same as the host addr */
+	ze_ret = ofi_zeMemFree(context, host_addr);
+
+	return (ze_ret == ZE_RESULT_SUCCESS) ? 0 : -FI_EINVAL;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -1373,6 +1539,27 @@ int ze_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 bool ze_is_dmabuf_requested(void)
 {
 	return false;
+}
+
+int ze_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		   uint64_t flags, void **addr, int *fd, uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+void ze_dev_free(uint64_t device, void *addr)
+{
+}
+
+int ze_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
+		    uint64_t flags, void **dev_addr)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_dev_unimport(uint64_t device, void *host_addr)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_ZE */
