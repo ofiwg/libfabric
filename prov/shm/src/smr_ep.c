@@ -845,7 +845,7 @@ create_shm:
 				goto create_shm;
 		}
 
-		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
+		if (smr_env.disable_cma) {
 			smr_set_vma_cap(&ep->region->peer_vma_caps,
 					FI_SHM_P2P_CMA, false);
 			smr_set_vma_cap(&ep->region->self_vma_caps,
