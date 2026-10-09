@@ -270,6 +270,7 @@ void test_info_direct_without_context2_api_lt_2_7(void **state);
 void test_info_direct_with_context2_api_lt_2_7(void **state);
 void test_info_dgram_without_context2_api_lt_2_7(void **state);
 void test_info_direct_without_context2_api_ge_2_7(void **state);
+void test_info_direct_wr_requested_drops_context2(void **state);
 void test_info_reuse_fabric_via_fabric_attr(void **state);
 void test_info_reuse_domain_via_domain_attr(void **state);
 void test_info_reuse_fabric_via_name(void **state);

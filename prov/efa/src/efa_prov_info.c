@@ -5,6 +5,7 @@
 #include <ofi_util.h>
 
 #include "efa.h"
+#include "efa_wr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_pkt_type.h"
 
@@ -160,6 +161,8 @@ void efa_prov_info_set_ep_attr(struct fi_info *prov_info,
 		/* ep_attr->max_msg_size is the maximum of both MSG and RMA operations */
 		if (prov_info->caps & FI_RMA)
 			prov_info->ep_attr->max_msg_size = MAX(device->ibv_port_attr.max_msg_sz, device->max_rdma_size);
+		prov_info->ep_attr->max_tx_wr_size = efa_wr_tx_size();
+		prov_info->ep_attr->max_rx_wr_size = efa_wr_rx_size(device->efa_attr.max_rq_sge);
 	} else {
 		assert(ep_type == FI_EP_DGRAM);
 		prov_info->ep_attr->msg_prefix_size = 40;
@@ -589,6 +592,11 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 	prov_info_rdm->mode &= ~FI_CONTEXT2;
 	prov_info_rdm->tx_attr->mode &= ~FI_CONTEXT2;
 	prov_info_rdm->rx_attr->mode &= ~FI_CONTEXT2;
+
+	/* A work request is a device queue entry, which the RDM protocols do
+	 * not post directly. Only efa-direct supports them. */
+	prov_info_rdm->ep_attr->max_tx_wr_size = 0;
+	prov_info_rdm->ep_attr->max_rx_wr_size = 0;
 
 	/* update domain_attr */
 	{

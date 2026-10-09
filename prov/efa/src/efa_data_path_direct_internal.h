@@ -649,6 +649,28 @@ EFA_ALWAYS_INLINE int efa_post_recv_validate(struct efa_qp *qp,
 }
 
 /**
+ * @brief Set the static (position-independent) transmit control flags
+ *
+ * Sets every common control flag except the PHASE bit: metadata descriptor,
+ * operation type, first, last, and completion request. The PHASE bit depends
+ * on the send queue ring position and is set separately, so this helper can be
+ * used to format a work request ahead of time (e.g. fi_wr_prepare) without
+ * touching send queue state.
+ *
+ * @param desc Pointer to the transmit metadata descriptor
+ * @param op_type Type of send operation (SEND, RDMA_READ, RDMA_WRITE, etc.)
+ */
+EFA_ALWAYS_INLINE void efa_set_common_ctrl_flags_no_phase(struct efa_io_tx_meta_desc *desc,
+						       enum efa_io_send_op_type op_type)
+{
+	EFA_SET(&desc->ctrl1, EFA_IO_TX_META_DESC_META_DESC, 1);
+	EFA_SET(&desc->ctrl1, EFA_IO_TX_META_DESC_OP_TYPE, op_type);
+	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_FIRST, 1);
+	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_LAST, 1);
+	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_COMP_REQ, 1);
+}
+
+/**
  * @brief Set common control flags for transmit work queue entries
  *
  * Initializes the standard control flags that are common to all transmit
@@ -662,12 +684,8 @@ EFA_ALWAYS_INLINE void efa_set_common_ctrl_flags(struct efa_io_tx_meta_desc *des
 					      struct efa_data_path_direct_sq *sq,
 					      enum efa_io_send_op_type op_type)
 {
-	EFA_SET(&desc->ctrl1, EFA_IO_TX_META_DESC_META_DESC, 1);
-	EFA_SET(&desc->ctrl1, EFA_IO_TX_META_DESC_OP_TYPE, op_type);
+	efa_set_common_ctrl_flags_no_phase(desc, op_type);
 	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_PHASE, sq->wq.phase);
-	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_FIRST, 1);
-	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_LAST, 1);
-	EFA_SET(&desc->ctrl2, EFA_IO_TX_META_DESC_COMP_REQ, 1);
 }
 
 /**
