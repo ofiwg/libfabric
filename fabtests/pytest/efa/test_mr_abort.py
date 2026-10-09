@@ -3,9 +3,6 @@ from common import ClientServerTest
 from efa.efa_common import memory_type_list_symm
 
 
-pytestmark = pytest.mark.pre_release
-
-
 # fi_mr_abort allocates -W MRs and posts -N transfers per MR, so a run
 # submits up to W*N operations per iteration; more in-flight operations
 # means more NIC load and memory pressure. Every test opens
