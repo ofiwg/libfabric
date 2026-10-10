@@ -289,6 +289,25 @@ size_t efa_test_device_inline_buf_size(void)
 	return g_efa_selected_device_list[0].efa_attr.inline_buf_size;
 }
 
+ssize_t efa_test_device_max_inline_data(int with_comp_action)
+{
+	uint32_t flags = 0;
+
+	if (g_efa_selected_device_cnt <= 0)
+		return -FI_ENODEV;
+
+	if (with_comp_action) {
+#if HAVE_EFADV_COMP_ACTION
+		flags = EFADV_INLINE_DATA_ATTR_COMP_ACTION_WITH_DATA;
+#else
+		return -FI_ENOSYS;
+#endif
+	}
+
+	return efa_query_max_inline_data(
+		g_efa_selected_device_list[0].ibv_ctx, flags);
+}
+
 ssize_t efa_test_device_max_wide_wqe_sq_depth(size_t inject_size)
 {
 #if HAVE_INLINE_BUF_SIZE_EX

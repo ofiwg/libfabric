@@ -411,6 +411,37 @@ def device_has_hw_cntr(host_id):
     return False
 
 
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def host_has_comp_action(host_id, binpath, environments):
+    """
+    Return True if completion actions can be enabled on the host, which
+    fi_efa_rma_bw --action-check reports by exiting 0. It exits 61 (ENODATA)
+    when the device, driver, firmware or libfabric build lacks them.
+    """
+    command = "timeout 60 " + os.path.join(binpath, "fi_efa_rma_bw") + \
+              " -p efa --action-check"
+    if environments:
+        command = environments + " " + command
+    proc = subprocess.run("ssh {} {}".format(host_id, command), shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=120)
+
+    if has_ssh_connection_err_msg(proc.stdout) or has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+
+    return proc.returncode == 0
+
+
+def comp_action_neuron_needs_dmabuf(item, do_dmabuf):
+    """
+    The Neuron completion action case is covered in the dmabuf registration
+    mode only, so it is deselected from the other runs.
+    """
+    callspec = getattr(item, "callspec", None)
+    memory_type = callspec.params.get("memory_type") if callspec else None
+    return memory_type == "neuron_to_neuron" and not do_dmabuf
+
+
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, deselects tests whose
     # required binary or device support is missing. Test ordering is handled
@@ -430,6 +461,19 @@ def pytest_collection_modifyitems(session, config, items):
                     "Could not determine hw_cntr support: ssh to {} failed after "
                     "retries. Refusing to silently deselect hw_cntr tests.".format(host_id))
     have_gda = os.path.exists(os.path.join(binpath, "fi_efa_gda"))
+    have_comp_action = os.path.exists(os.path.join(binpath, "fi_efa_rma_bw"))
+    do_dmabuf = config.getoption("do_dmabuf_reg_for_hmem", default=False)
+    if have_comp_action and any(item.get_closest_marker("comp_action") for item in items):
+        environments = config.getoption("environments", default=None)
+        for host_id in filter(None, (server_id, client_id)):
+            try:
+                if not host_has_comp_action(host_id, binpath, environments):
+                    have_comp_action = False
+                    break
+            except SshConnectionError:
+                pytest.fail(
+                    "Could not determine completion action support: ssh to {} failed "
+                    "after retries. Refusing to silently deselect comp_action tests.".format(host_id))
 
     deselected = []
     remaining = []
@@ -438,6 +482,10 @@ def pytest_collection_modifyitems(session, config, items):
         if "hw_cntr" in markers and not have_hw_cntr:
             deselected.append(item)
         elif "gda" in markers and not have_gda:
+            deselected.append(item)
+        elif "comp_action" in markers and not have_comp_action:
+            deselected.append(item)
+        elif "comp_action" in markers and comp_action_neuron_needs_dmabuf(item, do_dmabuf):
             deselected.append(item)
         else:
             remaining.append(item)

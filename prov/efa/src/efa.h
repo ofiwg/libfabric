@@ -116,6 +116,41 @@ static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
 	      "efa_context must not be larger than fi_context2");
 #endif
 
+/*
+ * Per-work-request completion-action descriptor, passed by the message-form
+ * data path (fi_writemsg with FI_EFA_MSG_ACTION) down to the WQE
+ * builder. Built on the stack for the current WR; a NULL pointer or
+ * feature_bits == 0 means no actions to attach. Not persistent state.
+ */
+struct efa_comp_action_wr {
+	uint64_t feature_bits;
+	uint32_t local_action_id;
+	uint32_t remote_action_id;
+	/*
+	 * The action's device operand: one 64-bit word holding the value the
+	 * action writes, as the efadv setter and the WQE field take it; the
+	 * device truncates it to the action's op_mem_size.
+	 */
+	uint64_t local_action_data;
+	uint64_t remote_action_data;
+};
+
+/*
+ * struct fi_efa_msg_rma_action is handed to fi_writemsg() as a struct
+ * fi_msg_rma pointer, so the core descriptor must sit at offset 0.
+ */
+static_assert(offsetof(struct fi_efa_msg_rma_action, msg) == 0,
+	      "fi_msg_rma must be the first member of fi_efa_msg_rma_action");
+
+/*
+ * Every feature bit this provider understands. Kept out of the public header:
+ * an application has no use for the provider's own notion of "all of them",
+ * and one compiled against a newer header would read a stale value anyway.
+ */
+#define EFA_MSG_ACTION_SUPPORTED_FEATURE_BITS                                  \
+	(FI_EFA_LOCAL_ACTION_ID | FI_EFA_REMOTE_ACTION_ID |                    \
+	 FI_EFA_LOCAL_ACTION_VALUE | FI_EFA_REMOTE_ACTION_VALUE)
+
 #define EFA_SETUP_IOV(iov, buf, len)           \
 	do {                                   \
 		iov.iov_base = (void *)buf;    \

@@ -352,7 +352,7 @@ int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sg
 	return mock_int();
 }
 
-int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, const struct ibv_data_buf *inline_data_list, bool use_inline, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, const struct ibv_data_buf *inline_data_list, bool use_inline, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey, const struct efa_comp_action_wr *sig)
 {
 	efa_mock_efa_qp_post_save_wr_id(wr_id);
 	return mock_int();
@@ -477,9 +477,9 @@ int __wrap_efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list, s
 	return g_efa_unit_test_mocks.efa_qp_post_read(qp, sge_list, sge_count, remote_key, remote_addr, wr_id, flags, ah, qpn, qkey);
 }
 
-int __wrap_efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, const struct ibv_data_buf *inline_data_list, bool use_inline, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+int __wrap_efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, const struct ibv_data_buf *inline_data_list, bool use_inline, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey, const struct efa_comp_action_wr *sig)
 {
-	return g_efa_unit_test_mocks.efa_qp_post_write(qp, sge_list, sge_count, inline_data_list, use_inline, remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
+	return g_efa_unit_test_mocks.efa_qp_post_write(qp, sge_list, sge_count, inline_data_list, use_inline, remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey, sig);
 }
 
 int __wrap_efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)
@@ -901,6 +901,11 @@ int efa_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp, struct efadv_wq_attr *sq_a
 	sq_attr->max_batch = 16;
 #if HAVE_EFADV_WQ_ATTR_CAPS
 	sq_attr->caps |= EFADV_WQ_CAPS_64_BIT_REQ_ID;
+#endif
+#if HAVE_EFADV_COMP_ACTION
+	sq_attr->caps |= EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA;
+	sq_attr->comp_action_with_data_block_offset =
+		EFA_UNIT_TEST_MOCK_ACTION_BLOCK_OFFSET;
 #endif
 
 	rq_attr->buffer = (uint8_t *) 0x12345678;

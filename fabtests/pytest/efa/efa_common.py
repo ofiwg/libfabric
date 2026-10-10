@@ -53,6 +53,11 @@ memory_type_list_neuron_to_neuron = [
     pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
 ]
 
+memory_type_list_host_and_neuron = [
+    pytest.param("host_to_host"),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+]
+
 # EFA-specific message size lists for @pytest.mark.message_sizes decorator.
 # Generic (shared) size lists live in fabtests/pytest/common.py.
 DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]

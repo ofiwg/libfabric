@@ -1,5 +1,6 @@
 from efa.efa_common import (efa_run_client_server_test, DIRECT_SIZES,
                             memory_type_list_all, memory_type_list_device_to_device,
+                            memory_type_list_host_and_neuron,
                             CudaMemorySupport, get_cuda_memory_support,
                             get_efa_devices_on_dma_path)
 from common import (perf_progress_model_cli, ClientServerTest,
@@ -174,6 +175,31 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
                                message_size="all",
                                fabric=rma_fabric,
                                additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+
+
+# Completion actions ride on the writes fi_efa_rma_bw posts. They are an
+# EFA-direct feature, so this runs only on efa-direct, and the test itself
+# reports ENODATA (a skip) when the libfabric it was built against has no
+# completion actions or the device does not advertise support for them.
+# The action target lives in the memory type the test runs with, so the
+# neuron_to_neuron case has the device write the action value straight into
+# device memory over a dmabuf fd. Neuron is the only hmem type covered: its
+# dmabuf export is unconditional, while the CUDA one depends on both driver
+# support and a mapping type that has to match the NIC the test picked.
+@pytest.mark.comp_action
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_host_and_neuron)
+@pytest.mark.parametrize("action_mode", ["local", "remote", "both"])
+@pytest.mark.parametrize("action_width", ["8", "16", "32"])
+def test_efa_rma_bw_comp_action(cmdline_args, memory_type, action_mode,
+                                action_width, rma_fabric):
+    command = ("fi_efa_rma_bw -e rdm -I 8 -o write"
+               " --action-mode " + action_mode +
+               " --action-width " + action_width)
+    efa_run_client_server_test(cmdline_args, command, None,
+                               "transmit_complete", memory_type, 4096,
+                               fabric=rma_fabric)
 
 
 # Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE
