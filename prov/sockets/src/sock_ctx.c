@@ -71,7 +71,14 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
 
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
 {
-	struct sock_rx_entry *rx_buffered;
+	struct sock_rx_entry *rx_buffered, *rx_posted;
+
+	/* Release posted entries before freeing their shared pool. */
+	while (!dlist_empty(&rx_ctx->rx_entry_list)) {
+		dlist_pop_front(&rx_ctx->rx_entry_list,
+		                struct sock_rx_entry, rx_posted, entry);
+		sock_rx_release_entry(rx_posted);
+	}
 
 	/* free any remaining buffered entries */
 	while (!dlist_empty(&rx_ctx->rx_buffered_list)) {
