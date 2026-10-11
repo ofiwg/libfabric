@@ -568,6 +568,8 @@ err1:
 
 void ofi_ns_stop_server(struct util_ns *ns)
 {
+	RbtIterator it;
+	void *service, *name;
 	SOCKET sock;
 
 	assert(ns->is_initialized);
@@ -584,6 +586,11 @@ void ofi_ns_stop_server(struct util_ns *ns)
 		ofi_close_socket(sock);
 	util_ns_close_listen(ns);
 	(void) pthread_join(ns->thread, NULL);
+	for (it = rbtBegin(ns->map); it; it = rbtNext(ns->map, it)) {
+		rbtKeyValue(ns->map, it, &service, &name);
+		free(service);
+		free(name);
+	}
 	rbtDelete(ns->map);
 }
 
