@@ -732,15 +732,27 @@ static ssize_t util_srx_peek(struct util_srx_ctx *srx, const struct iovec *iov,
 				FI_WARN(&core_prov, FI_LOG_EP_CTRL,
 					"Error discarding message with peer\n");
 			}
-			ofi_buf_free(rx_entry);
+		} else {
+			((struct fi_context *)context)->internal[0] = rx_entry;
 		}
-		((struct fi_context *)context)->internal[0] = rx_entry;
 	}
 
-	return ofi_cq_write(srx->cq, context, rx_entry->peer_entry.flags,
-			    rx_entry->peer_entry.msg_size, NULL,
-			    rx_entry->peer_entry.cq_data,
-			    rx_entry->peer_entry.tag);
+	if (srx->cq->src) {
+		ret = ofi_cq_write_src(srx->cq, context,
+				      rx_entry->peer_entry.flags,
+				      rx_entry->peer_entry.msg_size, NULL,
+				      rx_entry->peer_entry.cq_data,
+				      rx_entry->peer_entry.tag,
+				      rx_entry->peer_entry.addr);
+	} else {
+		ret = ofi_cq_write(srx->cq, context, rx_entry->peer_entry.flags,
+				  rx_entry->peer_entry.msg_size, NULL,
+				  rx_entry->peer_entry.cq_data,
+				  rx_entry->peer_entry.tag);
+	}
+	if (flags & FI_DISCARD)
+		ofi_buf_free(rx_entry);
+	return ret;
 }
 
 ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
