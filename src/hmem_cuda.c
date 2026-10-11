@@ -1046,7 +1046,7 @@ bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	CUresult cuda_ret;
 	unsigned int mem_type;
 	unsigned int is_managed;
-	uint64_t device_ord;
+	int device_ord;
 
 	/* Each pointer in 'data' needs to have the same array index
 		as the corresponding attribute in 'cuda_attributes' */
