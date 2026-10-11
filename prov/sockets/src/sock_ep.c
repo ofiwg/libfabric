@@ -1398,6 +1398,8 @@ static void sock_set_fabric_attr(void *src_addr, const struct fi_fabric_attr *hi
 {
 	struct sock_fabric *fabric;
 
+	free(attr->name);
+	free(attr->prov_name);
 	*attr = sock_fabric_attr;
 	if (hint_attr && hint_attr->fabric) {
 		attr->fabric = hint_attr->fabric;
@@ -1423,6 +1425,7 @@ static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
 {
 	struct sock_domain *domain;
 
+	free(attr->name);
 	domain = sock_dom_list_head();
 	attr->domain = domain ? &domain->dom_fid : NULL;
 	if (!hint_attr) {
