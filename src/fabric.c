@@ -1579,6 +1579,7 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	dup->ep_attr = NULL;
 	dup->domain_attr = NULL;
 	dup->fabric_attr = NULL;
+	dup->nic = NULL;
 	dup->next = NULL;
 
 	if (info->src_addr != NULL) {
