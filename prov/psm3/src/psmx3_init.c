@@ -724,21 +724,23 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 	}
 
 	/* Set src or dest to used supplied address in native format */
-	if (node &&
-	    !ofi_str_toaddr(node, &fmt, &addr, &len) &&
-	    fmt == FI_ADDR_PSMX3) {
-		if (flags & FI_SOURCE) {
-			src_addr = addr;
-			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-				"'%s' is taken as src_addr: <unit=%d, port=%d, service=%d>\n",
-				node, src_addr->unit, src_addr->port, src_addr->service);
+	if (node && !ofi_str_toaddr(node, &fmt, &addr, &len)) {
+		if (fmt == FI_ADDR_PSMX3) {
+			if (flags & FI_SOURCE) {
+				src_addr = addr;
+				PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
+					"'%s' is taken as src_addr: <unit=%d, port=%d, service=%d>\n",
+					node, src_addr->unit, src_addr->port, src_addr->service);
+			} else {
+				dest_addr = addr;
+				PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
+					"'%s' is taken as dest_addr: <epid=%s>\n",
+					node, psm3_epid_fmt(dest_addr->epid, 0));
+			}
+			node = NULL;
 		} else {
-			dest_addr = addr;
-			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
-				"'%s' is taken as dest_addr: <epid=%s>\n",
-				node, psm3_epid_fmt(dest_addr->epid, 0));
+			free(addr);
 		}
-		node = NULL;
 	}
 
 	/* Initialize src address based on the "host:unit:port" format */
