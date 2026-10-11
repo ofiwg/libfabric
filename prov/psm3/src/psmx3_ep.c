@@ -254,7 +254,8 @@ static void psmx3_ep_close_internal(struct psmx3_fid_ep *ep)
 static int psmx3_ep_close(fid_t fid)
 {
 	struct psmx3_fid_ep *ep;
-	struct psmx3_ep_name ep_name;
+	struct psmx3_trx_ctxt *trx_ctxt;
+	struct psmx3_ep_name ep_name = {0};
 	int usage_flags = 0;
 
 	ep = container_of(fid, struct psmx3_fid_ep, ep.fid);
@@ -273,15 +274,17 @@ static int psmx3_ep_close(fid_t fid)
 	if (ep->tx && !ep->stx)
 		usage_flags |= PSMX3_TX;
 
-	if (ep->rx) {
+	if (ep->rx)
 		usage_flags |= PSMX3_RX;
-		ep_name.epid = ep->rx->psm2_epid;
 
+	if (usage_flags) {
+		trx_ctxt = ep->rx ? ep->rx : ep->tx;
+		ep_name.epid = trx_ctxt->psm2_epid;
+		ep_name.type = ep->type;
 		ofi_ns_del_local_name(&ep->domain->fabric->name_server,
 				      &ep->service, &ep_name);
+		psmx3_trx_ctxt_free(trx_ctxt, usage_flags);
 	}
-
-	psmx3_trx_ctxt_free(ep->rx, usage_flags);
 	psmx3_ep_close_internal(ep);
 	return 0;
 }
@@ -644,7 +647,7 @@ int psmx3_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct psmx3_fid_domain *domain_priv;
 	struct psmx3_fid_ep *ep_priv;
-	struct psmx3_ep_name ep_name;
+	struct psmx3_ep_name ep_name = {0};
 	struct psmx3_ep_name *src_addr;
 	struct psmx3_trx_ctxt *trx_ctxt = NULL;
 	int err = -FI_EINVAL;
@@ -845,7 +848,7 @@ errout:
 static int psmx3_sep_close(fid_t fid)
 {
 	struct psmx3_fid_sep *sep;
-	struct psmx3_ep_name ep_name;
+	struct psmx3_ep_name ep_name = {0};
 	int i;
 
 	sep = container_of(fid, struct psmx3_fid_sep, ep.fid);
@@ -990,7 +993,7 @@ int psmx3_sep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx3_fid_domain *domain_priv;
 	struct psmx3_fid_ep *ep_priv;
 	struct psmx3_fid_sep *sep_priv;
-	struct psmx3_ep_name ep_name;
+	struct psmx3_ep_name ep_name = {0};
 	struct psmx3_ep_name *src_addr;
 	struct psmx3_trx_ctxt *trx_ctxt;
 	size_t ctxt_cnt = 1;
