@@ -1990,24 +1990,21 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_write_total_len == 0) {
-		/* According to libfabric document
-		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
-		 * write with 0 byte is allowed.
-		 *
-		 * Note that because send operation used a pkt_entry as wr_id,
-		 * we had to use a pkt_entry as context for write too.
-		 */
+		/* A 0-byte write is allowed by the libfabric RMA API. It
+		 * transfers nothing, so it posts a single length-0 SGE only to
+		 * generate a completion. Point that SGE at the domain's shared
+		 * pre-registered zero-byte buffer rather than NULL: some older
+		 * firmware rejects a NULL buffer on a 0-byte write. A pkt_entry
+		 * is still needed as the work request context. */
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		/* Provide the registered bounce buffer and its desc to rdma-core.
-		 * The user provided buffer/desc will not be used for 0 byte writes.
-		 * This allows the user to pass NULL for buff/desc.
-		 */
 		efa_rdm_pke_init_write_context(
-			pkt_entry, ope, pkt_entry->wiredata, 0, fi_mr_desc(pkt_entry->mr),
+			pkt_entry, ope,
+			efa_rdm_ep_domain(ep)->zero_byte_bounce_buf, 0,
+			fi_mr_desc(&efa_rdm_ep_domain(ep)->zero_byte_bounce_buf_mr->mr_fid),
 			ope->rma_iov[0].addr, ope->rma_iov[0].key);
 		err = efa_rdm_pke_write(pkt_entry);
 		if (err)

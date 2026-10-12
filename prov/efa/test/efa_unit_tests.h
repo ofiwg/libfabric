@@ -518,7 +518,7 @@ void test_efa_fabric_open_ops_feature_unknown(void **state);
 
 /* begin efa_unit_test_rdm_domain.c */
 void test_efa_domain_info_type_efa_rdm(void **state);
-void test_efa_domain_rdm_no_bounce_buffer(void **state);
+void test_efa_domain_rdm_has_bounce_buffer(void **state);
 void test_efa_domain_rdm_attr_mr_allocated(void **state);
 void test_efa_domain_rdm_mr_ops(void **state);
 void test_efa_domain_mr_cache_enabled(void **state);

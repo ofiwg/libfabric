@@ -37,7 +37,7 @@ struct efa_domain {
 	enum efa_domain_info_type info_type;
 	/* list of enabled efa_base_ep in this domain */
 	struct dlist_entry base_ep_list;
-	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
+	/* Bounce buffer for 0-byte RMA operations */
 	void *zero_byte_bounce_buf;
 	struct efa_mr *zero_byte_bounce_buf_mr;
 	/*
@@ -52,6 +52,17 @@ struct efa_domain {
 extern struct dlist_entry g_efa_domain_list;
 extern ofi_mutex_t g_efa_domain_list_lock;
 extern struct fi_efa_ops_domain efa_ops_domain;
+
+/**
+ * @brief Register the domain's shared 0-byte RMA bounce buffer.
+ *
+ * No-op unless the domain has FI_RMA. On success the
+ * buffer and its MR are stored on the domain and must be released on close.
+ *
+ * @return 0 on success (including the no-op case), negative errno on failure.
+ */
+int efa_domain_register_zero_byte_bounce_buf(struct efa_domain *efa_domain,
+					     struct fi_info *info);
 
 /**
  * @brief domain name suffix according to endpoint type

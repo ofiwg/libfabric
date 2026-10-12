@@ -180,6 +180,12 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 	efa_domain->util_domain.domain_fid.ops = &efa_domain_ops_rdm;
 
+	err = efa_domain_register_zero_byte_bounce_buf(efa_domain, info);
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
 	err = efa_domain_finalize_base(efa_domain);
 	if (err) {
 		ret = err;
@@ -216,6 +222,18 @@ static int efa_rdm_domain_close(fid_t fid)
 	efa_domain = container_of(fid, struct efa_domain,
 				  util_domain.domain_fid.fid);
 	rdm_domain = (struct efa_rdm_domain *) efa_domain;
+
+	if (efa_domain->zero_byte_bounce_buf_mr) {
+		ret = fi_close(&efa_domain->zero_byte_bounce_buf_mr->mr_fid.fid);
+		if (ret)
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to close zero-byte bounce buffer MR: %d\n", ret);
+		efa_domain->zero_byte_bounce_buf_mr = NULL;
+	}
+
+	if (efa_domain->zero_byte_bounce_buf) {
+		free(efa_domain->zero_byte_bounce_buf);
+		efa_domain->zero_byte_bounce_buf = NULL;
+	}
 
 	if (rdm_domain->cache) {
 		ofi_mr_cache_cleanup(rdm_domain->cache);
