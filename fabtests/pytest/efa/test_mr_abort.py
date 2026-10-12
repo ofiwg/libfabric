@@ -140,7 +140,7 @@ def run_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side,
                  ops_per_mr, high_pps, sl_low_latency, message_size,
                  memory_type):
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
-               f" -R {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
+               f" --close-side {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
                f" -S {message_size}{MR_ABORT_EP_ARGS}")
     if high_pps:
         assert(rma_op != "read")
@@ -297,7 +297,7 @@ def run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
                     f"{MR_ABORT_INCAST_NUM_DOMAINS} EFA NICs")
 
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
-               f" -R initiator -N {ops_per_mr}"
+               f" --close-side initiator -N {ops_per_mr}"
                f" -W {mr_abort_num_mrs(ops_per_mr, MR_ABORT_INCAST_INITIATOR_EPS)}"
                f" -S {message_size}"
                f" --num-initiator-eps {MR_ABORT_INCAST_INITIATOR_EPS}"
@@ -430,7 +430,8 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
         # the recv is always matched and its tail READ then fails against
         # the invalidated source rkey, yielding exactly one FI_ECANCELED.
         # This is the only protocol owed a completion under -X (see
-        # abort_owes_rx_completion). Run with -H (HOMOGENEOUS_PEERS) so the
+        # abort_owes_rx_completion). Run with --homogeneous-peers
+        # (HOMOGENEOUS_PEERS) so the
         # sender does not stall on a handshake before selecting it.
         proto_env = ("FI_EFA_USE_DEVICE_RDMA=1 "
                      "FI_EFA_RUNT_SIZE=0 "
@@ -524,16 +525,17 @@ def run_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
     env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
 
     owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
-    # LONGREAD is an extra-feature (read-based) protocol. Pass -H to set
-    # HOMOGENEOUS_PEERS on the endpoint, which makes it ignore the handshake
+    # LONGREAD is an extra-feature (read-based) protocol. Pass
+    # --homogeneous-peers to set HOMOGENEOUS_PEERS on the endpoint, which
+    # makes it ignore the handshake
     # requirement before selecting a read-based protocol. Without it the
     # first sends are queued pending the peer handshake and the abort race is
     # nondeterministic; skipping the handshake pins LONGREAD from the first
     # send so the target reliably owes -- and can enforce via -X -- exactly
     # one completion per send.
-    homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
+    homogeneous_flag = " --homogeneous-peers" if protocol == "LONGREAD" else ""
     command = (f"fi_mr_abort -T {send_op} -C {cancel_order}"
-               f" -R {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
+               f" --close-side {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
                f" -S {message_size}{owe_flag}{homogeneous_flag}"
                f"{MR_ABORT_EP_ARGS}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
