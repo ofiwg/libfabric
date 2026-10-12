@@ -406,6 +406,24 @@ def _has_rdma_cached(server_id, client_id, binpath, timeout, environments, opera
 
     return (server_proc.returncode == 0 and client_proc.returncode == 0)
 
+@functools.lru_cache(maxsize=None)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def has_cuda_p2p(hostname, environments=None):
+    """
+    determine whether the EFA device on a host can access CUDA memory peer to
+    peer (GDR). efa-direct only advertises FI_HMEM when the provider's p2p
+    probe succeeds; without p2p the efa fabric emulates RMA on CUDA memory.
+    """
+    env = environments + " " if environments else ""
+    fi_info = "$(command -v fi_info || echo /opt/amazon/efa/bin/fi_info)"
+    command = f"ssh {hostname} '{env}{fi_info} -p efa -f efa-direct -c FI_HMEM'"
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+    return proc.returncode == 0
+
 def efa_retrieve_gid(hostname):
     """
     return the GID of efa device on a host
