@@ -157,15 +157,14 @@ static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_ope *txe,
 						       use_p2p);
 }
 
-struct efa_rdm_proto efa_rdm_proto_longread_write = {
-	.name = "longread_write",
+EFA_RDM_PROTO_DEF(longread_write,
 	.wants_mr = true,
 	.can_use_protocol = &efa_rdm_proto_longread_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longread_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_LONGREAD_RTW_PKT,
 	.req_pkt_type_dc = EFA_RDM_LONGREAD_RTW_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+);
 
 /* RX path functions */
 
