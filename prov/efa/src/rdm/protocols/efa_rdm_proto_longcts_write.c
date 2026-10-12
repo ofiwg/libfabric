@@ -259,8 +259,7 @@ static ssize_t efa_rdm_proto_longcts_write_post_continuation(struct efa_rdm_ope 
 	return efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
 }
 
-struct efa_rdm_proto efa_rdm_proto_longcts_write = {
-	.name = "longcts_write",
+EFA_RDM_PROTO_DEF(longcts_write,
 	.wants_mr = false,
 	.can_use_protocol = &efa_rdm_proto_longcts_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_write_construct_tx_pkes,
@@ -268,7 +267,7 @@ struct efa_rdm_proto efa_rdm_proto_longcts_write = {
 	.req_pkt_type = EFA_RDM_LONGCTS_RTW_PKT,
 	.req_pkt_type_dc = EFA_RDM_DC_LONGCTS_RTW_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_longcts_write_handle_tx_pkes_posted,
-};
+);
 
 /* RX path functions */
 
