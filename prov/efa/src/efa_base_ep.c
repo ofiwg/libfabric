@@ -35,15 +35,16 @@ int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
  * @brief The inline data size the endpoint's QP is created with
  *
  * Only efa-direct carries inject data in the send queue entry, so only there does
- * the endpoint's inject size become the QP's inline data size. The efa fabric
- * injects through its own protocol and leaves the QP at the device's regular
+ * the endpoint's inject size become the QP's inline data size, except without FI_CONTEXT2. 
+ * The efa fabric injects through its own protocol and leaves the QP at the device's regular
  * inline buffer size, as does the DGRAM endpoint.
  */
 static size_t efa_base_ep_get_max_inline_data(struct efa_base_ep *ep)
 {
-	return EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
-		ep->info->tx_attr->inject_size :
-		ep->domain->device->efa_attr.inline_buf_size;
+	if (!EFA_INFO_TYPE_IS_DIRECT(ep->info) || ep->context_mode != USE_CONTEXT2)
+		return ep->domain->device->efa_attr.inline_buf_size;
+
+	return ep->info->tx_attr->inject_size;
 }
 
 /**

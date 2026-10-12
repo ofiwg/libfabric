@@ -241,7 +241,10 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	}
 
 	err = efa_msg_use_inline(msg->desc, msg->iov_count, total_len,
-				 base_ep->inject_rma_size, flags);
+				 base_ep->context_mode != USE_CONTEXT2 ?
+					 base_ep->domain->device->efa_attr.inline_buf_size :
+					 base_ep->inject_rma_size,
+				 flags);
 	if (OFI_UNLIKELY(err < 0))
 		goto out_err;
 	use_inline = err;
