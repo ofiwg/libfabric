@@ -1,6 +1,30 @@
+import functools
+import subprocess
+
 import pytest
-from common import ClientServerTest
+from common import ClientServerTest, bssh
 from efa.efa_common import memory_type_list_symm
+
+# Instance types where MR Abort is in production, so these tests run by
+# default. On every other instance they are pre_release, which
+# runfabtests.py only runs when requested.
+MR_ABORT_PRODUCTION_INSTANCES = ["trn2.48xlarge"]
+
+
+@functools.lru_cache(10)
+def is_mr_abort_production_instance(host):
+    # EC2 reports the instance type as the DMI product name, e.g. trn2.48xlarge
+    proc = subprocess.run(f"{bssh} {host} cat /sys/devices/virtual/dmi/id/product_name",
+                          shell=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, timeout=60, encoding="utf-8")
+    return proc.stdout.strip() in MR_ABORT_PRODUCTION_INSTANCES
+
+
+def pytest_generate_tests(metafunc):
+    hosts = (metafunc.config.getoption("--server-id"),
+             metafunc.config.getoption("--client-id"))
+    if not any(is_mr_abort_production_instance(host) for host in hosts):
+        pytest.mark.pre_release(metafunc.function)
 
 
 # fi_mr_abort allocates -W MRs and posts -N transfers per MR, so a run
