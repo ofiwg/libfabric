@@ -78,6 +78,14 @@ enum {
 	OPT_NUM_TARGET_EPS = 512,
 	OPT_NUM_INITIATOR_EPS,
 	OPT_PARTIAL_SPLIT_EPS,
+	/*
+	 * Close side and homogeneous-peers are long-only: the short letters
+	 * -R and -H are owned by shared fabtests (-R = reg HMEM with
+	 * fi_mr_dmabuf, -H = enable FI_HMEM) and collide with runfabtests
+	 * injection.
+	 */
+	OPT_CLOSE_SIDE,
+	OPT_HOMOGENEOUS_PEERS,
 };
 
 /*
@@ -2599,6 +2607,8 @@ static struct option mr_abort_extra_opts[] = {
 	{"num-target-eps", required_argument, NULL, OPT_NUM_TARGET_EPS},
 	{"num-initiator-eps", required_argument, NULL, OPT_NUM_INITIATOR_EPS},
 	{"partial-split-eps", no_argument, NULL, OPT_PARTIAL_SPLIT_EPS},
+	{"close-side", required_argument, NULL, OPT_CLOSE_SIDE},
+	{"homogeneous-peers", no_argument, NULL, OPT_HOMOGENEOUS_PEERS},
 	{0, 0, 0, 0}
 };
 
@@ -2645,7 +2655,7 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	while ((op = getopt_long(argc, argv,
-				 "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS,
+				 "W:N:C:T:A:r:Xh" CS_OPTS INFO_OPTS API_OPTS,
 				 mr_abort_long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case OPT_HIGH_PPS:
@@ -2706,7 +2716,7 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 			break;
-		case 'R':
+		case OPT_CLOSE_SIDE:
 			if (!strcmp(optarg, "initiator"))
 				close_side = CLOSE_INITIATOR;
 			else if (!strcmp(optarg, "target"))
@@ -2743,10 +2753,12 @@ int main(int argc, char **argv)
 		case 'X':
 			abort_owes_rx_completion = 1;
 			break;
-		case 'H':
+		case OPT_HOMOGENEOUS_PEERS:
 			set_homogeneous_peers = 1;
 			break;
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			ret = ft_parse_api_opts(op, optarg, hints, &opts);
@@ -2776,7 +2788,7 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-r <file>",
 				"Replay MR close order from <file> "
 				"(overrides -C; written to /tmp on failure)");
-			FT_PRINT_OPTS_USAGE("-R <side>",
+			FT_PRINT_OPTS_USAGE("--close-side <side>",
 				"Which side closes MRs: "
 				"initiator|target (default: initiator)");
 			FT_PRINT_OPTS_USAGE("-A <order>",
