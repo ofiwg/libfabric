@@ -91,6 +91,18 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
 
+	/* Respect FI_EFA_RDM_FORCE_SEND_PROTO and select the right protocol */
+	if (efa_env.rdm_force_send_proto) {
+		if (!strcmp(efa_env.rdm_force_send_proto, "eager"))
+			return eager_rtm;
+		if (!strcmp(efa_env.rdm_force_send_proto, "medium"))
+			return medium_rtm;
+		if (!strcmp(efa_env.rdm_force_send_proto, "longcts"))
+			return longcts_rtm;
+		if (!strcmp(efa_env.rdm_force_send_proto, "longread"))
+			return readbase_rtm;
+	}
+
 	if (use_p2p &&
 	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
 	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
