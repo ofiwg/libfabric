@@ -72,6 +72,15 @@ ssize_t __real_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      const struct iovec *hmem_iov,
 				      size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
+ssize_t __real_efa_copy_from_hmem_iov(void **desc, char *buff,
+				      size_t buff_size,
+				      const struct iovec *hmem_iov,
+				      size_t iov_count);
+
+ssize_t efa_mock_efa_copy_from_hmem_iov_return_mock(
+	void **desc, char *buff, size_t buff_size,
+	const struct iovec *hmem_iov, size_t iov_count);
+
 ssize_t __real_ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 				    const struct iovec *hmem_iov,
 				    size_t hmem_iov_count, uint64_t hmem_iov_offset,
@@ -219,6 +228,11 @@ struct efa_unit_test_mocks
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+	ssize_t (*efa_copy_from_hmem_iov)(void **desc, char *buff,
+					  size_t buff_size,
+					  const struct iovec *hmem_iov,
+					  size_t iov_count);
 
 	ssize_t (*ofi_copy_to_hmem_iov)(enum fi_hmem_iface hmem_iface, uint64_t device,
 					const struct iovec *hmem_iov,

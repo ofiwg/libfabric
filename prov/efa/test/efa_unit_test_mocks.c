@@ -407,6 +407,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,
 	.ofi_cuMemFree = __real_ofi_cuMemFree,
 #endif
+	.efa_copy_from_hmem_iov = __real_efa_copy_from_hmem_iov,
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
 	.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
@@ -770,6 +771,22 @@ CUresult efa_mock_ofi_cuMemFree_return_mock(CUdeviceptr dptr)
 	return (CUresult) mock();
 }
 #endif
+
+ssize_t efa_mock_efa_copy_from_hmem_iov_return_mock(
+	void **desc, char *buff, size_t buff_size,
+	const struct iovec *hmem_iov, size_t iov_count)
+{
+	return mock_type(ssize_t);
+}
+
+ssize_t __wrap_efa_copy_from_hmem_iov(void **desc, char *buff,
+				      size_t buff_size,
+				      const struct iovec *hmem_iov,
+				      size_t iov_count)
+{
+	return g_efa_unit_test_mocks.efa_copy_from_hmem_iov(
+		desc, buff, buff_size, hmem_iov, iov_count);
+}
 
 ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      enum fi_hmem_iface hmem_iface, uint64_t device,

@@ -151,19 +151,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *txe)
 {
-	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_WRITE_RTA_PKT, txe);
-	return 0;
-}
-
-/**
- * @brief handle the send completion event of a WRITE RTA packet
- *
- * @param[in,out]	pkt_entry	packet entry
- */
-void efa_rdm_pke_handle_write_rta_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	efa_rdm_pke_assert_ope_valid(pkt_entry);
-	efa_rdm_ope_handle_send_completed(pkt_entry->ope);
+	return efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_WRITE_RTA_PKT, txe);
 }
 
 static
@@ -262,9 +250,13 @@ ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
 
 {
 	struct efa_rdm_rta_hdr *rta_hdr;
+	ssize_t ret;
 
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_DC_WRITE_RTA_PKT, txe);
+	ret = efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_DC_WRITE_RTA_PKT, txe);
+	if (ret)
+		return ret;
+
 	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
 	rta_hdr->send_id = txe->tx_id;
 	return 0;

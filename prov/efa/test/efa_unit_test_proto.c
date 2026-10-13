@@ -3,9 +3,14 @@
  * rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_pke_rta.h"
+#include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_proto.h"
+#include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_zero_copy.h"
+#include <errno.h>
 
 /* Tests from efa_unit_test_proto_select.c */
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
@@ -648,4 +653,477 @@ void test_proto_zero_copy_reselected_after_handshake(void **state)
 	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
 
 	efa_unit_test_buff_destruct(&send_buff);
+}
+
+#define EFA_UNIT_TEST_ATOMIC_REMOTE_ADDR 0x12345000ULL
+#define EFA_UNIT_TEST_ATOMIC_REMOTE_KEY  0xabcdu
+#define EFA_UNIT_TEST_ATOMIC_LEN         8
+
+struct efa_unit_test_atomic_ctx {
+	struct efa_resource *resource;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct fi_msg_atomic msg;
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	void *desc;
+	fi_addr_t peer_addr;
+	size_t tx_pkt_free;
+	size_t txe_free;
+	uint32_t next_msg_id;
+};
+
+static size_t test_proto_atomic_bufpool_free_count(struct ofi_bufpool *pool)
+{
+	struct slist_entry *item;
+	size_t count = 0;
+
+	for (item = pool->free_list.entries.head; item; item = item->next)
+		count++;
+
+	return count;
+}
+
+static void test_proto_atomic_setup(struct efa_resource *resource,
+				    struct efa_unit_test_atomic_ctx *ctx)
+{
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *txe;
+
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->resource = resource;
+	ctx->ep = setup_proto_select_test(resource, &ctx->peer_addr);
+	ctx->peer = efa_rdm_ep_get_peer_explicit(ctx->ep, ctx->peer_addr);
+	ctx->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	efa_unit_test_buff_construct(&ctx->send_buff, resource,
+				     ctx->ep->mtu_size);
+	ctx->desc = fi_mr_desc(ctx->send_buff.mr);
+	ctx->ioc.addr = ctx->send_buff.buff;
+	ctx->rma_ioc.addr = EFA_UNIT_TEST_ATOMIC_REMOTE_ADDR;
+	ctx->rma_ioc.key = EFA_UNIT_TEST_ATOMIC_REMOTE_KEY;
+	ctx->msg.msg_iov = &ctx->ioc;
+	ctx->msg.desc = &ctx->desc;
+	ctx->msg.iov_count = 1;
+	ctx->msg.addr = ctx->peer_addr;
+	ctx->msg.rma_iov = &ctx->rma_ioc;
+	ctx->msg.rma_iov_count = 1;
+	ctx->msg.datatype = FI_UINT8;
+	ctx->msg.op = FI_ATOMIC_WRITE;
+	ctx->msg.context = ctx;
+
+	/* Warm lazy pools so free-count checks detect leaked entries. */
+	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->efa_tx_pkt_pool,
+				ctx->ep->efa_tx_bounce_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pke);
+	efa_rdm_pke_release_tx(pke);
+	txe = ofi_buf_alloc(ctx->ep->base_ep.txe_pool);
+	assert_non_null(txe);
+	ofi_buf_free(txe);
+
+	ctx->tx_pkt_free =
+		test_proto_atomic_bufpool_free_count(ctx->ep->efa_tx_pkt_pool);
+	ctx->txe_free =
+		test_proto_atomic_bufpool_free_count(ctx->ep->base_ep.txe_pool);
+	ctx->next_msg_id = ctx->peer->next_msg_id;
+}
+
+static ssize_t test_proto_atomic_post(struct efa_unit_test_atomic_ctx *ctx,
+				      size_t count, uint64_t flags)
+{
+	ctx->ioc.count = count;
+	ctx->rma_ioc.count = count;
+	return fi_atomicmsg(ctx->resource->ep, &ctx->msg, flags);
+}
+
+static struct efa_rdm_pke *
+test_proto_atomic_posted_pke(struct efa_unit_test_atomic_ctx *ctx)
+{
+	assert_int_equal(ctx->ep->send_pkt_entry_vec_size, 1);
+	assert_non_null(ctx->ep->send_pkt_entry_vec[0]);
+	return ctx->ep->send_pkt_entry_vec[0];
+}
+
+static struct efa_rdm_pke *
+test_proto_atomic_receipt(struct efa_unit_test_atomic_ctx *ctx,
+			  uint32_t tx_id)
+{
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_receipt_hdr *hdr;
+
+	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
+				ctx->ep->rx_unexp_bounce_pool,
+				EFA_RDM_PKE_FROM_UNEXP_POOL);
+	assert_non_null(pke);
+	pke->ep = ctx->ep;
+	pke->peer = ctx->peer;
+	hdr = efa_rdm_pke_get_receipt_hdr(pke);
+	memset(hdr, 0, sizeof(*hdr));
+	hdr->type = EFA_RDM_RECEIPT_PKT;
+	hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	hdr->tx_id = tx_id;
+	return pke;
+}
+
+static void test_proto_atomic_assert_clean(
+	struct efa_unit_test_atomic_ctx *ctx, uint32_t next_msg_id)
+{
+	assert_int_equal(
+		efa_unit_test_get_ope_list_length(ctx->ep, EFA_RDM_TXE), 0);
+	assert_int_equal(ctx->ep->efa_outstanding_tx_ops, 0);
+	assert_int_equal(ctx->peer->next_msg_id, next_msg_id);
+	assert_int_equal(
+		test_proto_atomic_bufpool_free_count(ctx->ep->efa_tx_pkt_pool),
+		ctx->tx_pkt_free);
+	assert_int_equal(
+		test_proto_atomic_bufpool_free_count(ctx->ep->base_ep.txe_pool),
+		ctx->txe_free);
+}
+
+static void test_proto_atomic_assert_cq_empty(
+	struct efa_unit_test_atomic_ctx *ctx)
+{
+	struct fi_cq_data_entry entry;
+	struct fi_cq_err_entry err_entry = {0};
+
+	assert_int_equal(fi_cq_read(ctx->resource->cq, &entry, 1),
+			 -FI_EAGAIN);
+	assert_int_equal(fi_cq_readerr(ctx->resource->cq, &err_entry, 0),
+			 -FI_EAGAIN);
+}
+
+static void test_proto_atomic_read_success(
+	struct efa_unit_test_atomic_ctx *ctx, size_t len)
+{
+	struct fi_cq_data_entry entry;
+
+	assert_int_equal(fi_cq_read(ctx->resource->cq, &entry, 1), 1);
+	assert_ptr_equal(entry.op_context, ctx);
+	assert_int_equal(entry.flags, FI_ATOMIC | FI_WRITE);
+	assert_int_equal(entry.len, len);
+}
+
+static void test_proto_atomic_read_error(
+	struct efa_unit_test_atomic_ctx *ctx, int err, int prov_errno)
+{
+	struct fi_cq_data_entry entry;
+	struct fi_cq_err_entry err_entry = {0};
+
+	assert_int_equal(fi_cq_read(ctx->resource->cq, &entry, 1),
+			 -FI_EAVAIL);
+	assert_int_equal(fi_cq_readerr(ctx->resource->cq, &err_entry, 0), 1);
+	assert_ptr_equal(err_entry.op_context, ctx);
+	assert_int_equal(err_entry.flags, FI_ATOMIC | FI_WRITE);
+	assert_int_equal(err_entry.err, err);
+	assert_int_equal(err_entry.prov_errno, prov_errno);
+}
+
+void test_proto_atomic_write_post_and_complete(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_ope probe = {0};
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_rta_hdr *hdr;
+	uint8_t expected[EFA_UNIT_TEST_ATOMIC_LEN];
+	size_t exact;
+	size_t hdr_size;
+	int post_count;
+
+	test_proto_atomic_setup(resource, &ctx);
+	probe.ep = ctx.ep;
+	probe.peer = ctx.peer;
+	probe.rma_iov_count = 1;
+	exact = efa_rdm_txe_max_req_data_capacity(
+		ctx.ep, &probe, EFA_RDM_WRITE_RTA_PKT);
+	assert_true(exact > 0);
+	assert_true(exact + 1 <= ctx.send_buff.size);
+	memset(ctx.send_buff.buff, 0x5a, ctx.send_buff.size);
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	assert_int_equal(
+		test_proto_atomic_post(&ctx, exact, FI_COMPLETION), 0);
+	pke = test_proto_atomic_posted_pke(&ctx);
+	txe = pke->ope;
+	hdr = efa_rdm_pke_get_rta_hdr(pke);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pke);
+	assert_int_equal(efa_rdm_pkt_type_of(pke), EFA_RDM_WRITE_RTA_PKT);
+	assert_ptr_equal(txe->atomic_proto, &efa_rdm_atomic_write_proto);
+	assert_null(txe->proto);
+	assert_ptr_equal(pke->handle_pke,
+			 txe->atomic_proto->handle_send_completion);
+	assert_int_equal(hdr->atomic_datatype, FI_UINT8);
+	assert_int_equal(hdr->atomic_op, FI_ATOMIC_WRITE);
+	assert_memory_equal(pke->wiredata + hdr_size,
+			    ctx.send_buff.buff, exact);
+
+	efa_rdm_pke_handle_send_completion(pke);
+	test_proto_atomic_read_success(&ctx, exact);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+
+	post_count = g_ibv_submitted_wr_id_cnt;
+	assert_int_equal(
+		test_proto_atomic_post(&ctx, exact + 1, FI_COMPLETION),
+		-FI_EMSGSIZE);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, post_count);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	test_proto_atomic_assert_cq_empty(&ctx);
+
+	memset(ctx.send_buff.buff, 0xa5, sizeof(expected));
+	memcpy(expected, ctx.send_buff.buff, sizeof(expected));
+	assert_int_equal(
+		fi_inject_atomic(resource->ep, ctx.send_buff.buff,
+				 sizeof(expected), ctx.peer_addr,
+				 EFA_UNIT_TEST_ATOMIC_REMOTE_ADDR,
+				 EFA_UNIT_TEST_ATOMIC_REMOTE_KEY,
+				 FI_UINT8, FI_ATOMIC_WRITE),
+		0);
+	pke = test_proto_atomic_posted_pke(&ctx);
+	txe = pke->ope;
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pke);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION);
+	assert_ptr_equal(txe->atomic_proto, &efa_rdm_atomic_write_proto);
+	assert_ptr_equal(pke->handle_pke,
+			 txe->atomic_proto->handle_send_completion);
+	memset(ctx.send_buff.buff, 0, sizeof(expected));
+	assert_memory_equal(pke->wiredata + hdr_size,
+			    expected, sizeof(expected));
+
+	efa_rdm_pke_handle_send_completion(pke);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 2);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+void test_proto_atomic_dc_write_completion_orders(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *req_pke;
+	struct efa_rdm_pke *receipt_pke;
+	int send_first;
+
+	test_proto_atomic_setup(resource, &ctx);
+	memset(ctx.send_buff.buff, 0x5a, EFA_UNIT_TEST_ATOMIC_LEN);
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	for (send_first = 0; send_first <= 1; send_first++) {
+		assert_int_equal(
+			test_proto_atomic_post(
+				&ctx, EFA_UNIT_TEST_ATOMIC_LEN,
+				FI_DELIVERY_COMPLETE | FI_COMPLETION),
+			0);
+		req_pke = test_proto_atomic_posted_pke(&ctx);
+		txe = req_pke->ope;
+		assert_int_equal(efa_rdm_pkt_type_of(req_pke),
+				 EFA_RDM_DC_WRITE_RTA_PKT);
+		assert_int_equal(efa_rdm_pke_get_rta_hdr(req_pke)->send_id,
+				 txe->tx_id);
+		assert_ptr_equal(req_pke->handle_pke,
+				 txe->atomic_proto->handle_send_completion);
+		receipt_pke = test_proto_atomic_receipt(&ctx, txe->tx_id);
+
+		if (send_first) {
+			efa_rdm_pke_handle_send_completion(req_pke);
+			assert_int_equal(efa_unit_test_get_ope_list_length(
+						 ctx.ep, EFA_RDM_TXE), 1);
+			test_proto_atomic_assert_cq_empty(&ctx);
+			efa_rdm_proto_handle_receipt_recv(receipt_pke);
+			test_proto_atomic_read_success(
+				&ctx, EFA_UNIT_TEST_ATOMIC_LEN);
+		} else {
+			efa_rdm_proto_handle_receipt_recv(receipt_pke);
+			assert_true(txe->internal_flags &
+				    EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
+			assert_int_equal(efa_unit_test_get_ope_list_length(
+						 ctx.ep, EFA_RDM_TXE), 1);
+			test_proto_atomic_read_success(
+				&ctx, EFA_UNIT_TEST_ATOMIC_LEN);
+			efa_rdm_pke_handle_send_completion(req_pke);
+		}
+
+		test_proto_atomic_assert_clean(
+			&ctx, ctx.next_msg_id + send_first + 1);
+		test_proto_atomic_assert_cq_empty(&ctx);
+	}
+
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+void test_proto_atomic_write_sync_failures(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	uint64_t flags[] = {
+		FI_COMPLETION,
+		FI_COMPLETION | FI_DELIVERY_COMPLETE,
+	};
+	size_t i;
+
+	test_proto_atomic_setup(resource, &ctx);
+	memset(ctx.send_buff.buff, 0x5a, EFA_UNIT_TEST_ATOMIC_LEN);
+	g_efa_unit_test_mocks.efa_copy_from_hmem_iov =
+		efa_mock_efa_copy_from_hmem_iov_return_mock;
+	will_return_count(efa_mock_efa_copy_from_hmem_iov_return_mock,
+			  -FI_EIO, ARRAY_SIZE(flags));
+
+	for (i = 0; i < ARRAY_SIZE(flags); i++) {
+		assert_int_equal(
+			test_proto_atomic_post(
+				&ctx, EFA_UNIT_TEST_ATOMIC_LEN, flags[i]),
+			-FI_EIO);
+		test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id);
+		test_proto_atomic_assert_cq_empty(&ctx);
+	}
+
+	g_efa_unit_test_mocks.efa_copy_from_hmem_iov =
+		__real_efa_copy_from_hmem_iov;
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, ENOMEM);
+	assert_int_equal(
+		test_proto_atomic_post(
+			&ctx, EFA_UNIT_TEST_ATOMIC_LEN, FI_COMPLETION),
+		-FI_EAGAIN);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+void test_proto_atomic_write_async_release_paths(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+
+	test_proto_atomic_setup(resource, &ctx);
+	memset(ctx.send_buff.buff, 0x5a, EFA_UNIT_TEST_ATOMIC_LEN);
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+	assert_int_equal(
+		test_proto_atomic_post(
+			&ctx, EFA_UNIT_TEST_ATOMIC_LEN, FI_COMPLETION),
+		0);
+	pke = test_proto_atomic_posted_pke(&ctx);
+	efa_rdm_pke_handle_tx_error(
+		pke, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	test_proto_atomic_read_error(
+		&ctx, FI_EHOSTUNREACH,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	test_proto_atomic_assert_cq_empty(&ctx);
+
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+	assert_int_equal(
+		test_proto_atomic_post(
+			&ctx, EFA_UNIT_TEST_ATOMIC_LEN, FI_COMPLETION),
+		0);
+	pke = test_proto_atomic_posted_pke(&ctx);
+	txe = pke->ope;
+	efa_rdm_pke_handle_tx_error(
+		pke, EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR);
+	assert_int_equal(
+		efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_TXE), 1);
+
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, EIO);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe), -FI_EIO);
+	test_proto_atomic_read_error(&ctx, FI_EIO, FI_EFA_ERR_PKT_POST);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 2);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+static void test_proto_atomic_complete_dc(struct efa_unit_test_atomic_ctx *ctx,
+					  struct efa_rdm_pke *req_pke,
+					  size_t len)
+{
+	struct efa_rdm_pke *receipt_pke;
+
+	receipt_pke = test_proto_atomic_receipt(ctx, req_pke->ope->tx_id);
+	efa_rdm_pke_handle_send_completion(req_pke);
+	test_proto_atomic_assert_cq_empty(ctx);
+	efa_rdm_proto_handle_receipt_recv(receipt_pke);
+	test_proto_atomic_read_success(ctx, len);
+}
+
+/**
+ * @brief A send error after RECEIPT keeps the reported success and releases
+ * the PKE and TXE without writing an error CQ entry.
+ */
+void test_proto_atomic_dc_receipt_then_send_error(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_pke *pke;
+
+	test_proto_atomic_setup(resource, &ctx);
+	memset(ctx.send_buff.buff, 0x5a, EFA_UNIT_TEST_ATOMIC_LEN);
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	assert_int_equal(
+		test_proto_atomic_post(&ctx, EFA_UNIT_TEST_ATOMIC_LEN,
+				       FI_COMPLETION | FI_DELIVERY_COMPLETE),
+		0);
+	pke = test_proto_atomic_posted_pke(&ctx);
+	efa_rdm_proto_handle_receipt_recv(
+		test_proto_atomic_receipt(&ctx, pke->ope->tx_id));
+	test_proto_atomic_read_success(&ctx, EFA_UNIT_TEST_ATOMIC_LEN);
+
+	efa_rdm_pke_handle_tx_error(
+		pke, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+/**
+ * @brief FI_INJECT does not downgrade FI_DELIVERY_COMPLETE: the operand is
+ * copied before return and success is reported once, on RECEIPT.
+ */
+void test_proto_atomic_inject_delivery_complete(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	uint8_t expected[EFA_UNIT_TEST_ATOMIC_LEN];
+	struct efa_rdm_pke *pke;
+
+	test_proto_atomic_setup(resource, &ctx);
+	memset(ctx.send_buff.buff, 0xa5, sizeof(expected));
+	memcpy(expected, ctx.send_buff.buff, sizeof(expected));
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	assert_int_equal(
+		test_proto_atomic_post(&ctx, sizeof(expected),
+				       FI_INJECT | FI_DELIVERY_COMPLETE |
+					       FI_COMPLETION),
+		0);
+	memset(ctx.send_buff.buff, 0, sizeof(expected));
+	pke = test_proto_atomic_posted_pke(&ctx);
+	assert_int_equal(efa_rdm_pkt_type_of(pke), EFA_RDM_DC_WRITE_RTA_PKT);
+	assert_int_equal(efa_rdm_pke_get_rta_hdr(pke)->send_id,
+			 pke->ope->tx_id);
+	assert_memory_equal(pke->wiredata + efa_rdm_pke_get_req_hdr_size(pke),
+			    expected, sizeof(expected));
+
+	test_proto_atomic_complete_dc(&ctx, pke, sizeof(expected));
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
 }

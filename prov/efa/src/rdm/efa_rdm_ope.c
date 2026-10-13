@@ -30,6 +30,7 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	txe->rx_id = EFA_RDM_OPE_ID_INVALID;
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->peer = peer;
+	txe->atomic_proto = NULL;
 	/* peer would be NULL for local read operation */
 	if (txe->peer) {
 		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
@@ -2574,6 +2575,8 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 {
 	int ret = 0;
+	bool release_atomic_txe = false;
+	struct efa_rdm_ep *ep = ope->ep;
 	/*
 	 * Default reason for the error path: a packet-post failure. Overridden
 	 * to FI_EFA_ERR_PEER_ABORTED below only when the MR gen check fails.
@@ -2632,6 +2635,11 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 			return ret;
 
 		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+		/*
+		 * An atomic-protocol TXE has no outstanding WR left to retire it
+		 * after a non-FI_EAGAIN repost failure, so release it below.
+		 */
+		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
 		if (ope->type == EFA_RDM_TXE)
 			efa_rdm_txe_handle_error(ope, -ret, prov_errno);
 		else
@@ -2643,7 +2651,12 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	}
 
 	if (flag == EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
-		--ope->ep->ope_queued_before_handshake_cnt;
+		--ep->ope_queued_before_handshake_cnt;
+
+	if (release_atomic_txe) {
+		assert(ope->efa_outstanding_tx_ops == 0);
+		efa_rdm_txe_release(ope);
+	}
 
 	return ret;
 }
