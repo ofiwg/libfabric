@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_wr" "3" "2026\-10\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_wr" "3" "2026\-10\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -231,9 +231,8 @@ fi_context2 respectively, following the usual rules for those modes.
 The fi_wr_prepare call validates its inputs and formats a work request
 for the operation described by \f[I]attr\f[R] into \f[I]wr\f[R],
 updating \f[I]wr_len\f[R] to the size of the formatted request.
-Prepare does not queue the request, does not consume endpoint transmit
-resources, and does not access the data buffers referenced by the
-operation.
+Prepare does not queue the request and does not consume endpoint
+transmit resources.
 .PP
 On output \f[I]wr_len\f[R] is the size the provider actually used, which
 may be less than fi_ep_attr::max_tx_wr_size or
