@@ -207,9 +207,8 @@ for those modes.
 
 The fi_wr_prepare call validates its inputs and formats a work request for the
 operation described by *attr* into *wr*, updating *wr_len* to the size of the
-formatted request.  Prepare does not queue the request, does not consume
-endpoint transmit resources, and does not access the data buffers referenced by
-the operation.
+formatted request.  Prepare does not queue the request and does not consume
+endpoint transmit resources.
 
 On output *wr_len* is the size the provider actually used, which may be less
 than fi_ep_attr::max_tx_wr_size or fi_ep_attr::max_rx_wr_size.  The required size can
