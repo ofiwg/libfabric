@@ -10,7 +10,9 @@
 #include <rdma/fi_rma.h>
 
 using testing::_;
+using testing::DoAll;
 using testing::Return;
+using testing::SaveArg;
 using testing::StrictMock;
 using testing::Test;
 using testing::Truly;
@@ -292,4 +294,48 @@ TEST_F(EfaRmaTest, write_no_context2_echoes_context_and_leaves_buffer_untouched)
 
 	EXPECT_EQ(memcmp(&ctx, &expected, sizeof(ctx)), 0);
 	EXPECT_EQ(efa_test_ope_list_count(resource.ep), 0u);
+}
+
+TEST_F(EfaRmaTest, write_no_context2_not_inlined_without_inline_write_qp)
+{
+	struct fi_context2 ctx;
+	bool use_inline = true;
+	struct fi_info *hints = make_hints();
+
+	ASSERT_NE(hints, nullptr);
+	hints->mode &= ~FI_CONTEXT2;
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+	reg_buffer(8);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_write)
+		.WillOnce(DoAll(SaveArg<4>(&use_inline), Return(0)));
+
+	EXPECT_EQ(fi_write(resource.ep, local_buf, 8, local_desc, peer_addr,
+			   kRemoteAddr, kRemoteKey, &ctx),
+		  0);
+	EXPECT_FALSE(use_inline);
+}
+
+TEST_F(EfaRmaTest, write_inlined_on_inline_write_qp)
+{
+	struct fi_context2 ctx;
+	bool use_inline = false;
+	struct fi_info *hints;
+
+	if (!efa_test_device_supports_wide_wqe())
+		GTEST_SKIP() << "device does not support wide send queue entries";
+
+	hints = make_hints();
+	ASSERT_NE(hints, nullptr);
+	hints->tx_attr->inject_size = efa_test_device_inline_buf_size() + 1;
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+	reg_buffer(8);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_write)
+		.WillOnce(DoAll(SaveArg<4>(&use_inline), Return(0)));
+
+	EXPECT_EQ(fi_write(resource.ep, local_buf, 8, local_desc, peer_addr,
+			   kRemoteAddr, kRemoteKey, &ctx),
+		  0);
+	EXPECT_TRUE(use_inline);
 }

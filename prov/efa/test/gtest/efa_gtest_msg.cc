@@ -9,7 +9,9 @@
 #include <gtest/gtest.h>
 
 using testing::_;
+using testing::DoAll;
 using testing::Return;
+using testing::SaveArg;
 using testing::StrictMock;
 using testing::Test;
 using testing::Truly;
@@ -183,4 +185,27 @@ TEST_F(EfaMsgTest, recv_no_context2_echoes_context_and_leaves_buffer_untouched)
 
 	EXPECT_EQ(memcmp(&ctx, &expected, sizeof(ctx)), 0);
 	EXPECT_EQ(efa_test_ope_list_count(resource.ep), 0u);
+}
+
+TEST_F(EfaMsgTest, send_no_context2_inlines_up_to_device_buffer)
+{
+	struct fi_context2 ctx;
+	bool fits = false, over = true;
+	size_t inline_size;
+
+	ASSERT_NO_FATAL_FAILURE(construct(4096, false));
+	inline_size = efa_test_device_inline_buf_size();
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<4>(&fits), Return(0)))
+		.WillOnce(DoAll(SaveArg<4>(&over), Return(0)));
+
+	EXPECT_EQ(fi_send(resource.ep, local_buf, inline_size, local_desc,
+			  peer_addr, &ctx),
+		  0);
+	EXPECT_EQ(fi_send(resource.ep, local_buf, inline_size + 1, local_desc,
+			  peer_addr, &ctx),
+		  0);
+	EXPECT_TRUE(fits);
+	EXPECT_FALSE(over);
 }

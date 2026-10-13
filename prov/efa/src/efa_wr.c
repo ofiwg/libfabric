@@ -143,8 +143,7 @@ static inline int efa_wr_prepare_send(struct efa_base_ep *base_ep,
 	}
 
 	err = efa_msg_use_inline(msg->desc, iov_count, len,
-				 base_ep->domain->device->efa_attr.inline_buf_size,
-				 op_msg->flags);
+				 base_ep->qp->max_inline_send, op_msg->flags);
 	if (OFI_UNLIKELY(err < 0))
 		return err;
 	if (err) {
@@ -297,8 +296,7 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 		return efa_wr_prepare_rdma_sgl(base_ep, msg, wqe, total_len);
 
 	err = efa_msg_use_inline(msg->desc, msg->iov_count, total_len,
-				 base_ep->domain->device->efa_attr.inline_buf_size,
-				 op_rma->flags);
+				 base_ep->qp->max_inline_write, op_rma->flags);
 	if (OFI_UNLIKELY(err < 0))
 		return err;
 	if (!err)

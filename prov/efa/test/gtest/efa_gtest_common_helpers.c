@@ -316,3 +316,25 @@ void efa_test_ep_qp_cap(struct fid_ep *ep_fid, size_t *max_send_wr,
 	if (max_inline_data)
 		*max_inline_data = attr_ex.cap.max_inline_data;
 }
+
+void efa_test_ep_qp_inline_limits(struct fid_ep *ep_fid,
+				  size_t *max_inline_send,
+				  size_t *max_inline_write)
+{
+	struct efa_base_ep *base_ep;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+
+	if (max_inline_send)
+		*max_inline_send = base_ep->qp->max_inline_send;
+	if (max_inline_write)
+		*max_inline_write = base_ep->qp->max_inline_write;
+}
+
+int efa_test_device_supports_rdma_write(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_rdma_write();
+}
