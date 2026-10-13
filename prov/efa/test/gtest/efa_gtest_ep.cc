@@ -232,6 +232,100 @@ TEST_F(EfaEpQueueDepthTest, getopt_tx_size_rdm_unaffected_by_inject_size)
 	expect_getopt_matches_qp_cap();
 }
 
+class EfaEpInlineLimitTest : public EfaEpQueueDepthTest
+{
+	protected:
+	size_t max_inline_send = 0;
+	size_t max_inline_write = 0;
+
+	void read_inline_limits()
+	{
+		efa_test_ep_qp_inline_limits(resource.ep, &max_inline_send,
+					     &max_inline_write);
+	}
+
+	struct fi_info *no_context2_hints()
+	{
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+		if (hints)
+			hints->mode &= ~FI_CONTEXT2;
+		return hints;
+	}
+};
+
+TEST_F(EfaEpInlineLimitTest, regular_wqe_inlines_sends_but_not_writes)
+{
+	ASSERT_NO_FATAL_FAILURE(construct(efa_test_alloc_default_hints(
+		FI_EP_RDM, EFA_DIRECT_FABRIC_NAME)));
+	read_inline_limits();
+
+	EXPECT_EQ(max_inline_send, efa_test_device_inline_buf_size());
+	EXPECT_EQ(max_inline_write, 0u);
+}
+
+TEST_F(EfaEpInlineLimitTest, wide_wqe_inlines_sends_and_writes)
+{
+	size_t wide_inject;
+	struct fi_info *hints = efa_test_alloc_default_hints(
+		FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ASSERT_NE(hints, nullptr);
+	if (!efa_test_device_supports_wide_wqe()) {
+		fi_freeinfo(hints);
+		GTEST_SKIP() << "device does not support wide send queue entries";
+	}
+
+	wide_inject = efa_test_device_inline_buf_size() + 1;
+	hints->tx_attr->inject_size = wide_inject;
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+	read_inline_limits();
+
+	EXPECT_EQ(max_inline_send, wide_inject);
+	EXPECT_EQ(max_inline_write,
+		  efa_test_device_supports_rdma_write() ? wide_inject : 0u);
+}
+
+TEST_F(EfaEpInlineLimitTest, no_context2_inlines_sends_up_to_device_buffer)
+{
+	ASSERT_NO_FATAL_FAILURE(construct(no_context2_hints()));
+	ASSERT_EQ(resource.info->tx_attr->inject_size, 0u);
+	read_inline_limits();
+
+	EXPECT_EQ(max_inline_send, efa_test_device_inline_buf_size());
+	EXPECT_EQ(max_inline_write, 0u);
+}
+
+TEST_F(EfaEpInlineLimitTest, no_context2_inject_set_after_getinfo_gets_wide_wqe)
+{
+	size_t wide_inject;
+
+	ASSERT_NO_FATAL_FAILURE(getinfo(no_context2_hints()));
+	if (!efa_test_device_supports_wide_wqe())
+		GTEST_SKIP() << "device does not support wide send queue entries";
+
+	wide_inject = efa_test_device_inline_buf_size() + 1;
+	resource.info->tx_attr->inject_size = wide_inject;
+	ASSERT_NO_FATAL_FAILURE(construct_from_info());
+	read_inline_limits();
+
+	EXPECT_EQ(max_inline_send, wide_inject);
+	EXPECT_EQ(max_inline_write,
+		  efa_test_device_supports_rdma_write() ? wide_inject : 0u);
+	expect_getopt_matches_qp_cap();
+}
+
+TEST_F(EfaEpInlineLimitTest, rdm_inlines_sends_but_not_writes)
+{
+	ASSERT_NO_FATAL_FAILURE(construct(
+		efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME)));
+	read_inline_limits();
+
+	EXPECT_EQ(max_inline_send, efa_test_device_inline_buf_size());
+	EXPECT_EQ(max_inline_write, 0u);
+}
+
 TEST_F(EfaEpQueueDepthTest, getopt_reports_configured_depth_dgram)
 {
 	ASSERT_NO_FATAL_FAILURE(construct(

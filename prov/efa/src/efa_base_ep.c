@@ -35,16 +35,24 @@ int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
  * @brief The inline data size the endpoint's QP is created with
  *
  * Only efa-direct carries inject data in the send queue entry, so only there does
- * the endpoint's inject size become the QP's inline data size, except without FI_CONTEXT2. 
- * The efa fabric injects through its own protocol and leaves the QP at the device's regular
+ * the endpoint's inject size become the QP's inline data size. The efa fabric
+ * injects through its own protocol and leaves the QP at the device's regular
  * inline buffer size, as does the DGRAM endpoint.
+ *
+ * The QP always gets at least the device's inline buffer size, so small
+ * transfers go inline even without FI_CONTEXT2, where the inject size is 0
+ * because the provider cannot honor FI_INJECT. A larger inject size in the
+ * info, including one the application raised before opening the endpoint,
+ * gets a QP with that much inline room.
  */
 static size_t efa_base_ep_get_max_inline_data(struct efa_base_ep *ep)
 {
-	if (!EFA_INFO_TYPE_IS_DIRECT(ep->info) || ep->context_mode != USE_CONTEXT2)
-		return ep->domain->device->efa_attr.inline_buf_size;
+	size_t inline_buf_size = ep->domain->device->efa_attr.inline_buf_size;
 
-	return ep->info->tx_attr->inject_size;
+	if (!EFA_INFO_TYPE_IS_DIRECT(ep->info))
+		return inline_buf_size;
+
+	return MAX(ep->info->tx_attr->inject_size, inline_buf_size);
 }
 
 /**
@@ -353,6 +361,8 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 	if (!*qp)
 		return -FI_ENOMEM;
 
+	(*qp)->max_inline_send = init_attr_ex->cap.max_inline_data;
+
 	init_attr_ex->comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
 	init_attr_ex->send_ops_flags |= IBV_QP_EX_WITH_SEND | IBV_QP_EX_WITH_SEND_WITH_IMM;
 
@@ -375,8 +385,10 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 #if HAVE_INLINE_BUF_SIZE_EX
 		if (init_attr_ex->cap.max_inline_data >
 		    g_efa_selected_device_list[0].efa_attr.inline_buf_size &&
-		    efa_device_support_rdma_write())
+		    efa_device_support_rdma_write()) {
 			efa_attr.flags |= EFADV_QP_FLAGS_INLINE_WRITE;
+			(*qp)->max_inline_write = (*qp)->max_inline_send;
+		}
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
 #if HAVE_EFADV_SL

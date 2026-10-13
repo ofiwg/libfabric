@@ -186,6 +186,20 @@ void efa_test_ep_qp_cap(struct fid_ep *ep_fid, size_t *max_send_wr,
 			size_t *max_recv_wr, size_t *max_inline_data);
 
 /**
+ * @brief The inline limits the endpoint's QP was created with: how much a send
+ * and an RDMA write can carry inline. The write limit is 0 unless the QP was
+ * created for inline writes. Any out parameter may be NULL.
+ */
+void efa_test_ep_qp_inline_limits(struct fid_ep *ep_fid,
+				  size_t *max_inline_send,
+				  size_t *max_inline_write);
+
+/**
+ * @brief Whether the selected EFA device supports RDMA write.
+ */
+int efa_test_device_supports_rdma_write(void);
+
+/**
  * @brief Value of OFI_HMEM_DATA_DEV_REG_HANDLE (the gdrcopy handle bit), which
  * lives in ofi_mr.h and is not includable from C++.
  */

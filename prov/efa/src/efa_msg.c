@@ -277,14 +277,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		goto post;
 	}
 
-	/* Without FI_CONTEXT2, the provider cannot honor FI_INJECT, so the
-	 * inline decision is bounded by the device's inline buffer size rather
-	 * than the configured inject size. */
 	ret = efa_msg_use_inline(msg->desc, msg->iov_count, len,
-				 base_ep->context_mode != USE_CONTEXT2 ?
-					 base_ep->domain->device->efa_attr.inline_buf_size :
-					 base_ep->inject_msg_size,
-				 flags);
+				 base_ep->qp->max_inline_send, flags);
 	if (OFI_UNLIKELY(ret < 0))
 		goto out_err;
 	use_inline = ret;

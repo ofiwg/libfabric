@@ -158,25 +158,26 @@ static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
  *
  * Shared by the send path (efa_post_send), the RMA write path
  * (efa_rma_post_write), and the work request prepare path (efa_wr_prepare). A
- * transfer uses inline when it fits the given inject threshold and references
- * no HMEM buffer. When it cannot go inline and FI_INJECT was requested, the
- * request cannot be honored: an oversized request is a size error
- * (-FI_EMSGSIZE) and an HMEM buffer is unsupported (-FI_EOPNOTSUPP); the
+ * transfer uses inline when it fits the QP's inline size for the operation and
+ * references no HMEM buffer. When it cannot go inline and FI_INJECT was
+ * requested, the request cannot be honored: an oversized request is a size
+ * error (-FI_EMSGSIZE) and an HMEM buffer is unsupported (-FI_EOPNOTSUPP); the
  * specific reason is logged.
  *
  * @param desc		array of memory descriptors (may be NULL)
  * @param iov_count	number of iov/desc entries
  * @param len		total transfer length (prefix already removed)
- * @param inject_size	inject threshold (inject_msg_size or inject_rma_size)
+ * @param inline_size	the QP's inline limit for the operation (max_inline_send
+ *			for a send, max_inline_write for an RDMA write)
  * @param flags		operation flags (checked for FI_INJECT)
  * @return 1 to use the inline path, 0 to use the SGL path, or a negative
  *	   libfabric error code when FI_INJECT cannot be honored
  */
 static inline int efa_msg_use_inline(void **desc, size_t iov_count,
-				     size_t len, size_t inject_size,
+				     size_t len, size_t inline_size,
 				     uint64_t flags)
 {
-	bool len_fits_inline = len <= inject_size;
+	bool len_fits_inline = len <= inline_size;
 	bool is_hmem = false;
 	size_t i;
 
@@ -196,8 +197,8 @@ static inline int efa_msg_use_inline(void **desc, size_t iov_count,
 		if (!len_fits_inline) {
 			EFA_WARN(FI_LOG_EP_DATA,
 				 "FI_INJECT is requested but message size of "
-				 "%zu exceeds inject size of %zu.\n", len,
-				 inject_size);
+				 "%zu exceeds inline size of %zu.\n", len,
+				 inline_size);
 			return -FI_EMSGSIZE;
 		}
 		EFA_WARN(FI_LOG_EP_DATA,

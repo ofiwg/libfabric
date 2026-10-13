@@ -54,6 +54,8 @@ struct efa_qp {
 	uint32_t qp_num;
 	uint32_t qkey;
 	bool data_path_direct_enabled;
+	uint16_t max_inline_send;
+	uint16_t max_inline_write;
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_data_path_direct_qp data_path_direct_qp;
 #endif
