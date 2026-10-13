@@ -10,6 +10,8 @@
 
 #define EFA_RDM_IOV_LIMIT		(4)
 
+struct efa_rdm_atomic_proto;
+
 /**
  * @brief EFA RDM operation entry (ope) type
  */
@@ -92,6 +94,7 @@ struct efa_rdm_ope {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_proto *proto; /**< protocol used by the refactored send path; NULL in the old code path */
+	const struct efa_rdm_atomic_proto *atomic_proto;
 
 	uint32_t tx_id;
 	uint32_t rx_id;
@@ -576,8 +579,8 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
 /**
  * @brief Check if a DC or atomic txe is ready for release.
  *
- * Used by: DC eager/medium/longcts msg/tag/write, DC CTSDATA,
- *          FETCH_RTA, COMPARE_RTA.
+ * Used by: DC eager/medium/longcts msg/tag/write, callback-based DC_WRITE_RTA,
+ *          DC CTSDATA, FETCH_RTA, COMPARE_RTA.
  *
  * These protocols require a remote acknowledgment (RECEIPT for DC,
  * ATOMRSP for fetch/compare atomics) before the txe can complete.

@@ -95,6 +95,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,
 		.ofi_cuMemFree = __real_ofi_cuMemFree,
 #endif
+		.efa_copy_from_hmem_iov = __real_efa_copy_from_hmem_iov,
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 		.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
 		.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
@@ -922,6 +923,12 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_eager_assigns_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_eager_queued_before_handshake_survives_mr_gen_check, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_failure_rolls_back_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_write_post_and_complete, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_dc_write_completion_orders, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_write_sync_failures, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_write_async_release_paths, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_dc_receipt_then_send_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_atomic_inject_delivery_complete, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

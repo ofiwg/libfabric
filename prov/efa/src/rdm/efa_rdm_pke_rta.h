@@ -14,8 +14,6 @@ struct efa_rdm_rta_hdr *efa_rdm_pke_get_rta_hdr(struct efa_rdm_pke *pkt_entry)
 
 ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe);
 
-void efa_rdm_pke_handle_write_rta_send_completion(struct efa_rdm_pke *pkt_entry);
-
 int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,

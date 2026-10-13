@@ -147,8 +147,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Long CTS read");
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_write_rta(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Atomic write");
 		break;
 	case EFA_RDM_FETCH_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -192,8 +191,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_dc_longcts_rtw(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_WRITE_RTA_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_write_rta(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Atomic write");
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -482,8 +480,23 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 			}
 		} else {
+			/*
+			 * Read atomic_proto first: efa_rdm_txe_handle_error()
+			 * can release a peer-aborting txe.
+			 */
+			bool release_atomic_txe = (txe->atomic_proto != NULL);
+
 			efa_rdm_txe_handle_error(txe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
+			/*
+			 * This error CQE retires the atomic request's only WR.
+			 * The success-completion callback is not invoked for error CQEs,
+			 * so release the TXE here.
+			 */
+			if (release_atomic_txe) {
+				assert(txe->efa_outstanding_tx_ops == 0);
+				efa_rdm_txe_release(txe);
+			}
 		}
 		break;
 	case EFA_RDM_RXE:
@@ -692,7 +705,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_RDM_PROTO_MOVED("Long CTS read");
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
-		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);
+	case EFA_RDM_DC_WRITE_RTA_PKT:
+		EFA_RDM_PROTO_MOVED("Atomic write");
 		break;
 	case EFA_RDM_FETCH_RTA_PKT: /* fall through */
 	case EFA_RDM_COMPARE_RTA_PKT: /* fall through */
@@ -700,7 +714,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
-	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
