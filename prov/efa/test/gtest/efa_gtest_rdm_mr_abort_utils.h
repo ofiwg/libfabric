@@ -46,11 +46,16 @@ struct efa_test_mr_abort_state {
 int efa_test_mr_abort_setup(struct fid_ep *ep, struct fid_av *av, int req_pkt,
 			    bool handshake_received, void *op_context);
 
+void efa_test_mr_abort_set_peer_flags(bool req_sent, bool handshake_sent,
+				      bool handshake_queued);
+
 void efa_test_mr_abort_set_peer_error_emitted(void);
 
 void *efa_test_mr_abort_forge_tx_pke(int pkt);
 
 void efa_test_mr_abort_handle_tx_error(void *pke, int err);
+
+void efa_test_mr_abort_txe_handle_error(void);
 
 void efa_test_mr_abort_snapshot(struct efa_test_mr_abort_state *out);
 
