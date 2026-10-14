@@ -120,6 +120,8 @@ struct dlist_entry;
 	  (av, ahn, qpn, pkt_entry))                                           \
 	X(fi_addr_t, ofi_av_lookup_fi_addr,                                    \
 	  (struct util_av * av, const void *addr), (av, addr))                 \
+	X(bool, efa_ibv_cq_wc_is_unsolicited, (struct efa_ibv_cq * ibv_cq),    \
+	  (ibv_cq))                                                            \
 	X(int, ofi_mr_map_insert,                                              \
 	  (struct ofi_mr_map * map, const struct fi_mr_attr *attr,             \
 	   uint64_t *key, void *context, uint64_t flags),                      \
@@ -224,5 +226,16 @@ EFA_MOCK_FUNCTIONS(EFA_MOCK_GEN_REAL_DECL)
  *			and 4th malloc. Order and duplicates don't matter.
  */
 void efa_test_fail_mallocs(const std::vector<unsigned> &ordinals);
+
+/**
+ * @brief Arm every data path op with a mock that does nothing.
+ *
+ * The data path ops reach the real device when unmocked, so a fixture that is
+ * not about the data path calls this to keep the device out of it: posts report
+ * success without submitting, and the CQ reports no completion. Expectations are
+ * WillRepeatedly, so they neither require nor forbid any call, and a later
+ * EFA_EXPECT_CALL on the same op takes precedence over them.
+ */
+void efa_test_arm_inert_data_path(MockEfa &mock);
 
 #endif /* EFA_GTEST_COMMON_MOCKS_H */

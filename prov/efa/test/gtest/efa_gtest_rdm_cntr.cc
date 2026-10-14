@@ -25,6 +25,7 @@ class EfaRdmCntrTest : public Test
 		ASSERT_NE(resource.domain, nullptr);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
