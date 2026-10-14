@@ -620,6 +620,8 @@ int bandwidth(void)
 	 * some MPI-level benchmarks tend to use this type of loop for measuring
 	 * bandwidth.  */
 
+	ft_wr_set_batch(true);
+
 	if (opts.dst_addr) {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
@@ -660,12 +662,18 @@ int bandwidth(void)
 				return ret;
 
 			if (++j == opts.window_size) {
+				ret = ft_wr_flush_tx_queued(ep);
+				if (ret)
+					return ret;
 				ret = bw_tx_comp();
 				if (ret)
 					return ret;
 				j = 0;
 			}
 		}
+		ret = ft_wr_flush_tx_queued(ep);
+		if (ret)
+			return ret;
 		ret = bw_tx_comp();
 		if (ret)
 			return ret;
@@ -702,16 +710,23 @@ int bandwidth(void)
 				return ret;
 
 			if (++j == opts.window_size) {
+				ret = ft_wr_flush_rx_queued(ep);
+				if (ret)
+					return ret;
 				ret = bw_rx_comp(j);
 				if (ret)
 					return ret;
 				j = 0;
 			}
 		}
+		ret = ft_wr_flush_rx_queued(ep);
+		if (ret)
+			return ret;
 		ret = bw_rx_comp(j);
 		if (ret)
 			return ret;
 	}
+	ft_wr_set_batch(false);
 	ft_stop();
 
 	if (opts.machr)
@@ -726,6 +741,15 @@ int bandwidth(void)
 static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
 {
 	int ret;
+
+	if (num_completions > 0) {
+		if (rma_op == FT_RMA_WRITEDATA && !opts.dst_addr)
+			ret = ft_wr_flush_rx_queued(ep);
+		else
+			ret = ft_wr_flush_tx_queued(ep);
+		if (ret)
+			return ret;
+	}
 
 	if (rma_op == FT_RMA_WRITEDATA) {
 		/* for writedata, only the client sends,
@@ -777,6 +801,8 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	ret = ft_sync();
 	if (ret)
 		return ret;
+
+	ft_wr_set_batch(true);
 
 	offset_rma_start = FT_RMA_SYNC_MSG_BYTES +
 			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
@@ -904,6 +930,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	ret = bw_rma_comp(rma_op, j);
 	if (ret)
 		return ret;
+	ft_wr_set_batch(false);
 	ft_stop();
 
 	if (opts.machr)
