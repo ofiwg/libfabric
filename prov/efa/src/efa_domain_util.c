@@ -39,6 +39,11 @@ int efa_mr_pool_create(struct efa_domain *efa_domain, size_t entry_size)
 /**
  * @brief Destroy any MR bufpools created by efa_mr_pool_create.
  *
+ * The caller must verify the domain is safe to close (no application MRs
+ * still open) before any teardown begins, so that this never destroys a
+ * pool with slots still checked out. See efa_domain_close /
+ * efa_rdm_domain_close.
+ *
  * @param[in,out] efa_domain  Domain whose pools will be destroyed.
  */
 static void efa_mr_pool_destroy(struct efa_domain *efa_domain)
