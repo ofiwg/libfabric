@@ -985,6 +985,13 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 			 "Sender-side abort of msg_id %u decided before the "
 			 "peer's handshake; deferring PEER_ERROR emit until "
 			 "the handshake arrives.\n", txe->msg_id);
+		/*
+		 * RTMs that do not wait for the handshake are never
+		 * guaranteed to reach the peer, so the peer may never send
+		 * its handshake. Send ours unless one was already sent or
+		 * queued; the peer answers any packet with its handshake.
+		 */
+		efa_rdm_ep_post_handshake_or_queue(txe->ep, txe->peer);
 		return;
 	}
 

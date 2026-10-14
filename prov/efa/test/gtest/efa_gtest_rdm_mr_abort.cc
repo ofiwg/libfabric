@@ -8,6 +8,7 @@
 #include "efa_gtest_rdm_ope_helpers.h"
 #include <gtest/gtest.h>
 #include <rdma/fi_errno.h>
+#include <string>
 
 using testing::DoAll;
 using testing::Return;
@@ -177,5 +178,82 @@ TEST_F(EfaRdmMrAbortTest, rnr_on_peer_error_pkt_requeues)
 	EXPECT_EQ(st.ep_rnr_queued_pkt_cnt, 1u);
 	expect_cq_empty();
 }
+
+TEST_F(EfaRdmMrAbortTest, pre_handshake_abort_sends_handshake)
+{
+	struct efa_test_mr_abort_state before = {}, st = {};
+	uintptr_t wr_id = 0;
+
+	ASSERT_NO_FATAL_FAILURE(
+		setup_txe(EFA_TEST_MR_ABORT_PKT_LONGCTS_TAGRTM, false));
+	efa_test_mr_abort_set_peer_flags(true, false, false);
+	efa_test_mr_abort_snapshot(&before);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<5>(&wr_id), Return(0)));
+
+	efa_test_mr_abort_txe_handle_error();
+	efa_test_mr_abort_snapshot(&st);
+	ASSERT_TRUE(st.alive);
+	EXPECT_TRUE(st.peer_abort_pending);
+	EXPECT_FALSE(st.peer_error_emitted);
+	EXPECT_TRUE(st.peer_handshake_sent);
+	EXPECT_FALSE(st.peer_handshake_queued);
+	EXPECT_EQ(st.ep_outstanding, before.ep_outstanding + 1);
+	ASSERT_NE(wr_id, 0u);
+	EXPECT_EQ(efa_test_wire_pkt_type_from_wr_id(wr_id),
+		  efa_test_mr_abort_wire_type(EFA_TEST_MR_ABORT_PKT_HANDSHAKE));
+	expect_cq_empty();
+
+	efa_test_mr_abort_complete_send(wr_id);
+	efa_test_mr_abort_snapshot(&st);
+	EXPECT_EQ(st.ep_outstanding, before.ep_outstanding);
+	EXPECT_TRUE(st.alive);
+}
+
+struct PendingHandshakeCase {
+	const char *name;
+	bool handshake_sent;
+	bool handshake_queued;
+};
+
+class EfaRdmMrAbortPendingHandshakeTest
+	: public EfaRdmMrAbortTest,
+	  public testing::WithParamInterface<PendingHandshakeCase>
+{
+};
+
+TEST_P(EfaRdmMrAbortPendingHandshakeTest, pre_handshake_abort_skips_handshake)
+{
+	const PendingHandshakeCase &c = GetParam();
+	struct efa_test_mr_abort_state before = {}, st = {};
+
+	ASSERT_NO_FATAL_FAILURE(
+		setup_txe(EFA_TEST_MR_ABORT_PKT_LONGCTS_TAGRTM, false));
+	efa_test_mr_abort_set_peer_flags(true, c.handshake_sent,
+					 c.handshake_queued);
+	efa_test_mr_abort_snapshot(&before);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+
+	efa_test_mr_abort_txe_handle_error();
+	efa_test_mr_abort_snapshot(&st);
+	ASSERT_TRUE(st.alive);
+	EXPECT_TRUE(st.peer_abort_pending);
+	EXPECT_FALSE(st.peer_error_emitted);
+	EXPECT_EQ(st.peer_handshake_sent, c.handshake_sent);
+	EXPECT_EQ(st.peer_handshake_queued, c.handshake_queued);
+	EXPECT_EQ(st.handshake_queued_peers, c.handshake_queued ? 1u : 0u);
+	EXPECT_EQ(st.ep_outstanding, before.ep_outstanding);
+	expect_cq_empty();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmMrAbortPendingHandshakeTest,
+	testing::Values(PendingHandshakeCase{"sent", true, false},
+			PendingHandshakeCase{"queued", false, true}),
+	[](const testing::TestParamInfo<PendingHandshakeCase> &info) {
+		return std::string(info.param.name);
+	});
 
 } // namespace
