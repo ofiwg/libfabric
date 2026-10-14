@@ -126,6 +126,22 @@ int efa_test_mr_abort_setup(struct fid_ep *ep, struct fid_av *av, int req_pkt,
 	return 0;
 }
 
+void efa_test_mr_abort_set_peer_flags(bool req_sent, bool handshake_sent,
+				      bool handshake_queued)
+{
+	struct efa_rdm_peer *peer = g_mr_abort.peer;
+
+	if (req_sent)
+		peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	if (handshake_sent)
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
+	if (handshake_queued) {
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+		dlist_insert_tail(&peer->handshake_queued_entry,
+				  &g_mr_abort.ep->handshake_queued_peer_list);
+	}
+}
+
 /* The txe state right after the abort path posted its PEER_ERROR_PKT. */
 void efa_test_mr_abort_set_peer_error_emitted(void)
 {
@@ -170,6 +186,12 @@ void efa_test_mr_abort_handle_tx_error(void *pke, int err)
 		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 
 	efa_rdm_pke_handle_tx_error((struct efa_rdm_pke *) pke, prov_errno);
+}
+
+void efa_test_mr_abort_txe_handle_error(void)
+{
+	efa_rdm_txe_handle_error(g_mr_abort.txe, FI_ECANCELED,
+				 FI_EFA_ERR_PKT_POST);
 }
 
 void efa_test_mr_abort_snapshot(struct efa_test_mr_abort_state *out)
