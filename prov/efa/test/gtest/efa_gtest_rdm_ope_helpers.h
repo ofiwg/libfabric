@@ -175,6 +175,14 @@ int efa_test_abort_without_local_read_copy_completes_now(
 	struct fid_ep *ep, struct fid_av *av, void *op_context,
 	struct efa_test_local_read_abort *state);
 
+/**
+ * @brief Return the wire packet type of the solicited send behind @p wr_id.
+ *
+ * Call it from inside the efa_qp_post_send action, before the poster
+ * releases the packet entry.
+ */
+int efa_test_wire_pkt_type_from_wr_id(uintptr_t wr_id);
+
 #ifdef __cplusplus
 }
 #endif
