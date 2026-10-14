@@ -4,6 +4,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cntr.h"
+#include "efa_rdm_mr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_rtm.h"
@@ -473,6 +474,19 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				efa_rdm_pke_release_tx(pkt_entry);
 				if (!txe->efa_outstanding_tx_ops)
 					efa_rdm_txe_release(txe);
+			} else if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_PEER_ERROR_PKT &&
+				   (txe->state == EFA_RDM_OPE_ERR ||
+				    !efa_rdm_mr_gen_check_ope(txe))) {
+				/*
+				 * The txe already errored or its source MR was
+				 * closed, so a repost can never succeed. Take the
+				 * MR abort path instead of requeueing. The
+				 * PEER_ERROR_PKT is still requeued: it does not use
+				 * the source MR and the receiver needs it.
+				 */
+				efa_rdm_pke_release_tx(pkt_entry);
+				efa_rdm_txe_handle_error(txe, FI_ECANCELED,
+							 FI_EFA_ERR_PEER_ABORTED);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such
