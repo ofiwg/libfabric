@@ -424,15 +424,9 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
     elif protocol == "LONGREAD":
         # Pure long read: read-base enabled (USE_DEVICE_RDMA=1) with the
         # runt budget set to 0, so no runt segments ride the RTM and the
-        # entire payload is pulled by the receiver via RDMA READ. The
-        # LONGREAD RTM is a pure read-request (no source-MR payload), so
-        # closing the source MR cannot flush it before the receiver matches:
-        # the recv is always matched and its tail READ then fails against
-        # the invalidated source rkey, yielding exactly one FI_ECANCELED.
-        # This is the only protocol owed a completion under -X (see
-        # abort_owes_rx_completion). Run with --homogeneous-peers
-        # (HOMOGENEOUS_PEERS) so the
-        # sender does not stall on a handshake before selecting it.
+        # entire payload is pulled by the receiver via RDMA READ. Run with
+        # --homogeneous-peers (HOMOGENEOUS_PEERS) so the sender does not
+        # stall on a handshake before selecting it.
         proto_env = ("FI_EFA_USE_DEVICE_RDMA=1 "
                      "FI_EFA_RUNT_SIZE=0 "
                      "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE=65536")
@@ -459,33 +453,6 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
         raise ValueError(f"unknown protocol: {protocol}")
 
     return proto_env.strip(), proto_size[protocol]
-
-
-def abort_owes_rx_completion(protocol):
-    """
-    Whether an aborted send/tagged message is owed a terminal recv
-    completion on the target for this protocol (the -X flag of
-    fi_mr_abort).
-
-    Owed: LONGREAD only. The LONGREAD RTM is a pure read-request control
-    packet -- it carries the read iov, no inline user data, and its send WR
-    uses the internal TX pool MR rather than the user's source MR. So
-    closing the source MR cannot flush the RTM: it is always delivered, the
-    receiver always matches the recv and posts the tail RDMA READ, and that
-    READ then fails against the invalidated source rkey -- driving the
-    matched rxe to a clean FI_ECANCELED. Exactly one terminal completion is
-    therefore guaranteed.
-
-    Not owed: EAGER, MEDIUM, LONGCTS, RUNTREAD-LONGREAD, RUNTREAD-NOREAD.
-    Every one of these carries source-MR user data in its RTM (EAGER/MEDIUM
-    full or first segment, LONGCTS first segment, RUNTREAD runt segments),
-    so the RTM itself can be flushed or gen-check cancelled before the
-    receiver ever matches the recv. When that happens the receiver owes no
-    completion, so the recv-completion count is indeterminate and -X (which
-    blocks until reaped == required) would hang the target. These use the
-    slack path: a stray FI_ECANCELED is tolerated but never required.
-    """
-    return protocol in ("LONGREAD",)
 
 
 # --- Test: send and tagged ---
@@ -524,19 +491,14 @@ def run_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
 
     env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
 
-    owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
     # LONGREAD is an extra-feature (read-based) protocol. Pass
     # --homogeneous-peers to set HOMOGENEOUS_PEERS on the endpoint, which
-    # makes it ignore the handshake
-    # requirement before selecting a read-based protocol. Without it the
-    # first sends are queued pending the peer handshake and the abort race is
-    # nondeterministic; skipping the handshake pins LONGREAD from the first
-    # send so the target reliably owes -- and can enforce via -X -- exactly
-    # one completion per send.
+    # makes it ignore the handshake requirement before selecting a
+    # read-based protocol, so LONGREAD is pinned from the first send.
     homogeneous_flag = " --homogeneous-peers" if protocol == "LONGREAD" else ""
     command = (f"fi_mr_abort -T {send_op} -C {cancel_order}"
                f" --close-side {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
-               f" -S {message_size}{owe_flag}{homogeneous_flag}"
+               f" -S {message_size}{homogeneous_flag}"
                f"{MR_ABORT_EP_ARGS}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
                             memory_type=memory_type, additional_env=env)
