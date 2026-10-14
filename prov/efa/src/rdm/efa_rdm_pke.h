@@ -21,6 +21,7 @@
 #define EFA_RDM_PKE_HELD_BY_PROGRESS	BIT_ULL(9) /**< this rx-pool packet entry is being held by progress engine and counted in ep->efa_rx_pkts_held */
 #define EFA_RDM_PKE_ABORTED		BIT_ULL(10) /**< this OOO pke is an abort marker for a peer-aborted message */
 #define EFA_RDM_PKE_WRITE_CONTEXT	BIT_ULL(11) /**< this packet entry is the context of an RDMA write */
+#define EFA_RDM_PKE_READ_CONTEXT	BIT_ULL(12) /**< this packet entry is the context of an RDMA read */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 
@@ -250,13 +251,15 @@ struct efa_rdm_pke {
 	struct fid_mr *payload_mr;
 
 	/**
-	 * @brief size of payload buffer, or the start offset of an RMA segment
+	 * @brief size of payload buffer, or an RMA segment offset/size
 	 */
 	union {
 		/** @brief message pkes: user-data bytes in wiredata */
 		size_t payload_size;
 		/** @brief RMA write-context pkes: byte offset of this segment in the write */
 		size_t rma_seg_start;
+		/** @brief RMA read-context pkes: byte size of this read segment */
+		size_t rma_seg_size;
 	};
 
 	/**@brief Callback function called in TX and RX paths */

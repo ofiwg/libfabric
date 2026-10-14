@@ -519,22 +519,15 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *ope,
-				   int read_id,
 				   size_t seg_size)
 {
-	struct efa_rdm_rma_context_pkt *ctx_pkt;
-
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
-	pkt_entry->pkt_size = sizeof(struct efa_rdm_rma_context_pkt);
-
-	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx_pkt->flags = 0;
-	ctx_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
-	ctx_pkt->read_id = read_id;
-	ctx_pkt->seg_size = seg_size;
+	/* A read-context pke is identified by this flag. Its segment size is
+	 * stored on the pke and consumed at completion by
+	 * efa_rdm_pke_handle_rma_read_completion(). */
+	pkt_entry->flags |= EFA_RDM_PKE_READ_CONTEXT;
+	pkt_entry->rma_seg_size = seg_size;
 }
 
 static
@@ -544,18 +537,15 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *data_pkt_entry;
-	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	int err;
 
-	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
-	assert(rma_context_pkt->type == EFA_RDM_RMA_CONTEXT_PKT);
-	assert(rma_context_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT);
+	assert(context_pkt_entry->flags & EFA_RDM_PKE_READ_CONTEXT);
 
 	x_entry_type = context_pkt_entry->ope->type;
 	if (x_entry_type == EFA_RDM_TXE) {
 		txe = context_pkt_entry->ope;
 		assert(txe->op == ofi_op_read_req);
-		txe->bytes_read_completed += rma_context_pkt->seg_size;
+		txe->bytes_read_completed += context_pkt_entry->rma_seg_size;
 		if (txe->bytes_read_total_len == txe->bytes_read_completed) {
 			if (txe->peer == NULL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
@@ -611,7 +601,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 			return;
 		}
 
-		rxe->bytes_read_completed += rma_context_pkt->seg_size;
+		rxe->bytes_read_completed += context_pkt_entry->rma_seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {
 			efa_rdm_tracepoint(read_completed,
@@ -679,7 +669,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		return;
 	}
 
-	assert(efa_rdm_pke_get_base_hdr(context_pkt_entry)->version == EFA_RDM_PROTOCOL_VERSION);
+	assert(context_pkt_entry->flags & EFA_RDM_PKE_READ_CONTEXT);
 	efa_rdm_pke_handle_rma_read_completion(context_pkt_entry);
 
 	efa_rdm_pke_release_tx(context_pkt_entry);

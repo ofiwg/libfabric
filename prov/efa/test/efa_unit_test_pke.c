@@ -1016,8 +1016,6 @@ void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_rma_context_pkt *ctx_pkt;
 	struct efa_rdm_ope rxe_ope = { .type = EFA_RDM_RXE };
 	struct efa_rdm_ope txe_ope = { .type = EFA_RDM_TXE };
 
@@ -1031,12 +1029,10 @@ void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
 	assert_non_null(pkt_entry);
 	pkt_entry->ope = &rxe_ope;
 
-	base_hdr = (struct efa_rdm_base_hdr *) pkt_entry->wiredata;
+	/* A read-context pke is identified by EFA_RDM_PKE_READ_CONTEXT. */
+	pkt_entry->flags |= EFA_RDM_PKE_READ_CONTEXT;
 
 	/* Receiver-initiated RDMA READ context packet — in scope */
-	ctx_pkt = (struct efa_rdm_rma_context_pkt *) pkt_entry->wiredata;
-	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
 	assert_true(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
 
 	/* Same RDMA READ context, but owned by a txe (one-sided
@@ -1045,45 +1041,12 @@ void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
 	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
 	pkt_entry->ope = &rxe_ope;
 
-	/* Sender-initiated RDMA WRITE context packet — out of scope */
-	ctx_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
+	/* Any pke without the read-context flag — out of scope,
+	 * including write contexts and all control/data packets. */
+	pkt_entry->flags &= ~EFA_RDM_PKE_READ_CONTEXT;
 	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
 
-	/* Receiver-side control SENDs that ride on an rxe — out of
-	 * scope for this helper (they are not routed through the
-	 * peer-abort handler today; if that changes, extend or split
-	 * this helper). */
-	memset(pkt_entry->wiredata, 0,
-	       sizeof(struct efa_rdm_rma_context_pkt) + 64);
-	base_hdr->type = EFA_RDM_CTS_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_EOR_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_RECEIPT_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	/* Sender-side / non-rxe-protocol packets — out of scope */
-	base_hdr->type = EFA_RDM_HANDSHAKE_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_CTSDATA_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_READRSP_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_READ_NACK_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_EAGER_MSGRTM_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_LONGCTS_TAGRTM_PKT;
-	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
-
-	base_hdr->type = EFA_RDM_LONGREAD_MSGRTM_PKT;
+	pkt_entry->flags |= EFA_RDM_PKE_WRITE_CONTEXT;
 	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
 
 	efa_rdm_pke_release_tx(pkt_entry);

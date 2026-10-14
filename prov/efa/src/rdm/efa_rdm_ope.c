@@ -1834,13 +1834,14 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	ep = ope->ep;
 
 	/*
-	 * Allow local iov count to be equal to 0 b/c bounce buffer's pre-registered buff/desc
-	 * will be passed to rdma-core
+	 * Allow local iov count to be equal to 0 b/c the domain's pre-registered
+	 * zero-byte buffer's buff/desc will be passed to rdma-core
 	 */
 	assert((ope->iov_count == 0 && ope->bytes_read_total_len == 0) || ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_read_total_len == 0) {
+		struct efa_domain *domain = efa_rdm_ep_domain(ep);
 
 		/* According to libfabric document
 		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
@@ -1849,16 +1850,17 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		 * Note that because send operation used a pkt_entry as wr_id,
 		 * we had to use a pkt_entry as context for read too.
 		 */
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), 0);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, 0);
+		/* firmware bug rejects NULL buffer */
 		err = efa_rdm_pke_read(pkt_entry,
-					 pkt_entry->wiredata,
+					 domain->zero_byte_bounce_buf,
 					 0,
-					 fi_mr_desc(pkt_entry->mr),
+					 fi_mr_desc(&domain->zero_byte_bounce_buf_mr->mr_fid),
 					 ope->rma_iov[0].addr,
 					 ope->rma_iov[0].key);
 		if (err)
@@ -1915,7 +1917,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				return -FI_ENOMR;
 			}
 
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1924,7 +1926,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), read_once_len);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, read_once_len);
 		err = efa_rdm_pke_read(pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,

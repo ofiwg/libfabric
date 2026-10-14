@@ -2956,8 +2956,7 @@ void test_efa_rdm_rxe_mark_peer_aborted_multi_recv_writes_err(
 
 /**
  * @brief Build a TX pkt_entry configured as a receiver-initiated RDMA
- *        READ context (i.e. of type EFA_RDM_RMA_CONTEXT_PKT with
- *        context_type EFA_RDM_RDMA_READ_CONTEXT) bound to an rxe,
+ *        READ context (EFA_RDM_PKE_READ_CONTEXT) bound to an rxe,
  *        then call the TX error dispatcher with the supplied
  *        prov_errno.
  *
@@ -2976,26 +2975,18 @@ static void run_longread_read_error(struct efa_resource *resource,
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_rma_context_pkt *ctx_pkt;
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
 			  base_ep.util_ep.ep_fid);
 
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_pke_set_ope(pkt_entry, rxe);
-	pkt_entry->peer = rxe->peer;
 
-	/* Forge the receiver-initiated RDMA READ context layout that
-	 * efa_rdm_pke_init_read_context would have produced. */
-	ctx_pkt = (struct efa_rdm_rma_context_pkt *) pkt_entry->wiredata;
-	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx_pkt->flags = 0;
-	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
-	ctx_pkt->seg_size = 0;
+	/* Build the receiver-initiated RDMA READ context the same way
+	 * efa_rdm_pke_init_read_context does: flag + segment size on the
+	 * pke, no wiredata. */
+	efa_rdm_pke_init_read_context(pkt_entry, rxe, 0);
 
 	/* Simulate a submitted RDMA READ WR on this rxe so the
 	 * record_tx_op_completed decrement at the top of handle_tx_error
@@ -4065,7 +4056,6 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt1, *pkt2;
-	struct efa_rdm_rma_context_pkt *ctx;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr = 0;
@@ -4098,29 +4088,15 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	peer->efa_outstanding_tx_ops += 3;
 	rxe->efa_outstanding_tx_ops += 3;
 
-	pkt1 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				 ep->efa_tx_bounce_pool,
+	pkt1 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
 				 EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt1);
-	efa_rdm_pke_set_ope(pkt1, rxe);
-	pkt1->peer = peer;
-	ctx = (struct efa_rdm_rma_context_pkt *) pkt1->wiredata;
-	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx->flags = 0;
-	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	efa_rdm_pke_init_read_context(pkt1, rxe, 0);
 
-	pkt2 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				 ep->efa_tx_bounce_pool,
+	pkt2 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
 				 EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt2);
-	efa_rdm_pke_set_ope(pkt2, rxe);
-	pkt2->peer = peer;
-	ctx = (struct efa_rdm_rma_context_pkt *) pkt2->wiredata;
-	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx->flags = 0;
-	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	efa_rdm_pke_init_read_context(pkt2, rxe, 0);
 
 	/* First sibling RDMA READ WR fails. The EFA_RDM_OPE_PEER_ABORT_PENDING branch must
 	 * NOT clear IN_FLIGHT (this packet is not the PEER_ERROR_PKT)
@@ -5354,7 +5330,6 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *fail_pkt, *ok_pkt;
-	struct efa_rdm_rma_context_pkt *ctx;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr = 0;
@@ -5404,17 +5379,10 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	/* WR #1 fails (peer-abort) -> mark sets EFA_RDM_OPE_PEER_ABORT_PENDING. No peer feature
 	 * support so no PEER_ERROR_PKT; drain is a no-op (sibling still
 	 * outstanding), and the user error completion is deferred. */
-	fail_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				     ep->efa_tx_bounce_pool,
+	fail_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
 				     EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(fail_pkt);
-	efa_rdm_pke_set_ope(fail_pkt, rxe);
-	fail_pkt->peer = peer;
-	ctx = (struct efa_rdm_rma_context_pkt *) fail_pkt->wiredata;
-	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx->flags = 0;
-	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	efa_rdm_pke_init_read_context(fail_pkt, rxe, 0);
 	efa_rdm_pke_handle_tx_error(fail_pkt,
 		EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
 
@@ -5425,18 +5393,10 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	/* WR #2 completes SUCCESSFULLY (the leak trigger). The forged
 	 * context releases the pkt itself, so do not touch ok_pkt
 	 * after the call. */
-	ok_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				   ep->efa_tx_bounce_pool,
+	ok_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
 				   EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(ok_pkt);
-	efa_rdm_pke_set_ope(ok_pkt, rxe);
-	ok_pkt->peer = peer;
-	ctx = (struct efa_rdm_rma_context_pkt *) ok_pkt->wiredata;
-	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx->flags = 0;
-	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
-	ctx->seg_size = 16;
+	efa_rdm_pke_init_read_context(ok_pkt, rxe, 16);
 
 	efa_rdm_ep_record_tx_op_completed(ep, ok_pkt);
 	efa_rdm_pke_handle_rma_completion(ok_pkt);
