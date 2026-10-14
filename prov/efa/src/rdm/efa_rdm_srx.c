@@ -21,7 +21,12 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 {
 	assert(peer_rxe->count <= rxe->ep->base_ep.info->rx_attr->iov_limit);
 
-	rxe->fi_flags = peer_rxe->flags;
+	/*
+	 * Do not set FI_MORE for RXEs. The protocol path posts bounce buffers for
+	 * the receive, so it does not make sense to honor FI_MORE. Leaving it set
+	 * could set FI_MORE on a read issued during long read and cause a hang.
+	 */
+	rxe->fi_flags = peer_rxe->flags & ~FI_MORE;
 
 	/* Handle case where we're allocating an unexpected rxe */
 	rxe->iov_count = peer_rxe->count;
