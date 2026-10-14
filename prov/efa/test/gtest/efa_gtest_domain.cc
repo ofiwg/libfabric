@@ -339,3 +339,100 @@ INSTANTIATE_TEST_SUITE_P(
 	});
 
 #endif /* HAVE_EFADV_QUERY_QP_WQS */
+
+struct DomainCloseCase {
+	const char *name;
+	enum fi_ep_type ep_type;
+	const char *fabric_name;
+};
+
+class EfaDomainClosePreconditionTest
+	: public Test,
+	  public WithParamInterface<DomainCloseCase>
+{
+	protected:
+	struct efa_resource resource = {};
+	char buf[4096];
+
+	void open_fabric_domain()
+	{
+		const DomainCloseCase &param = GetParam();
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			param.ep_type, param.fabric_name);
+		ASSERT_NE(hints, nullptr);
+
+		ASSERT_NO_FATAL_FAILURE(efa_test_resource_getinfo(&resource,
+								  hints));
+
+		int ret = fi_fabric(resource.info->fabric_attr,
+				    &resource.fabric, NULL);
+		ASSERT_EQ(ret, 0) << "fi_fabric: " << fi_strerror(-ret);
+
+		ret = fi_domain(resource.fabric, resource.info,
+				&resource.domain, NULL);
+		ASSERT_EQ(ret, 0) << "fi_domain: " << fi_strerror(-ret);
+	}
+
+	struct fid_mr *reg_mr()
+	{
+		struct fid_mr *mr = nullptr;
+		int ret = fi_mr_reg(resource.domain, buf, sizeof(buf),
+				    FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+		EXPECT_EQ(ret, 0) << "fi_mr_reg: " << fi_strerror(-ret);
+		return mr;
+	}
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		memset(buf, 0, sizeof(buf));
+	}
+
+	void TearDown() override
+	{
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_P(EfaDomainClosePreconditionTest, open_mr_refuses_close_with_ebusy)
+{
+	ASSERT_NO_FATAL_FAILURE(open_fabric_domain());
+
+	struct fid_mr *mr = reg_mr();
+	ASSERT_NE(mr, nullptr);
+
+	EXPECT_EQ(fi_close(&resource.domain->fid), -FI_EBUSY);
+
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+
+	EXPECT_EQ(fi_close(&resource.domain->fid), 0);
+	resource.domain = NULL;
+}
+
+TEST_P(EfaDomainClosePreconditionTest, closed_mr_allows_close)
+{
+	ASSERT_NO_FATAL_FAILURE(open_fabric_domain());
+
+	struct fid_mr *mr = reg_mr();
+	ASSERT_NE(mr, nullptr);
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+
+	EXPECT_EQ(fi_close(&resource.domain->fid), 0);
+	resource.domain = NULL;
+}
+
+TEST_P(EfaDomainClosePreconditionTest, no_mr_closes_cleanly)
+{
+	ASSERT_NO_FATAL_FAILURE(open_fabric_domain());
+
+	EXPECT_EQ(fi_close(&resource.domain->fid), 0);
+	resource.domain = NULL;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaDomainClosePreconditionTest,
+	Values(DomainCloseCase{"rdm", FI_EP_RDM, EFA_FABRIC_NAME},
+	       DomainCloseCase{"direct", FI_EP_RDM, EFA_DIRECT_FABRIC_NAME}),
+	[](const testing::TestParamInfo<DomainCloseCase> &info) {
+		return std::string(info.param.name);
+	});

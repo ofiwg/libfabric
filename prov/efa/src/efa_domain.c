@@ -229,6 +229,16 @@ static int efa_domain_close(fid_t fid)
 	efa_domain = container_of(fid, struct efa_domain,
 				  util_domain.domain_fid.fid);
 
+	// zero-byte bounce buffer holds a util_domain.ref, but user not responsible for it
+	int internal_refs = efa_domain->zero_byte_bounce_buf_mr ? 1 : 0;
+	if (ofi_atomic_get32(&efa_domain->util_domain.ref) > internal_refs) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Cannot close domain: resources (endpoints, CQs, AVs, "
+			 "counters, or MRs) are still open. All domain "
+			 "resources must be closed before the domain.\n");
+		return -FI_EBUSY;
+	}
+
 	if (efa_domain->zero_byte_bounce_buf_mr) {
 		ret = fi_close(&efa_domain->zero_byte_bounce_buf_mr->mr_fid.fid);
 		if (ret)
