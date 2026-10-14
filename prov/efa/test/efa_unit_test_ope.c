@@ -4862,11 +4862,19 @@ void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state)
 	 */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
 	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
-	assert_int_equal(efa_unit_test_get_dlist_length(&peer->txe_list), 1);
-	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
 	memset(&err_entry, 0, sizeof(err_entry));
 	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
 	assert_int_equal(ret, -FI_EAGAIN);
+
+	/*
+	 * Parking also posts a HANDSHAKE to make the peer answer: one new
+	 * WR, and the internal handshake txe joins the parked txe on
+	 * peer->txe_list.
+	 */
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_SENT);
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->txe_list), 2);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	outstanding_before = ep->efa_outstanding_tx_ops;
 
 	/* Deliver the peer's handshake advertising PEER_ERROR support. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
