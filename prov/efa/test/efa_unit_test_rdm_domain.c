@@ -21,21 +21,6 @@ void test_efa_domain_info_type_efa_rdm(void **state)
 	assert_true(efa_domain->info_type == EFA_INFO_RDM);
 }
 /**
- * @brief Verify bounce buffer is NOT allocated for efa RDM domain
- *
- * @param[in]	state		struct efa_resource that is managed by the framework
- */
-void test_efa_domain_rdm_no_bounce_buffer(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-	assert_null(efa_domain->zero_byte_bounce_buf);
-	assert_null(efa_domain->zero_byte_bounce_buf_mr);
-}
-/**
  * @brief Verify FI_MR_ALLOCATED is set for efa rdm path
  *
  * @param[in]	state		struct efa_resource that is managed by the framework

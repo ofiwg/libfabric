@@ -24,16 +24,16 @@ void test_efa_domain_info_type_efa_direct(void **state)
 }
 
 /**
- * @brief Verify bounce buffer is allocated for efa-direct domain
+ * @brief Verify the 0-byte bounce buffer is allocated when FI_RMA is available.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_direct_has_bounce_buffer(void **state)
+static void test_efa_domain_has_bounce_buffer(void **state, char *fabric_name)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 
 	if (efa_domain->info->caps & FI_RMA) {
@@ -44,6 +44,16 @@ void test_efa_domain_direct_has_bounce_buffer(void **state)
 		assert_null(efa_domain->zero_byte_bounce_buf);
 		assert_null(efa_domain->zero_byte_bounce_buf_mr);
 	}
+}
+
+void test_efa_domain_direct_has_bounce_buffer(void **state)
+{
+	test_efa_domain_has_bounce_buffer(state, EFA_DIRECT_FABRIC_NAME);
+}
+
+void test_efa_domain_rdm_has_bounce_buffer(void **state)
+{
+	test_efa_domain_has_bounce_buffer(state, EFA_FABRIC_NAME);
 }
 
 

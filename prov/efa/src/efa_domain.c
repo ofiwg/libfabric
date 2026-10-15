@@ -90,24 +90,30 @@ int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 	return 0;
 }
 
-/* @brief Allocate a zero byte bounce buf for efa-direct
+/* @brief Allocate a zero byte bounce buf for the efa-direct and efa-RDM RMA paths
  *
- * TODO: enable 0-byte bounce buffer usage on efa-RDM path
+ * A 0-byte RMA transfer still posts one SGE so rdma-core generates a
+ * completion; the SGE points at this shared pre-registered page with length 0.
+ * Registered once per domain and reused by every 0-byte op.
  *
  * @param efa_domain struct representing the domain to create the buffer for
  * @param info info struct that was validated and returned by fi_getinfo
  * @return 0 on success, fi_errno on error
  */
-static int efa_domain_register_zero_byte_bounce_buf(struct efa_domain *efa_domain,
-						    struct fi_info *info)
+int efa_domain_register_zero_byte_bounce_buf(struct efa_domain *efa_domain,
+					     struct fi_info *info)
 {
 	struct iovec iov;
 	struct fid_mr *mr_fid;
-	uint64_t mr_flags = FI_READ | FI_WRITE;
+	uint64_t mr_flags = FI_SEND | FI_RECV;
 	long page_size;
 	int ret;
 
-	if (efa_domain->info_type != EFA_INFO_DIRECT || !(info->caps & FI_RMA))
+	/* Register only when RMA is both requested by the user (info->caps) and
+	 * supported by the domain (efa_domain->info->caps); otherwise there is
+	 * no 0-byte RMA op that would use the buffer. */
+	if (!(info->caps & FI_RMA) ||
+	    !(efa_domain->info->caps & FI_RMA))
 		return 0;
 
 	page_size = ofi_get_page_size();
@@ -124,8 +130,16 @@ static int efa_domain_register_zero_byte_bounce_buf(struct efa_domain *efa_domai
 
 	iov.iov_base = efa_domain->zero_byte_bounce_buf;
 	iov.iov_len = page_size;
-	ret = fi_mr_regv(&efa_domain->util_domain.domain_fid,
-			 &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
+	/*
+	 * Register through the base device MR op rather than the domain's
+	 * installed MR op. On efa-RDM the latter (efa_rdm_mr_regattr) also
+	 * mirrors every registration into a shm MR, which would pin the shm
+	 * domain for this domain-lifetime buffer and make shm teardown fail
+	 * with -FI_EBUSY. This buffer is only ever used as a device SGE for a
+	 * 0-byte RMA op, never over shm, so a device-only MR is correct.
+	 */
+	ret = efa_domain_mr_ops.regv(&efa_domain->util_domain.domain_fid.fid,
+				     &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
 	if (ret) {
 		EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", ret);
 		free(efa_domain->zero_byte_bounce_buf);

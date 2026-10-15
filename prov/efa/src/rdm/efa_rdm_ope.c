@@ -1835,13 +1835,14 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	ep = ope->ep;
 
 	/*
-	 * Allow local iov count to be equal to 0 b/c bounce buffer's pre-registered buff/desc
-	 * will be passed to rdma-core
+	 * Allow local iov count to be equal to 0 b/c the domain's pre-registered
+	 * zero-byte buffer's buff/desc will be passed to rdma-core
 	 */
 	assert((ope->iov_count == 0 && ope->bytes_read_total_len == 0) || ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_read_total_len == 0) {
+		struct efa_domain *domain = efa_rdm_ep_domain(ep);
 
 		/* According to libfabric document
 		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
@@ -1850,16 +1851,17 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		 * Note that because send operation used a pkt_entry as wr_id,
 		 * we had to use a pkt_entry as context for read too.
 		 */
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), 0);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, 0);
+		/* firmware bug rejects NULL buffer */
 		err = efa_rdm_pke_read(pkt_entry,
-					 pkt_entry->wiredata,
+					 domain->zero_byte_bounce_buf,
 					 0,
-					 fi_mr_desc(pkt_entry->mr),
+					 fi_mr_desc(&domain->zero_byte_bounce_buf_mr->mr_fid),
 					 ope->rma_iov[0].addr,
 					 ope->rma_iov[0].key);
 		if (err)
@@ -1916,7 +1918,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				return -FI_ENOMR;
 			}
 
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1925,7 +1927,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), read_once_len);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, read_once_len);
 		err = efa_rdm_pke_read(pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,
@@ -1959,7 +1961,55 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 }
 
 /**
- * @brief post RDMA write request(s)
+ * @brief recompute an RMA write segment from its start offset
+ *
+ * See efa_rdm_ope_get_write_segment() in the header for the rationale.
+ */
+void efa_rdm_ope_get_write_segment(struct efa_rdm_ope *ope, size_t seg_start,
+				   struct efa_rdm_ope_write_segment *seg)
+{
+	struct efa_rdm_ep *ep = ope->ep;
+	size_t max_write_once_len;
+	size_t iov_offset = 0, rma_iov_offset = 0;
+	int iov_idx = 0, rma_iov_idx = 0;
+	int err;
+
+	max_write_once_len = MIN(efa_env.efa_write_segment_size,
+				 efa_rdm_ep_domain(ep)->device->max_rdma_size);
+
+	/* A 0-byte write has no local iov to walk; only the remote address and
+	 * key are needed. */
+	if (ope->bytes_write_total_len == 0) {
+		seg->local_buf = NULL;
+		seg->desc = NULL;
+		seg->seg_size = 0;
+		seg->remote_buf = ope->rma_iov[0].addr;
+		seg->remote_key = ope->rma_iov[0].key;
+		return;
+	}
+
+	err = ofi_iov_locate(ope->iov, ope->iov_count, seg_start,
+			     &iov_idx, &iov_offset);
+	assert(!err);
+	err = ofi_rma_iov_locate(ope->rma_iov, ope->rma_iov_count, seg_start,
+				 &rma_iov_idx, &rma_iov_offset);
+	assert(!err);
+	(void) err;
+
+	/* A segment cannot cross a local iov, a remote iov, or the max
+	 * write-once boundary, so it is the smallest of the three remainders. */
+	seg->seg_size = MIN(ope->iov[iov_idx].iov_len - iov_offset,
+			    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
+	seg->seg_size = MIN(seg->seg_size, max_write_once_len);
+
+	seg->local_buf = (char *) ope->iov[iov_idx].iov_base + iov_offset;
+	seg->desc = ope->desc[iov_idx];
+	seg->remote_buf = ope->rma_iov[rma_iov_idx].addr + rma_iov_offset;
+	seg->remote_key = ope->rma_iov[rma_iov_idx].key;
+}
+
+/**
+ * @brief post a write request for a RDMA write operation
  *
  * This function posts write request(s) according to information in ope.
  * Depending on ope->bytes_write_total_len and max write size of device,
@@ -1983,33 +2033,24 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	ep = ope->ep;
 
-	/*
-	 * Allow local iov count to be equal to 0 b/c bounce buffer's pre-registered buff/desc
-	 * will be passed to rdma-core
-	 */
+	/* A 0-byte write has no local iov. */
 	assert((ope->iov_count == 0 && ope->bytes_write_total_len == 0) || ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_write_total_len == 0) {
-		/* According to libfabric document
-		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
-		 * write with 0 byte is allowed.
-		 *
-		 * Note that because send operation used a pkt_entry as wr_id,
-		 * we had to use a pkt_entry as context for write too.
-		 */
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		/* A 0-byte write is allowed by the libfabric RMA API. It
+		 * transfers nothing, so it posts a single length-0 SGE pointing
+		 * at the domain's shared zero-byte buffer only to generate a
+		 * completion (see efa_rdm_pke_write). The pke needs no wiredata
+		 * buffer of its own, but is still needed as the work request
+		 * context. */
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, NULL,
+					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		/* Provide the registered bounce buffer and its desc to rdma-core.
-		 * The user provided buffer/desc will not be used for 0 byte writes.
-		 * This allows the user to pass NULL for buff/desc.
-		 */
-		efa_rdm_pke_init_write_context(
-			pkt_entry, ope, pkt_entry->wiredata, 0, fi_mr_desc(pkt_entry->mr),
-			ope->rma_iov[0].addr, ope->rma_iov[0].key);
+		efa_rdm_pke_init_write_context(pkt_entry, ope, 0);
 		err = efa_rdm_pke_write(pkt_entry);
 		if (err)
 			efa_rdm_pke_release_tx(pkt_entry);
@@ -2059,7 +2100,11 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			 */
 			return -FI_EAGAIN;
 		}
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		/* FI_INJECT writes copy the payload into a wiredata bounce
+		 * buffer; other writes RDMA directly from the user's buffer. */
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					      (ope->fi_flags & FI_INJECT) ? ep->efa_tx_bounce_pool : NULL,
+					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -2069,25 +2114,20 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			assert(ope->total_len <= ep->base_ep.inject_rma_size);
 			copied = efa_rdm_pke_copy_from_hmem_iov(
 				ope->desc[iov_idx], pkt_entry, ope,
-				sizeof(struct efa_rdm_rma_context_pkt), 0,
-				ope->total_len);
+				0, 0, ope->total_len);
 			assert(copied == ope->total_len);
 			(void) copied; /* suppress compiler warning for non-debug build */
 			ope->desc[0] = fi_mr_desc(pkt_entry->mr);
 			efa_rdm_mr_gen_capture_in_ope_desc(ope);
-			ope->iov[0].iov_base = pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt);
+			ope->iov[0].iov_base = pkt_entry->wiredata;
 		}
 
 		write_once_len = MIN(ope->iov[iov_idx].iov_len - iov_offset,
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
-		efa_rdm_pke_init_write_context(
-			pkt_entry, ope,
-			(char *) ope->iov[iov_idx].iov_base + iov_offset,
-			write_once_len, ope->desc[iov_idx],
-			ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
-			ope->rma_iov[rma_iov_idx].key);
+		efa_rdm_pke_init_write_context(pkt_entry, ope,
+					       ope->bytes_write_submitted);
 		err = efa_rdm_pke_write(pkt_entry);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "efa_rdm_pke_write failed! err: %d\n", err);

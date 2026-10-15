@@ -506,45 +506,28 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
  *  use a packet as context.
  */
 void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
-				    struct efa_rdm_ope *txe, void *local_buf,
-				    size_t seg_size, void *desc,
-				    uint64_t remote_buf, size_t remote_key)
+				    struct efa_rdm_ope *txe, size_t seg_start)
 {
-	struct efa_rdm_rma_context_pkt *rma_context_pkt;
-
 	efa_rdm_pke_set_ope(pkt_entry, (void *)txe);
 	pkt_entry->peer = txe->peer;
-	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-	rma_context_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
-	rma_context_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	rma_context_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
-	rma_context_pkt->tx_id = txe->tx_id;
-
-	rma_context_pkt->local_buf = local_buf;
-	rma_context_pkt->seg_size = seg_size;
-	rma_context_pkt->desc = desc;
-	rma_context_pkt->remote_buf = remote_buf;
-	rma_context_pkt->remote_key = remote_key;
+	/* A write-context pke is identified by this flag. Its per-segment
+	 * parameters are recomputed from the txe and this start offset by
+	 * efa_rdm_ope_get_write_segment(). */
+	pkt_entry->flags |= EFA_RDM_PKE_WRITE_CONTEXT;
+	pkt_entry->rma_seg_start = seg_start;
 }
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *ope,
-				   int read_id,
 				   size_t seg_size)
 {
-	struct efa_rdm_rma_context_pkt *ctx_pkt;
-
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
-	pkt_entry->pkt_size = sizeof(struct efa_rdm_rma_context_pkt);
-
-	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
-	ctx_pkt->flags = 0;
-	ctx_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
-	ctx_pkt->read_id = read_id;
-	ctx_pkt->seg_size = seg_size;
+	/* A read-context pke is identified by this flag. Its segment size is
+	 * stored on the pke and consumed at completion by
+	 * efa_rdm_pke_handle_rma_read_completion(). */
+	pkt_entry->flags |= EFA_RDM_PKE_READ_CONTEXT;
+	pkt_entry->rma_seg_size = seg_size;
 }
 
 static
@@ -554,18 +537,15 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *data_pkt_entry;
-	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	int err;
 
-	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
-	assert(rma_context_pkt->type == EFA_RDM_RMA_CONTEXT_PKT);
-	assert(rma_context_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT);
+	assert(context_pkt_entry->flags & EFA_RDM_PKE_READ_CONTEXT);
 
 	x_entry_type = context_pkt_entry->ope->type;
 	if (x_entry_type == EFA_RDM_TXE) {
 		txe = context_pkt_entry->ope;
 		assert(txe->op == ofi_op_read_req);
-		txe->bytes_read_completed += rma_context_pkt->seg_size;
+		txe->bytes_read_completed += context_pkt_entry->rma_seg_size;
 		if (txe->bytes_read_total_len == txe->bytes_read_completed) {
 			if (txe->peer == NULL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
@@ -621,7 +601,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 			return;
 		}
 
-		rxe->bytes_read_completed += rma_context_pkt->seg_size;
+		rxe->bytes_read_completed += context_pkt_entry->rma_seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {
 			efa_rdm_tracepoint(read_completed,
@@ -663,9 +643,6 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 {
 	struct efa_rdm_ope *txe = NULL;
-	struct efa_rdm_rma_context_pkt *rma_context_pkt;
-
-	assert(efa_rdm_pke_get_base_hdr(context_pkt_entry)->version == EFA_RDM_PROTOCOL_VERSION);
 
 	/* pkt_entry->peer can be NULL for a local read operation, which shouldn't be ignored. */
 	if (!context_pkt_entry->peer && !(context_pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
@@ -674,12 +651,13 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		return;
 	}
 
-	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
+	if (context_pkt_entry->flags & EFA_RDM_PKE_WRITE_CONTEXT) {
+		struct efa_rdm_ope_write_segment seg;
 
-	switch (rma_context_pkt->context_type) {
-	case EFA_RDM_RDMA_WRITE_CONTEXT:
 		txe = context_pkt_entry->ope;
-		txe->bytes_write_completed += rma_context_pkt->seg_size;
+		efa_rdm_ope_get_write_segment(txe, context_pkt_entry->rma_seg_start,
+					      &seg);
+		txe->bytes_write_completed += seg.seg_size;
 		if (txe->bytes_write_completed == txe->bytes_write_total_len) {
 			if (txe->fi_flags & FI_COMPLETION)
 				efa_rdm_txe_report_completion(txe);
@@ -687,15 +665,12 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 				efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
 			efa_rdm_txe_release(txe);
 		}
-		break;
-	case EFA_RDM_RDMA_READ_CONTEXT:
-		efa_rdm_pke_handle_rma_read_completion(context_pkt_entry);
-		break;
-	default:
-		EFA_WARN(FI_LOG_CQ, "invalid rma_context_type in EFA_RDM_RMA_CONTEXT_PKT %d\n",
-			rma_context_pkt->context_type);
-		assert(0 && "invalid EFA_RDM_RMA_CONTEXT_PKT rma_context_type\n");
+		efa_rdm_pke_release_tx(context_pkt_entry);
+		return;
 	}
+
+	assert(context_pkt_entry->flags & EFA_RDM_PKE_READ_CONTEXT);
+	efa_rdm_pke_handle_rma_read_completion(context_pkt_entry);
 
 	efa_rdm_pke_release_tx(context_pkt_entry);
 }

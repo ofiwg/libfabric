@@ -235,13 +235,10 @@ enum efa_rdm_rma_context_pkt_type {
 };
 
 void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
-				    struct efa_rdm_ope *txe, void *local_buf,
-				    size_t seg_size, void *desc,
-				    uint64_t remote_buf, size_t remote_key);
+				    struct efa_rdm_ope *txe, size_t seg_start);
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *ope,
-				   int read_id,
 				   size_t seg_size);
 
 void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry);
@@ -307,16 +304,10 @@ static inline bool efa_rdm_prov_errno_is_peer_abort(int prov_errno)
  */
 static inline bool efa_rdm_pkt_is_rxe_remote_read(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_rma_context_pkt *ctx_pkt;
-
 	if (!pkt_entry->ope || pkt_entry->ope->type != EFA_RDM_RXE)
 		return false;
 
-	if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_RMA_CONTEXT_PKT)
-		return false;
-
-	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-	return ctx_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT;
+	return !!(pkt_entry->flags & EFA_RDM_PKE_READ_CONTEXT);
 }
 
 /**
