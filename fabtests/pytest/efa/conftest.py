@@ -498,6 +498,18 @@ def pytest_collection_modifyitems(session, config, items):
                 not all(has_cuda_p2p(host_id, config.getoption("--environments"))
                         for host_id in dict.fromkeys((server_id, client_id))))
 
+    # MR Abort runs by default only on selected instances; everywhere else
+    # mark it pre_release so runfabtests.py skips it unless the mark is
+    # explicitly requested (preserving the opt-in). Marking here, in a conftest
+    # hook, lets the -m filter act on it; both hosts must be selected instances.
+    mr_abort_items = [item for item in items
+                      if item.module.__name__.split(".")[-1] == "test_mr_abort"]
+    if mr_abort_items and not all(
+            mr_abort_items[0].module.is_mr_abort_selected_instance(host)
+            for host in (server_id, client_id)):
+        for item in mr_abort_items:
+            item.add_marker(pytest.mark.pre_release)
+
     deselected = []
     remaining = []
     for item in items:
