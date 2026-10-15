@@ -6,6 +6,7 @@
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_wr_utils.h"
+#include "fi_ext_efa.h"
 #include <rdma/fi_rma.h>
 #include <rdma/fi_trigger.h>
 #include <rdma/fi_wr.h>
@@ -13,8 +14,11 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <string>
+#include <vector>
 
 using testing::_;
+using testing::Bool;
+using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 using testing::Test;
@@ -217,21 +221,36 @@ TEST_F(EfaWrFlushTest, tx_flush_without_pending_work_is_noop)
 	EXPECT_FALSE(efa_test_ep_tx_wr_pending(resource.ep));
 }
 
+#if HAVE_EFA_DATA_PATH_DIRECT
+
 class EfaWrTestBase : public EfaWrFlushTestBase
 {
 	protected:
-	void prepare_send(const struct fi_wr_attr **attr_out, size_t *wr_len,
-			  uint64_t flags = 0)
+	uint8_t *wr() { return wr_buf.data(); }
+
+	void fill_iovs(uint8_t *buf, void *desc, size_t count, size_t seg_len)
 	{
-		iov.iov_base = local_buf;
-		iov.iov_len = EFA_TEST_WR_SEG_LEN;
+		for (size_t i = 0; i < count; i++) {
+			iovs[i].iov_base = buf + i * seg_len;
+			iovs[i].iov_len = seg_len;
+			descs[i] = desc;
+		}
+	}
+
+	void prepare_send(const struct fi_wr_attr **attr_out, size_t *wr_len,
+			  uint64_t flags = 0, size_t count = 1,
+			  size_t seg_len = EFA_TEST_WR_SEG_LEN,
+			  uint64_t data = 0)
+	{
+		fill_iovs(local_buf, local_desc, count, seg_len);
 
 		memset(&op_msg, 0, sizeof(op_msg));
 		op_msg.ep = resource.ep;
-		op_msg.msg.msg_iov = &iov;
-		op_msg.msg.desc = &local_desc;
-		op_msg.msg.iov_count = 1;
+		op_msg.msg.msg_iov = iovs;
+		op_msg.msg.desc = descs;
+		op_msg.msg.iov_count = count;
 		op_msg.msg.addr = peer_addr;
+		op_msg.msg.data = data;
 		op_msg.flags = flags;
 
 		memset(&attr, 0, sizeof(attr));
@@ -240,13 +259,13 @@ class EfaWrTestBase : public EfaWrFlushTestBase
 
 		*wr_len = efa_test_wr_tx_size();
 		*attr_out = &attr;
+		wr_buf.assign(*wr_len, 0);
 	}
 
 	void prepare_rma(enum fi_op_type op_type,
 			 const struct fi_wr_attr **attr_out, size_t *wr_len)
 	{
-		iov.iov_base = local_buf;
-		iov.iov_len = EFA_TEST_WR_SEG_LEN;
+		fill_iovs(local_buf, local_desc, 1, EFA_TEST_WR_SEG_LEN);
 
 		rma_iov.addr = (uint64_t) (local_buf + EFA_TEST_WR_SEG_LEN);
 		rma_iov.len = EFA_TEST_WR_SEG_LEN;
@@ -254,8 +273,8 @@ class EfaWrTestBase : public EfaWrFlushTestBase
 
 		memset(&op_rma, 0, sizeof(op_rma));
 		op_rma.ep = resource.ep;
-		op_rma.msg.msg_iov = &iov;
-		op_rma.msg.desc = &local_desc;
+		op_rma.msg.msg_iov = iovs;
+		op_rma.msg.desc = descs;
 		op_rma.msg.iov_count = 1;
 		op_rma.msg.addr = peer_addr;
 		op_rma.msg.rma_iov = &rma_iov;
@@ -267,34 +286,66 @@ class EfaWrTestBase : public EfaWrFlushTestBase
 
 		*wr_len = efa_test_wr_tx_size();
 		*attr_out = &attr;
+		wr_buf.assign(*wr_len, 0);
 	}
 
 	void prepare_recv(const struct fi_wr_attr **attr_out, size_t *wr_len,
-			  bool provide_desc = true)
+			  bool provide_desc = true, size_t count = 1)
 	{
-		iov.iov_base = local_buf;
-		iov.iov_len = EFA_TEST_WR_SEG_LEN;
+		fill_iovs(local_buf, local_desc, count, EFA_TEST_WR_SEG_LEN);
 
 		memset(&op_msg, 0, sizeof(op_msg));
 		op_msg.ep = resource.ep;
-		op_msg.msg.msg_iov = &iov;
-		op_msg.msg.desc = provide_desc ? &local_desc : nullptr;
-		op_msg.msg.iov_count = 1;
+		op_msg.msg.msg_iov = iovs;
+		op_msg.msg.desc = provide_desc ? descs : nullptr;
+		op_msg.msg.iov_count = count;
 		op_msg.msg.addr = peer_addr;
 
 		memset(&attr, 0, sizeof(attr));
 		attr.op_type = FI_OP_RECV;
 		attr.op.msg = &op_msg;
 
-		*wr_len = efa_test_wr_rx_size(1);
+		*wr_len = efa_test_wr_rx_size(count);
 		*attr_out = &attr;
+		wr_buf.assign(*wr_len, 0);
 	}
 
+	void alloc_alt_mr()
+	{
+		int ret;
+
+		alt_buf = (uint8_t *) malloc(EFA_TEST_WR_SEG_LEN);
+		ASSERT_NE(alt_buf, nullptr);
+		memset(alt_buf, 0xa5, EFA_TEST_WR_SEG_LEN);
+
+		ret = fi_mr_reg(resource.domain, alt_buf, EFA_TEST_WR_SEG_LEN,
+				FI_SEND | FI_RECV, 0, 0, 0, &alt_mr, NULL);
+		ASSERT_EQ(ret, 0) << "fi_mr_reg failed: " << fi_strerror(-ret);
+		alt_desc = fi_mr_desc(alt_mr);
+	}
+
+	void teardown()
+	{
+		if (alt_mr) {
+			EXPECT_EQ(fi_close(&alt_mr->fid), 0);
+			alt_mr = nullptr;
+		}
+		free(alt_buf);
+		alt_buf = nullptr;
+
+		EfaWrFlushTestBase::teardown();
+	}
+
+	std::vector<uint8_t> wr_buf;
 	struct fi_wr_attr attr = {};
 	struct fi_op_msg op_msg = {};
 	struct fi_op_rma op_rma = {};
-	struct iovec iov = {};
+	struct iovec iovs[2] = {};
+	void *descs[2] = {};
 	struct fi_rma_iov rma_iov = {};
+	uint8_t *alt_buf = nullptr;
+	struct fid_mr *alt_mr = nullptr;
+	void *alt_desc = nullptr;
 };
 
 class EfaWrTest : public EfaWrTestBase, public Test
@@ -314,9 +365,6 @@ TEST_F(EfaWrTest, prepare_send_formats_send_wqe)
 	const struct fi_wr_attr *attr;
 	uint8_t wr[256];
 	size_t wr_len;
-
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
 
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 	ASSERT_NE(efa_test_wr_tx_size(), 0u);
@@ -340,9 +388,6 @@ TEST_F(EfaWrTest, prepare_rejects_too_small_buffer)
 	uint8_t wr[256];
 	size_t wr_len;
 
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 	ASSERT_NE(efa_test_wr_tx_size(), 0u);
 
@@ -363,9 +408,6 @@ TEST_F(EfaWrTest, prepare_rejects_unsupported_op_type)
 	struct fi_wr_attr bad;
 	uint8_t wr[256];
 	size_t wr_len;
-
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
 
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
@@ -402,9 +444,6 @@ TEST_P(EfaWrRmaTest, prepare_rma_formats_rdma_op_type)
 	size_t wr_len;
 	int expected_op_type;
 
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	if (!efa_test_device_supports_rma())
 		GTEST_SKIP() << "device does not support RDMA read/write";
 
@@ -435,9 +474,6 @@ INSTANTIATE_TEST_SUITE_P(
  */
 TEST_F(EfaWrTest, queue_tx_rejects_null_wr)
 {
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
 	EXPECT_EQ(fi_wr_queue_tx(resource.ep, nullptr, nullptr), -FI_EINVAL);
@@ -456,9 +492,6 @@ TEST_F(EfaWrTest, queue_tx_batches_prepared_send)
 	uint8_t wr[256];
 	size_t wr_len;
 
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
 	if (!efa_test_ep_data_path_direct_enabled(resource.ep))
@@ -475,7 +508,6 @@ TEST_F(EfaWrTest, queue_tx_batches_prepared_send)
 	EXPECT_TRUE(efa_test_ep_tx_wr_pending(resource.ep));
 }
 
-
 /**
  * @brief fi_wr_prepare formats a receive into the caller's buffer, reports the
  * receive work request size in wr_len, and marks the final descriptor with the
@@ -486,9 +518,6 @@ TEST_F(EfaWrTest, prepare_recv_formats_rx_descs)
 	const struct fi_wr_attr *attr;
 	uint8_t wr[256];
 	size_t wr_len;
-
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
 
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 	ASSERT_NE(efa_test_wr_rx_size(1), 0u);
@@ -511,9 +540,6 @@ TEST_F(EfaWrTest, prepare_recv_rejects_too_small_buffer)
 	uint8_t wr[256];
 	size_t wr_len;
 
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 	ASSERT_NE(efa_test_wr_rx_size(1), 0u);
 
@@ -534,9 +560,6 @@ TEST_F(EfaWrTest, prepare_recv_rejects_missing_desc)
 	uint8_t wr[256];
 	size_t wr_len;
 
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
 	prepare_recv(&attr, &wr_len, false);
@@ -550,9 +573,6 @@ TEST_F(EfaWrTest, prepare_recv_rejects_missing_desc)
  */
 TEST_F(EfaWrTest, queue_recv_rejects_null_wr)
 {
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
 	EXPECT_EQ(fi_wr_queue_recv(resource.ep, nullptr, nullptr), -FI_EINVAL);
@@ -570,9 +590,6 @@ TEST_F(EfaWrTest, queue_recv_posts_prepared_recv)
 	uint8_t wr[256];
 	size_t wr_len;
 	unsigned int posted_before;
-
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
 
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
@@ -595,11 +612,699 @@ TEST_F(EfaWrTest, queue_recv_posts_prepared_recv)
  */
 TEST_F(EfaWrTest, queue_trecv_not_supported)
 {
-	if (!efa_test_wr_supported())
-		GTEST_SKIP() << "build lacks data path direct work requests";
-
 	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 
 	EXPECT_EQ(fi_wr_queue_trecv(resource.ep, nullptr, nullptr),
 		  -FI_ENOSYS);
 }
+
+class EfaWrModifyTest : public EfaWrTestBase, public Test
+{
+	protected:
+	void SetUp() override
+	{
+		setup();
+		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+		ASSERT_NO_FATAL_FAILURE(alloc_alt_mr());
+	}
+	void TearDown() override { teardown(); }
+};
+
+TEST_F(EfaWrModifyTest, modify_addr_rewrites_tx_ud_addr)
+{
+	const struct fi_wr_attr *attr;
+	fi_addr_t new_addr = FI_ADDR_NOTAVAIL;
+	uint16_t ahn, qpn, want_ahn, want_qpn, self_ahn;
+	uint32_t qkey, want_qkey;
+	size_t wr_len;
+	static struct ibv_ah dummy_ibv_ah;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(efa_test_av_ud_addr(resource.ep, peer_addr, &self_ahn,
+				      nullptr, nullptr),
+		  0);
+	EFA_EXPECT_CALL(mock_efa, ibv_create_ah, _, _)
+		.WillOnce(Return(&dummy_ibv_ah));
+	EFA_EXPECT_CALL(mock_efa, efadv_query_ah, &dummy_ibv_ah, _, _)
+		.WillOnce(Invoke([self_ahn](struct ibv_ah *, struct efadv_ah_attr *attr,
+					    uint32_t) {
+			attr->ahn = (uint16_t) (self_ahn + 1);
+			return 0;
+		}));
+	EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah, &dummy_ibv_ah)
+		.WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_av_insert_fake_gid(resource.ep, resource.av,
+					      &new_addr),
+		  1);
+	ASSERT_EQ(efa_test_av_ud_addr(resource.ep, new_addr, &want_ahn,
+				      &want_qpn, &want_qkey),
+		  0);
+
+	efa_test_wr_tx_ud_addr(wr(), &ahn, &qpn, &qkey);
+	ASSERT_NE(ahn, want_ahn);
+	ASSERT_NE(qpn, want_qpn);
+	ASSERT_NE(qkey, want_qkey);
+
+	EXPECT_EQ(fi_wr_modify_addr(resource.ep, wr(), FI_OP_SEND, new_addr),
+		  0);
+
+	efa_test_wr_tx_ud_addr(wr(), &ahn, &qpn, &qkey);
+	EXPECT_EQ(ahn, want_ahn);
+	EXPECT_EQ(qpn, want_qpn);
+	EXPECT_EQ(qkey, want_qkey);
+	EXPECT_EQ(efa_test_wr_tx_op_type(wr()), efa_test_wr_op_type_send());
+	EXPECT_EQ(fi_av_remove(resource.av, &new_addr, 1, 0), 0);
+}
+
+TEST_F(EfaWrModifyTest, modify_addr_rejects_unspec_on_tx)
+{
+	const struct fi_wr_attr *attr;
+	uint16_t ahn, qpn, want_ahn, want_qpn;
+	uint32_t qkey, want_qkey;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(efa_test_av_ud_addr(resource.ep, peer_addr, &want_ahn,
+				      &want_qpn, &want_qkey),
+		  0);
+
+	EXPECT_EQ(fi_wr_modify_addr(resource.ep, wr(), FI_OP_SEND,
+				    FI_ADDR_UNSPEC),
+		  -FI_EINVAL);
+
+	efa_test_wr_tx_ud_addr(wr(), &ahn, &qpn, &qkey);
+	EXPECT_EQ(ahn, want_ahn);
+	EXPECT_EQ(qpn, want_qpn);
+	EXPECT_EQ(qkey, want_qkey);
+}
+
+TEST_F(EfaWrModifyTest, modify_addr_rejects_addr_not_in_av)
+{
+	const struct fi_wr_attr *attr;
+	fi_addr_t addr_not_in_av = 4096;
+	uint16_t ahn, qpn, want_ahn, want_qpn;
+	uint32_t qkey, want_qkey;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(efa_test_av_ud_addr(resource.ep, peer_addr, &want_ahn,
+				      &want_qpn, &want_qkey),
+		  0);
+	ASSERT_EQ(efa_test_av_ud_addr(resource.ep, addr_not_in_av, nullptr,
+				      nullptr, nullptr),
+		  -1);
+
+	EXPECT_EQ(fi_wr_modify_addr(resource.ep, wr(), FI_OP_SEND,
+				    addr_not_in_av),
+		  -FI_EINVAL);
+
+	efa_test_wr_tx_ud_addr(wr(), &ahn, &qpn, &qkey);
+	EXPECT_EQ(ahn, want_ahn);
+	EXPECT_EQ(qpn, want_qpn);
+	EXPECT_EQ(qkey, want_qkey);
+}
+
+TEST_F(EfaWrModifyTest, modify_iov_replaces_send_sgl)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec new_iov;
+	void *new_desc = alt_desc;
+	uint64_t addr;
+	uint32_t len, lkey;
+	size_t wr_len;
+
+	ASSERT_GT((size_t) (EFA_TEST_WR_SEG_LEN / 2),
+		  efa_test_device_inline_buf_size());
+
+	prepare_send(&attr, &wr_len, 0, /*count=*/2,
+		     EFA_TEST_WR_SEG_LEN / 2);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_FALSE(efa_test_wr_tx_is_inline(wr()));
+	ASSERT_EQ(efa_test_wr_tx_length(wr()), 2);
+
+	new_iov.iov_base = alt_buf;
+	new_iov.iov_len = EFA_TEST_WR_SEG_LEN;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_SEND, &new_iov,
+				   &new_desc, 1),
+		  0);
+
+	EXPECT_FALSE(efa_test_wr_tx_is_inline(wr()));
+	EXPECT_EQ(efa_test_wr_tx_length(wr()), 1);
+
+	efa_test_wr_tx_sge(wr(), FI_OP_SEND, 0, &addr, &len, &lkey);
+	EXPECT_EQ(addr, (uint64_t) alt_buf);
+	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+	EXPECT_EQ(lkey, efa_test_mr_desc_lkey(alt_desc));
+	EXPECT_NE(lkey, efa_test_mr_desc_lkey(local_desc));
+}
+
+TEST_F(EfaWrModifyTest, modify_iov_replaces_send_inline_data)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec new_iov;
+	void *new_desc = alt_desc;
+	size_t prepared_len = 8, new_len = 16;
+	size_t wr_len;
+
+	if (efa_test_device_inline_buf_size() < new_len)
+		GTEST_SKIP() << "device inline buffer is too small";
+
+	prepare_send(&attr, &wr_len, 0, /*count=*/1, prepared_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_TRUE(efa_test_wr_tx_is_inline(wr()));
+	ASSERT_EQ(efa_test_wr_tx_length(wr()), prepared_len);
+
+	new_iov.iov_base = alt_buf;
+	new_iov.iov_len = new_len;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_SEND, &new_iov,
+				   &new_desc, 1),
+		  0);
+
+	EXPECT_TRUE(efa_test_wr_tx_is_inline(wr()));
+	EXPECT_EQ(efa_test_wr_tx_length(wr()), (uint16_t) new_len);
+	EXPECT_EQ(memcmp(efa_test_wr_tx_inline_data(wr(), FI_OP_SEND), alt_buf,
+			 new_len),
+		  0);
+}
+
+/**
+ * @brief An iov too long for the device to take inline re-formats the work
+ * request to carry buffer descriptors rather than refusing the modification,
+ * since inline is a choice the provider made at prepare and not a property the
+ * application asked of this work request.
+ */
+TEST_F(EfaWrModifyTest, modify_iov_converts_inline_to_sgl)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec new_iov;
+	void *new_desc = alt_desc;
+	size_t prepared_len = 8;
+	uint64_t addr;
+	uint32_t len, lkey;
+	size_t wr_len;
+
+	ASSERT_GT((size_t) EFA_TEST_WR_SEG_LEN,
+		  efa_test_device_inline_buf_size());
+
+	prepare_send(&attr, &wr_len, 0, /*count=*/1, prepared_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_TRUE(efa_test_wr_tx_is_inline(wr()));
+
+	new_iov.iov_base = alt_buf;
+	new_iov.iov_len = EFA_TEST_WR_SEG_LEN;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_SEND, &new_iov,
+				   &new_desc, 1),
+		  0);
+
+	EXPECT_FALSE(efa_test_wr_tx_is_inline(wr()));
+	/* an sgl work request carries its sge count, not a byte count */
+	EXPECT_EQ(efa_test_wr_tx_length(wr()), 1);
+	efa_test_wr_tx_sge(wr(), FI_OP_SEND, 0, &addr, &len, &lkey);
+	EXPECT_EQ(addr, (uint64_t) alt_buf);
+	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+	EXPECT_EQ(lkey, efa_test_mr_desc_lkey(alt_desc));
+}
+
+TEST_F(EfaWrModifyTest, modify_iov_rebuilds_recv_descs)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec new_iovs[2];
+	void *new_descs[2] = {alt_desc, alt_desc};
+	uint64_t addr;
+	uint16_t len;
+	uint32_t lkey;
+	size_t wr_len;
+
+	if (resource.info->rx_attr->iov_limit < 2u)
+		GTEST_SKIP() << "device takes a single receive segment";
+
+	prepare_recv(&attr, &wr_len, /*provide_desc=*/true, /*count=*/2);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	new_iovs[0].iov_base = alt_buf;
+	new_iovs[0].iov_len = 64;
+	new_iovs[1].iov_base = alt_buf + 64;
+	new_iovs[1].iov_len = 128;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_RECV, new_iovs,
+				   new_descs, 2),
+		  0);
+
+	efa_test_wr_rx_desc(wr(), 0, &addr, &len, &lkey);
+	EXPECT_EQ(addr, (uint64_t) alt_buf);
+	EXPECT_EQ(len, 64);
+	EXPECT_EQ(lkey, efa_test_mr_desc_lkey(alt_desc));
+	EXPECT_EQ(efa_test_wr_rx_desc_is_last(wr(), 0), 0);
+
+	efa_test_wr_rx_desc(wr(), 1, &addr, &len, &lkey);
+	EXPECT_EQ(addr, (uint64_t) (alt_buf + 64));
+	EXPECT_EQ(len, 128);
+	EXPECT_EQ(lkey, efa_test_mr_desc_lkey(alt_desc));
+	EXPECT_EQ(efa_test_wr_rx_desc_is_last(wr(), 1), 1);
+}
+
+TEST_F(EfaWrModifyTest, modify_iov_recv_rejects_missing_desc)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec new_iov;
+	void *new_desc = nullptr;
+	uint64_t addr;
+	size_t wr_len;
+
+	prepare_recv(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	new_iov.iov_base = alt_buf;
+	new_iov.iov_len = 64;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_RECV, &new_iov,
+				   &new_desc, 1),
+		  -FI_EINVAL);
+
+	efa_test_wr_rx_desc(wr(), 0, &addr, nullptr, nullptr);
+	EXPECT_EQ(addr, (uint64_t) local_buf);
+}
+
+TEST_F(EfaWrModifyTest, modify_rma_iov_rejects_non_rma_op)
+{
+	const struct fi_wr_attr *attr;
+	struct fi_rma_iov new_rma_iov;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	new_rma_iov.addr = (uint64_t) alt_buf;
+	new_rma_iov.len = EFA_TEST_WR_SEG_LEN;
+	new_rma_iov.key = fi_mr_key(alt_mr);
+
+	EXPECT_EQ(fi_wr_modify_rma_iov(resource.ep, wr(), FI_OP_SEND,
+				       &new_rma_iov, 1),
+		  -FI_EINVAL);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+class EfaWrModifyRmaTest : public EfaWrTestBase,
+			   public TestWithParam<efa_test_wr_rma_op>
+{
+	protected:
+	void SetUp() override
+	{
+		setup();
+		if (efa_test_device_probe() ||
+		    !efa_test_device_supports_rma())
+			GTEST_SKIP() << "device does not support RDMA "
+					"read/write";
+		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+		ASSERT_NO_FATAL_FAILURE(alloc_alt_mr());
+	}
+	void TearDown() override { teardown(); }
+
+	int expected_op_type()
+	{
+		return GetParam().op_type == FI_OP_WRITE ?
+			       efa_test_wr_op_type_rdma_write() :
+			       efa_test_wr_op_type_rdma_read();
+	}
+};
+
+TEST_P(EfaWrModifyRmaTest, modify_iov_moves_rdma_length)
+{
+	const struct fi_wr_attr *attr;
+	enum fi_op_type op_type = GetParam().op_type;
+	struct iovec new_iov;
+	void *new_desc = alt_desc;
+	uint64_t addr;
+	uint32_t len, lkey, rdma_len;
+	size_t wr_len;
+
+	prepare_rma(op_type, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_FALSE(efa_test_wr_tx_is_inline(wr()));
+	efa_test_wr_tx_rdma_addr(wr(), nullptr, nullptr, &rdma_len);
+	ASSERT_EQ(rdma_len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+
+	new_iov.iov_base = alt_buf;
+	new_iov.iov_len = EFA_TEST_WR_SEG_LEN / 2;
+
+	EXPECT_EQ(fi_wr_modify_iov(resource.ep, wr(), op_type, &new_iov,
+				   &new_desc, 1),
+		  0);
+
+	efa_test_wr_tx_sge(wr(), op_type, 0, &addr, &len, &lkey);
+	EXPECT_EQ(addr, (uint64_t) alt_buf);
+	EXPECT_EQ(len, (uint32_t) (EFA_TEST_WR_SEG_LEN / 2));
+	EXPECT_EQ(lkey, efa_test_mr_desc_lkey(alt_desc));
+	EXPECT_EQ(efa_test_wr_tx_length(wr()), 1);
+
+	efa_test_wr_tx_rdma_addr(wr(), nullptr, nullptr, &rdma_len);
+	EXPECT_EQ(rdma_len, (uint32_t) (EFA_TEST_WR_SEG_LEN / 2));
+	EXPECT_EQ(efa_test_wr_tx_op_type(wr()), expected_op_type());
+}
+
+TEST_P(EfaWrModifyRmaTest, modify_rma_iov_replaces_remote_buf)
+{
+	const struct fi_wr_attr *attr;
+	enum fi_op_type op_type = GetParam().op_type;
+	struct fi_rma_iov new_rma_iov;
+	uint64_t addr;
+	uint32_t rkey, len;
+	size_t wr_len;
+
+	prepare_rma(op_type, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	new_rma_iov.addr = (uint64_t) alt_buf;
+	new_rma_iov.len = EFA_TEST_WR_SEG_LEN;
+	new_rma_iov.key = fi_mr_key(alt_mr);
+	ASSERT_NE(new_rma_iov.key, fi_mr_key(local_mr));
+
+	EXPECT_EQ(fi_wr_modify_rma_iov(resource.ep, wr(), op_type, &new_rma_iov,
+				       1),
+		  0);
+
+	efa_test_wr_tx_rdma_addr(wr(), &addr, &rkey, &len);
+	EXPECT_EQ(addr, (uint64_t) alt_buf);
+	EXPECT_EQ(rkey, (uint32_t) fi_mr_key(alt_mr));
+	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+	EXPECT_EQ(efa_test_wr_tx_op_type(wr()), expected_op_type());
+}
+
+TEST_P(EfaWrModifyRmaTest, modify_rma_iov_rejects_length_mismatch)
+{
+	const struct fi_wr_attr *attr;
+	enum fi_op_type op_type = GetParam().op_type;
+	struct fi_rma_iov new_rma_iov;
+	uint64_t addr;
+	uint32_t rkey, len;
+	size_t wr_len;
+
+	prepare_rma(op_type, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	new_rma_iov.addr = (uint64_t) alt_buf;
+	new_rma_iov.len = EFA_TEST_WR_SEG_LEN / 2;
+	new_rma_iov.key = fi_mr_key(alt_mr);
+
+	EXPECT_EQ(fi_wr_modify_rma_iov(resource.ep, wr(), op_type, &new_rma_iov,
+				       1),
+		  -FI_EINVAL);
+
+	efa_test_wr_tx_rdma_addr(wr(), &addr, &rkey, &len);
+	EXPECT_EQ(addr, (uint64_t) (local_buf + EFA_TEST_WR_SEG_LEN));
+	EXPECT_EQ(rkey, (uint32_t) fi_mr_key(local_mr));
+	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+	EXPECT_EQ(efa_test_wr_tx_op_type(wr()), expected_op_type());
+}
+
+TEST_P(EfaWrModifyRmaTest, modify_rma_iov_rejects_count_other_than_one)
+{
+	const struct fi_wr_attr *attr;
+	enum fi_op_type op_type = GetParam().op_type;
+	struct fi_rma_iov new_rma_iov[2];
+	uint64_t addr;
+	uint32_t rkey;
+	size_t wr_len;
+
+	prepare_rma(op_type, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	for (size_t i = 0; i < 2; i++) {
+		new_rma_iov[i].addr = (uint64_t) alt_buf;
+		new_rma_iov[i].len = EFA_TEST_WR_SEG_LEN;
+		new_rma_iov[i].key = fi_mr_key(alt_mr);
+	}
+
+	for (size_t count : {(size_t) 0, (size_t) 2}) {
+		EXPECT_EQ(fi_wr_modify_rma_iov(resource.ep, wr(), op_type,
+					       new_rma_iov, count),
+			  -FI_EINVAL)
+			<< "count " << count;
+
+		efa_test_wr_tx_rdma_addr(wr(), &addr, &rkey, nullptr);
+		EXPECT_EQ(addr, (uint64_t) (local_buf + EFA_TEST_WR_SEG_LEN));
+		EXPECT_EQ(rkey, (uint32_t) fi_mr_key(local_mr));
+		EXPECT_EQ(efa_test_wr_tx_op_type(wr()), expected_op_type());
+	}
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaWrModifyRmaTest,
+	Values(efa_test_wr_rma_op{FI_OP_WRITE, "write"},
+	       efa_test_wr_rma_op{FI_OP_READ, "read"}),
+	[](const testing::TestParamInfo<efa_test_wr_rma_op> &info) {
+		return std::string(info.param.name);
+	});
+
+TEST_F(EfaWrModifyTest, modify_tag_not_supported)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	EXPECT_EQ(fi_wr_modify_tag(resource.ep, wr(), FI_OP_SEND, 0x1, 0),
+		  -FI_ENOSYS);
+}
+
+TEST_F(EfaWrModifyTest, modify_data_replaces_imm_data)
+{
+	const struct fi_wr_attr *attr;
+	uint32_t imm_data = 0x1234abcd, new_imm_data = 0xfeed5678;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len, FI_REMOTE_CQ_DATA, /*count=*/1,
+		     EFA_TEST_WR_SEG_LEN, imm_data);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_TRUE(efa_test_wr_tx_has_imm(wr()));
+	ASSERT_EQ(efa_test_wr_tx_imm_data(wr()), imm_data);
+
+	EXPECT_EQ(fi_wr_modify_data(resource.ep, wr(), FI_OP_SEND,
+				    new_imm_data),
+		  0);
+
+	EXPECT_EQ(efa_test_wr_tx_imm_data(wr()), new_imm_data);
+	EXPECT_TRUE(efa_test_wr_tx_has_imm(wr()));
+}
+
+TEST_F(EfaWrModifyTest, modify_data_rejects_wr_without_remote_cq_data)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_FALSE(efa_test_wr_tx_has_imm(wr()));
+
+	EXPECT_EQ(fi_wr_modify_data(resource.ep, wr(), FI_OP_SEND, 0x1234abcd),
+		  -FI_EINVAL);
+
+	EXPECT_FALSE(efa_test_wr_tx_has_imm(wr()));
+	EXPECT_EQ(efa_test_wr_tx_imm_data(wr()), 0u);
+}
+
+TEST_F(EfaWrModifyTest, modify_data_rejects_recv_op)
+{
+	const struct fi_wr_attr *attr;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+
+	prepare_recv(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	EXPECT_EQ(fi_wr_modify_data(resource.ep, wr(), FI_OP_RECV, 0x1234abcd),
+		  -FI_EINVAL);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+class EfaWrModifyFlagsImmTest : public EfaWrTestBase,
+				public TestWithParam<bool>
+{
+	protected:
+	void SetUp() override
+	{
+		setup();
+		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+	}
+	void TearDown() override { teardown(); }
+};
+
+TEST_P(EfaWrModifyFlagsImmTest, modify_flags_cannot_change_remote_cq_data)
+{
+	const struct fi_wr_attr *attr;
+	bool with_imm = GetParam();
+	uint64_t flags = with_imm ? FI_REMOTE_CQ_DATA : 0;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len, flags, /*count=*/1, EFA_TEST_WR_SEG_LEN,
+		     0x1234abcd);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(!!efa_test_wr_tx_has_imm(wr()), with_imm);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND,
+				     with_imm ? 0 : FI_REMOTE_CQ_DATA),
+		  -FI_EINVAL);
+	EXPECT_EQ(!!efa_test_wr_tx_has_imm(wr()), with_imm);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND,
+				     with_imm ? FI_REMOTE_CQ_DATA : 0),
+		  0);
+	EXPECT_EQ(!!efa_test_wr_tx_has_imm(wr()), with_imm);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaWrModifyFlagsImmTest, Bool(),
+	[](const testing::TestParamInfo<bool> &info) {
+		return std::string(info.param ? "with_remote_cq_data" :
+						"without_remote_cq_data");
+	});
+
+TEST_F(EfaWrModifyTest, modify_flags_rejects_high_pps_on_send)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND,
+				     FI_EFA_WR_HIGH_PPS),
+		  -FI_EINVAL);
+	EXPECT_EQ(efa_test_wr_tx_processing_hints(wr()), 0);
+}
+
+TEST_F(EfaWrModifyTest, modify_flags_on_recv_is_noop)
+{
+	const struct fi_wr_attr *attr;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+
+	prepare_recv(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_RECV,
+				     FI_REMOTE_CQ_DATA),
+		  0);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+TEST_F(EfaWrModifyTest, modify_flags_sets_and_clears_high_pps)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	if (efa_test_device_probe() ||
+	    !efa_test_device_supports_rma())
+		GTEST_SKIP() << "device does not support RDMA read/write";
+
+	prepare_rma(FI_OP_WRITE, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(efa_test_wr_tx_processing_hints(wr()), 0);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_WRITE,
+				     FI_EFA_WR_HIGH_PPS),
+		  0);
+	EXPECT_EQ(efa_test_wr_tx_processing_hints(wr()),
+		  efa_test_wr_processing_hint_high_pps());
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_WRITE, 0), 0);
+	EXPECT_EQ(efa_test_wr_tx_processing_hints(wr()), 0);
+}
+
+/**
+ * @brief A flag the endpoint did not advertise is rejected rather than dropped,
+ * so an application cannot transmit believing it got a semantic the device was
+ * never told about.
+ */
+TEST_F(EfaWrModifyTest, modify_flags_rejects_unadvertised_flag)
+{
+	const struct fi_wr_attr *attr;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND, FI_FENCE),
+		  -FI_EBADFLAGS);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+/**
+ * @brief The unsupported flag check precedes the receive path, which otherwise
+ * accepts any flags because a receive descriptor carries none of them.
+ */
+TEST_F(EfaWrModifyTest, modify_flags_rejects_unsupported_flag_on_recv)
+{
+	const struct fi_wr_attr *attr;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+
+	prepare_recv(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_RECV,
+				     FI_MULTI_RECV),
+		  -FI_EBADFLAGS);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+/**
+ * @brief The completion semantics the endpoint advertises, and FI_COMPLETION,
+ * are accepted and change nothing: the device has one completion behavior and
+ * the work request always requests a completion. An application that passes
+ * its full flag set on each call is therefore not forced to strip them.
+ */
+TEST_F(EfaWrModifyTest, modify_flags_accepts_advertised_completion_semantics)
+{
+	const struct fi_wr_attr *attr;
+	std::vector<uint8_t> prepared;
+	size_t wr_len;
+	/* the layout flags are covered on their own, below */
+	uint64_t flags = FI_COMPLETION |
+			 (resource.info->tx_attr->op_flags &
+			  ~(FI_INJECT | FI_REMOTE_CQ_DATA));
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	prepared = wr_buf;
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND, flags), 0);
+	EXPECT_EQ(memcmp(wr(), prepared.data(), wr_len), 0);
+}
+
+/**
+ * @brief FI_INJECT cannot be added to a work request whose buffers were
+ * formatted as a scatter-gather list, since the data would have to move into
+ * the descriptor itself.
+ */
+TEST_F(EfaWrModifyTest, modify_flags_cannot_add_inject_to_sgl_wr)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_FALSE(efa_test_wr_tx_is_inline(wr()));
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND, FI_INJECT),
+		  -FI_EINVAL);
+	EXPECT_FALSE(efa_test_wr_tx_is_inline(wr()));
+}
+
+
+#endif /* HAVE_EFA_DATA_PATH_DIRECT */

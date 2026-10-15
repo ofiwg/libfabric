@@ -311,6 +311,110 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 	return 0;
 }
 
+static inline bool efa_wr_op_is_tx(enum fi_op_type op_type)
+{
+	return op_type == FI_OP_SEND || op_type == FI_OP_READ || op_type == FI_OP_WRITE;
+}
+
+/**
+ * @brief Replace the local buffers of a formatted transmit work request
+ *
+ * Sends keep their buffer descriptors in the top level sgl, while RDMA keeps
+ * them in the rdma_req alongside the remote address, so the target area depends
+ * on the operation. An RDMA transfer length is the total of its local buffers,
+ * so it is recomputed here; a send's length comes from the descriptors
+ * themselves and needs no fixup.
+ *
+ */
+static inline int efa_wr_setup_tx_sgl(struct efa_base_ep *base_ep,
+				      struct efa_io_tx_wqe_128 *wqe,
+				      enum fi_op_type op_type,
+				      const struct iovec *iov, void **desc,
+				      size_t count)
+{
+	struct efa_io_tx_meta_desc *meta = &wqe->meta;
+	bool is_rdma = op_type == FI_OP_READ || op_type == FI_OP_WRITE;
+	struct ibv_sge sg_list[EFA_IO_TX_DESC_NUM_BUFS];
+	struct efa_io_tx_buf_desc *tx_bufs;
+	int err;
+
+	assert(!EFA_GET(&meta->ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG));
+
+	if (is_rdma) {
+		assert(count <= EFA_IO_TX_DESC_NUM_RDMA_BUFS);
+		tx_bufs = wqe->data.rdma_req.local_mem;
+	} else {
+		assert(count <= EFA_IO_TX_DESC_NUM_BUFS);
+		tx_bufs = wqe->data.sgl;
+	}
+
+	err = efa_msg_setup_sge_list(base_ep, iov, desc, count, sg_list);
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	efa_data_path_direct_set_sgl(tx_bufs, meta, sg_list, count);
+
+	if (is_rdma)
+		wqe->data.rdma_req.remote_mem.length =
+			efa_sge_total_bytes(sg_list, count);
+
+	return 0;
+}
+
+/**
+ * @brief Format a transmit work request whose inline flag is set
+ *
+ * Continue using inline, or fall back to efa_wr_setup_tx_sgl() when inline does
+ * not apply.
+ */
+static inline int efa_wr_setup_tx_inline_or_sgl(struct efa_base_ep *base_ep,
+					 struct efa_io_tx_wqe_128 *wqe,
+					 enum fi_op_type op_type,
+					 const struct iovec *iov, void **desc,
+					 size_t count)
+{
+	struct ibv_data_buf inline_data_list[EFA_IO_TX_DESC_NUM_BUFS];
+	bool is_rdma = op_type == FI_OP_READ || op_type == FI_OP_WRITE;
+	size_t inline_size;
+	size_t len;
+
+	assert(EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG));
+
+	len = ofi_total_iov_len(iov, count);
+
+	if (is_rdma) {
+		assert(op_type == FI_OP_WRITE);
+		assert(count <= EFA_IO_TX_DESC_NUM_RDMA_BUFS);
+		inline_size = base_ep->qp->max_inline_write;
+	} else {
+		assert(count <= EFA_IO_TX_DESC_NUM_BUFS);
+		inline_size = base_ep->qp->max_inline_send;
+		if (count && base_ep->qp->ibv_qp->qp_type == IBV_QPT_UD) {
+			if (OFI_UNLIKELY(iov[0].iov_len <
+					 base_ep->info->ep_attr->msg_prefix_size))
+				return -FI_EINVAL;
+			len -= base_ep->info->ep_attr->msg_prefix_size;
+		}
+	}
+
+	if (!efa_msg_use_inline(desc, count, len, inline_size, 0)) {
+		EFA_SET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG, 0);
+		/* clear inline data so unused SGL slots are zeroed */
+		memset(&wqe->data, 0, sizeof(wqe->data));
+		return efa_wr_setup_tx_sgl(base_ep, wqe, op_type, iov, desc,
+					   count);
+	}
+
+	efa_msg_setup_inline_data_list(base_ep, iov, count, inline_data_list);
+
+	if (is_rdma)
+		efa_data_path_direct_set_rdma_inline_data(wqe, inline_data_list[0].addr, len);
+	else
+		efa_data_path_direct_set_inline_data(wqe, count, inline_data_list);
+
+	return 0;
+}
+
 /**
  * @brief Format a receive work request
  *
@@ -321,40 +425,56 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
  * left out, because it belongs to the queue slot rather than to the operation
  * and is patched in at queue time.
  */
-static inline int efa_wr_prepare_recv(struct efa_base_ep *base_ep,
-				      const struct fi_op_msg *op_msg,
-				      struct efa_io_rx_desc *rx_buf)
+static inline int efa_wr_setup_rx_buf(struct efa_base_ep *base_ep,
+					struct efa_io_rx_desc *rx_buf,
+					const struct iovec *iov, void **desc,
+					size_t count)
 {
-	const struct fi_msg *msg = &op_msg->msg;
 	struct efa_mr *efa_mr;
 	size_t i;
 
-	assert(msg->iov_count <= base_ep->info->rx_attr->iov_limit);
+	assert(count <= base_ep->info->rx_attr->iov_limit);
 
 	if (base_ep->qp->ibv_qp->qp_type == IBV_QPT_UD &&
-	    OFI_UNLIKELY(msg->msg_iov[0].iov_len <
+	    OFI_UNLIKELY(iov[0].iov_len <
 			 base_ep->info->ep_attr->msg_prefix_size)) {
 		EFA_WARN(FI_LOG_EP_DATA,
 			 "prefix not present on first iov, iov_len[%zu]\n",
-			 msg->msg_iov[0].iov_len);
+			 iov[0].iov_len);
 		return -FI_EINVAL;
 	}
 
-	for (i = 0; i < msg->iov_count; i++) {
-		if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+	/*
+	 * Validate every descriptor before writing any of them to avoid failing partway
+	 */
+	for (i = 0; i < count; i++) {
+		if (OFI_UNLIKELY(!desc || !desc[i])) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "EFA direct requires FI_MR_LOCAL but "
 				 "application does not provide a valid desc\n");
 			return -FI_EINVAL;
 		}
-		efa_mr = (struct efa_mr *) msg->desc[i];
+	}
 
-		efa_set_rx_buf(&rx_buf[i], (uintptr_t) msg->msg_iov[i].iov_base,
-			       efa_mr->lkey, msg->msg_iov[i].iov_len,
-			       i == msg->iov_count - 1);
+	for (i = 0; i < count; i++) {
+		efa_mr = (struct efa_mr *) desc[i];
+
+		efa_set_rx_buf(&rx_buf[i], (uintptr_t) iov[i].iov_base,
+			       efa_mr->lkey, iov[i].iov_len,
+			       i == count - 1);
 	}
 
 	return 0;
+}
+
+static inline int efa_wr_prepare_recv(struct efa_base_ep *base_ep,
+				      const struct fi_op_msg *op_msg,
+				      struct efa_io_rx_desc *rx_buf)
+{
+	const struct fi_msg *msg = &op_msg->msg;
+
+	return efa_wr_setup_rx_buf(base_ep, rx_buf, msg->msg_iov, msg->desc,
+				     msg->iov_count);
 }
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */
 
@@ -547,21 +667,109 @@ static ssize_t efa_wr_queue_trecv(struct fid_ep *ep_fid, const fi_wr wr,
 static int efa_wr_modify_addr(struct fid_ep *ep_fid, fi_wr wr,
 			      enum fi_op_type op_type, fi_addr_t addr)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_base_ep *base_ep;
+	struct efa_io_tx_wqe_128 *wqe = wr;
+	struct efa_av_entry *entry;
+
+	EFA_DBG(FI_LOG_EP_DATA, "ep: %p, wr: %p, op_type: %d, addr: %lu\n",
+		ep_fid, wr, op_type, addr);
+
+	assert(wr);
+
+	if (!efa_wr_op_is_tx(op_type))
+		return 0;
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_UNSPEC))
+		return -FI_EINVAL;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+
+	entry = efa_av_addr_to_entry(base_ep->av, addr);
+	if (OFI_UNLIKELY(!entry))
+		return -FI_EINVAL;
+
+	efa_data_path_direct_set_ud_addr(&wqe->meta, entry->ah,
+					 efa_av_entry_ep_addr(entry)->qpn,
+					 efa_av_entry_ep_addr(entry)->qkey);
+	return 0;
+#else
 	return -FI_ENOSYS;
+#endif
 }
 
 static int efa_wr_modify_iov(struct fid_ep *ep_fid, fi_wr wr,
 			     enum fi_op_type op_type, const struct iovec *iov,
 			     void **desc, size_t count)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_io_tx_wqe_128 *wqe = wr;
+	struct efa_base_ep *base_ep;
+
+	EFA_DBG(FI_LOG_EP_DATA,
+		"ep: %p, wr: %p, op_type: %d, iov_count: %zu\n", ep_fid, wr,
+		op_type, count);
+
+	assert(wr && (!count || (iov && desc)));
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+
+	if (efa_wr_op_is_tx(op_type)) {
+		if (EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG))
+			return efa_wr_setup_tx_inline_or_sgl(base_ep, wqe, op_type,
+						      iov, desc, count);
+
+		return efa_wr_setup_tx_sgl(base_ep, wqe, op_type, iov, desc,
+					   count);
+	}
+	return efa_wr_setup_rx_buf(base_ep, wr, iov, desc, count);
+#else
 	return -FI_ENOSYS;
+#endif
 }
 
 static int efa_wr_modify_rma_iov(struct fid_ep *ep_fid, fi_wr wr,
 				 enum fi_op_type op_type,
 				 const struct fi_rma_iov *rma_iov, size_t count)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_io_tx_wqe_128 *wqe = wr;
+
+	EFA_DBG(FI_LOG_EP_DATA,
+		"ep: %p, wr: %p, op_type: %d, rma_iov_count: %zu\n", ep_fid, wr,
+		op_type, count);
+
+	assert(wr && rma_iov);
+
+	if (OFI_UNLIKELY(op_type != FI_OP_READ && op_type != FI_OP_WRITE)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "only an rma work request has a remote buffer, "
+			 "op_type %d does not\n", op_type);
+		return -FI_EINVAL;
+	}
+
+	if (OFI_UNLIKELY(count != EFA_IO_TX_DESC_NUM_RDMA_BUFS)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "EFA device takes %d remote buffer for rma "
+			 "operations, not %zu\n",
+			 EFA_IO_TX_DESC_NUM_RDMA_BUFS, count);
+		return -FI_EINVAL;
+	}
+
+	if (OFI_UNLIKELY(rma_iov[0].len !=
+			 wqe->data.rdma_req.remote_mem.length)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "rma_iov length %zu does not match the work request's "
+			 "length of %u, use fi_wr_modify_iov to change it\n",
+			 rma_iov[0].len, wqe->data.rdma_req.remote_mem.length);
+		return -FI_EINVAL;
+	}
+
+	efa_send_wr_set_rdma_addr(&wqe->data.rdma_req.remote_mem, rma_iov[0].key, rma_iov[0].addr);
+	return 0;
+#else
 	return -FI_ENOSYS;
+#endif
 }
 
 static int efa_wr_modify_tag(struct fid_ep *ep_fid, fi_wr wr,
@@ -574,13 +782,96 @@ static int efa_wr_modify_tag(struct fid_ep *ep_fid, fi_wr wr,
 static int efa_wr_modify_data(struct fid_ep *ep_fid, fi_wr wr,
 			      enum fi_op_type op_type, uint64_t data)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_io_tx_wqe_128 *wqe = wr;
+
+	EFA_DBG(FI_LOG_EP_DATA, "ep: %p, wr: %p, op_type: %d, data: %lu\n",
+		ep_fid, wr, op_type, data);
+
+	assert(wr);
+
+	if (OFI_UNLIKELY(!efa_wr_op_is_tx(op_type))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "only a transmit work request carries remote CQ data, "
+			 "op_type %d does not\n", op_type);
+		return -FI_EINVAL;
+	}
+
+	if (OFI_UNLIKELY(!EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_HAS_IMM))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "work request was not prepared with FI_REMOTE_CQ_DATA, "
+			 "so it carries no remote CQ data to set\n");
+		return -FI_EINVAL;
+	}
+
+	efa_send_wr_set_imm_data(&wqe->meta, (__be32) data);
+	return 0;
+#else
 	return -FI_ENOSYS;
+#endif
 }
+
+#define EFA_WR_SUPPORTED_FLAGS \
+	(FI_REMOTE_CQ_DATA | FI_INJECT | FI_COMPLETION | \
+	 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE | FI_EFA_WR_HIGH_PPS)
 
 static int efa_wr_modify_flags(struct fid_ep *ep_fid, fi_wr wr,
 			       enum fi_op_type op_type, uint64_t flags)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_io_tx_wqe_128 *wqe = wr;
+
+	EFA_DBG(FI_LOG_EP_DATA, "ep: %p, wr: %p, op_type: %d, flags: %lx\n",
+		ep_fid, wr, op_type, flags);
+
+	assert(wr);
+
+	if (OFI_UNLIKELY(flags & ~EFA_WR_SUPPORTED_FLAGS)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "flags %lx cannot be applied to a formatted work "
+			 "request\n", flags);
+		return -FI_EBADFLAGS;
+	}
+
+	/* a receive descriptor carries none of the remaining flags */
+	if (!efa_wr_op_is_tx(op_type))
+		return 0;
+
+	if (OFI_UNLIKELY(
+		    !!(flags & FI_REMOTE_CQ_DATA) !=
+		    !!EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_HAS_IMM))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_REMOTE_CQ_DATA cannot be added to a work request "
+			 "that was not prepared with it\n");
+		return -FI_EINVAL;
+	}
+
+	if (OFI_UNLIKELY((flags & FI_INJECT) &&
+			 !EFA_GET(&wqe->meta.ctrl1,
+				  EFA_IO_TX_META_DESC_INLINE_MSG))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_INJECT cannot be added to a work request that was "
+			 "not formatted with inline data\n");
+		return -FI_EINVAL;
+	}
+
+	if (flags & FI_EFA_WR_HIGH_PPS) {
+		if (OFI_UNLIKELY(op_type != FI_OP_WRITE)) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "FI_EFA_WR_HIGH_PPS applies to rma write, "
+				 "op_type %d does not\n", op_type);
+			return -FI_EINVAL;
+		}
+		efa_send_wr_set_processing_hint_high_pps(&wqe->meta);
+	} else {
+		EFA_SET(&wqe->meta.ctrl3, EFA_IO_TX_META_DESC_PROCESSING_HINTS,
+			0);
+	}
+
+	return 0;
+#else
 	return -FI_ENOSYS;
+#endif
 }
 
 struct fi_ops_wr efa_wr_ops = {
