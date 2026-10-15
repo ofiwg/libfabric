@@ -10,8 +10,11 @@
 #define EFA_GTEST_WR_UTILS_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <rdma/fabric.h>
+#include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
+#include <rdma/fi_trigger.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,6 +35,19 @@ size_t efa_test_ep_recv_wr_index(struct fid_ep *ep_fid);
 int efa_test_ep_tx_wr_pending(struct fid_ep *ep_fid);
 
 /**
+ * @brief The provider's transmit work request size, i.e. efa_wr_tx_size().
+ * Bridged so the C++ test need not link the C-linkage efa_wr.h symbol.
+ */
+size_t efa_test_wr_tx_size(void);
+
+size_t efa_test_wr_rx_size(size_t num_sge);
+
+uint32_t efa_test_mr_desc_lkey(void *desc);
+
+int efa_test_av_ud_addr(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			uint16_t *qpn, uint32_t *qkey);
+
+/**
  * @brief Whether this build and the endpoint's QP have the direct data path
  * enabled, i.e. whether efa_wr_queue_tx reaches a live send queue. Tests that
  * post to the send queue skip when this is false.
@@ -39,17 +55,13 @@ int efa_test_ep_tx_wr_pending(struct fid_ep *ep_fid);
 int efa_test_ep_data_path_direct_enabled(struct fid_ep *ep_fid);
 
 /**
- * @brief Whether this build implements the work request transmit interface,
- * i.e. HAVE_EFA_DATA_PATH_DIRECT. When false, efa_wr_prepare/efa_wr_queue_tx
- * return -FI_ENOSYS and the formatting tests skip.
+ * @brief The count of send queue entries batched but not yet initiated on the
+ * endpoint's QP (sq.num_wqe_pending). Only meaningful when
+ * efa_test_ep_data_path_direct_enabled() is true.
  */
-int efa_test_wr_supported(void);
+unsigned int efa_test_ep_tx_num_wqe_pending(struct fid_ep *ep_fid);
 
-/**
- * @brief The provider's transmit work request size, i.e. efa_wr_tx_size().
- * Bridged so the C++ test need not link the C-linkage efa_wr.h symbol.
- */
-size_t efa_test_wr_tx_size(void);
+unsigned int efa_test_ep_rx_wqe_posted(struct fid_ep *ep_fid);
 
 /**
  * @brief The op_type (enum efa_io_send_op_type: EFA_IO_SEND / EFA_IO_RDMA_READ
@@ -68,18 +80,34 @@ int efa_test_wr_op_type_send(void);
 int efa_test_wr_op_type_rdma_read(void);
 int efa_test_wr_op_type_rdma_write(void);
 
-/**
- * @brief The count of send queue entries batched but not yet initiated on the
- * endpoint's QP (sq.num_wqe_pending). Only meaningful when
- * efa_test_ep_data_path_direct_enabled() is true.
- */
-unsigned int efa_test_ep_tx_num_wqe_pending(struct fid_ep *ep_fid);
-
-size_t efa_test_wr_rx_size(size_t num_sge);
-
 int efa_test_wr_rx_desc_is_last(const void *wr, size_t index);
 
-unsigned int efa_test_ep_rx_wqe_posted(struct fid_ep *ep_fid);
+void efa_test_wr_tx_ud_addr(const void *wr, uint16_t *ahn, uint16_t *qpn,
+			    uint32_t *qkey);
+
+int efa_test_wr_tx_is_inline(const void *wr);
+
+uint16_t efa_test_wr_tx_length(const void *wr);
+
+int efa_test_wr_tx_has_imm(const void *wr);
+
+uint32_t efa_test_wr_tx_imm_data(const void *wr);
+
+int efa_test_wr_tx_processing_hints(const void *wr);
+
+int efa_test_wr_processing_hint_high_pps(void);
+
+void efa_test_wr_tx_sge(const void *wr, enum fi_op_type op_type, size_t index,
+			uint64_t *addr, uint32_t *len, uint32_t *lkey);
+
+const void *efa_test_wr_tx_inline_data(const void *wr,
+				       enum fi_op_type op_type);
+
+void efa_test_wr_tx_rdma_addr(const void *wr, uint64_t *addr, uint32_t *rkey,
+			      uint32_t *len);
+
+void efa_test_wr_rx_desc(const void *wr, size_t index, uint64_t *addr,
+			 uint16_t *len, uint32_t *lkey);
 
 #ifdef __cplusplus
 }
