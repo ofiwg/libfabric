@@ -352,7 +352,6 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	struct efadv_wq_attr qp_rq_attr = {0};
 	uint32_t api_version;
 	bool has_caps_field;
-	bool has_block_offset_field;
 	size_t attr_size;
 	int ret;
 
@@ -360,7 +359,6 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	api_version =
 		base_ep->domain->util_domain.fabric->fabric_fid.api_version;
 	has_caps_field = FI_VERSION_GE(api_version, FI_VERSION(2, 7));
-	has_block_offset_field = FI_VERSION_GE(api_version, FI_VERSION(2, 8));
 	attr_size = efa_wq_attr_size(api_version);
 
 	memset(sq_attr, 0, attr_size);
@@ -402,7 +400,7 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 #endif
 	}
 #if HAVE_EFADV_COMP_ACTION
-	if (has_block_offset_field &&
+	if (FI_VERSION_GE(api_version, FI_VERSION(2, 8)) &&
 	    (qp_sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA))
 		sq_attr->comp_action_with_data_block_offset =
 			qp_sq_attr.comp_action_with_data_block_offset;
