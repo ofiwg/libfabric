@@ -369,7 +369,6 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	struct efa_domain *efa_domain;
 	struct fid_ep *ep = NULL;
 	struct ofi_bufpool *src_pool;
-	struct ofi_bufpool *src_bounce_pool;
 	enum efa_rdm_pke_alloc_type src_alloc_type;
 	struct efa_rdm_mr cuda_mr = {0};
 	char buf[16];
@@ -406,14 +405,12 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	 * into the read-copy pool and free the original */
 	if (force_clone) {
 		src_pool = efa_rdm_ep->rx_ooo_pkt_pool;
-		src_bounce_pool = efa_rdm_ep->rx_ooo_bounce_pool;
 		src_alloc_type = EFA_RDM_PKE_FROM_OOO_POOL;
 	} else {
 		src_pool = efa_rdm_ep->efa_rx_pkt_pool;
-		src_bounce_pool = efa_rdm_ep->efa_rx_bounce_pool;
 		src_alloc_type = EFA_RDM_PKE_FROM_EFA_RX_POOL;
 	}
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, src_pool, src_bounce_pool, src_alloc_type);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, src_pool, src_alloc_type);
 	assert_non_null(pkt_entry);
 	pkt_entry->payload = pkt_entry->wiredata;
 	pkt_entry->payload_size = sizeof buf;
@@ -1120,7 +1117,6 @@ void test_efa_rdm_pke_receipt_drops_stale_txe_id(void **state)
 	assert_int_not_equal(stale_id, reused->tx_id);
 
 	receipt_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-					ep->efa_rx_bounce_pool,
 					EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(receipt_pke);
 	receipt_pke->ep = ep;
@@ -1263,7 +1259,7 @@ void test_efa_rdm_txe_prepare_local_read_pkt_entry(void **state)
 	efa_rdm_txe_construct(txe, efa_rdm_ep, NULL, &msg, ofi_op_msg, 0, 0);
 
 	/* Use ooo rx pkt because it doesn't have mr so a read_copy pkt clone is enforced. */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_ooo_pkt_pool, efa_rdm_ep->rx_ooo_bounce_pool, EFA_RDM_PKE_FROM_OOO_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
 	pkt_entry->payload_size = 4;
 	pkt_entry->payload = pkt_entry->wiredata + 16;
 	pkt_entry->pkt_size = 32;
@@ -1946,7 +1942,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 	}
 
 	/* Create request packet entry */
-	req_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	req_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(req_pkt_entry);
 	efa_rdm_pke_set_ope(req_pkt_entry, txe);
 	req_pkt_entry->ep = efa_rdm_ep;
@@ -1963,7 +1959,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 
 	/* Create response packet entry (not needed for RTR which uses efa_rdm_ope_handle_recv_completed) */
 	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
-		resp_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		resp_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(resp_pkt_entry);
 		efa_rdm_pke_set_ope(resp_pkt_entry, txe);
 		resp_pkt_entry->ep = efa_rdm_ep;
@@ -2249,7 +2245,7 @@ static void test_efa_rdm_ope_longcts_cts_release_common(struct efa_resource *res
 		ope->state = EFA_RDM_RXE_RECV;
 
 	/* Create fake CTS packet entry */
-	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(cts_pkt_entry);
 	efa_rdm_pke_set_ope(cts_pkt_entry, ope);
 	cts_pkt_entry->ep = efa_rdm_ep;
@@ -2388,7 +2384,7 @@ static void test_efa_rdm_rxe_dc_longcts_write_cts_receipt_order_common(
 	rxe->state = EFA_RDM_RXE_RECV;
 
 	/* Create fake CTS packet entry */
-	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(cts_pkt_entry);
 	efa_rdm_pke_set_ope(cts_pkt_entry, rxe);
 	cts_pkt_entry->ep = efa_rdm_ep;
@@ -2982,7 +2978,6 @@ static void run_longread_read_error(struct efa_resource *resource,
 			  base_ep.util_ep.ep_fid);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
@@ -3822,7 +3817,6 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 	rxe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
@@ -3906,7 +3900,6 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 
 	/* Build the TX pkt_entry that owns the rxe. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
@@ -4099,7 +4092,6 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	rxe->efa_outstanding_tx_ops += 3;
 
 	pkt1 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				 ep->efa_tx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt1);
 	efa_rdm_pke_set_ope(pkt1, rxe);
@@ -4111,7 +4103,6 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
 
 	pkt2 = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				 ep->efa_tx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt2);
 	efa_rdm_pke_set_ope(pkt2, rxe);
@@ -4195,7 +4186,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 
 	/* Build the inbound PEER_ERROR_PKT pointing at our txe via send_id. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -4297,7 +4287,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 
 	/* Build the inbound PEER_ERROR_PKT pointing at our rxe via recv_id. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted += 1;
@@ -4397,7 +4386,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 
 	/* Build the inbound PEER_ERROR_PKT pointing at our tagged rxe via recv_id. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted += 1;
@@ -4474,7 +4462,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_eager_unexpected_tears_down(
 	/* Allocate the inbound PEER_ERROR pke early (efa_rx_pkt_pool has
 	 * limited entries). */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -4504,7 +4491,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_eager_unexpected_tears_down(
 	rxe->msg_id = msg_id;
 
 	unexp_pkt = efa_rdm_pke_alloc(ep, ep->rx_unexp_pkt_pool,
-				      ep->rx_unexp_bounce_pool,
 				      EFA_RDM_PKE_FROM_UNEXP_POOL);
 	assert_non_null(unexp_pkt);
 	rxe->unexp_pkt = unexp_pkt;
@@ -4569,7 +4555,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight), 0);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -4870,7 +4855,6 @@ void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state)
 
 	/* Deliver the peer's handshake advertising PEER_ERROR support. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted += 1;
@@ -5405,7 +5389,6 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	 * support so no PEER_ERROR_PKT; drain is a no-op (sibling still
 	 * outstanding), and the user error completion is deferred. */
 	fail_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				     ep->efa_tx_bounce_pool,
 				     EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(fail_pkt);
 	efa_rdm_pke_set_ope(fail_pkt, rxe);
@@ -5426,7 +5409,6 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	 * context releases the pkt itself, so do not touch ok_pkt
 	 * after the call. */
 	ok_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				   ep->efa_tx_bounce_pool,
 				   EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(ok_pkt);
 	efa_rdm_pke_set_ope(ok_pkt, rxe);
@@ -5531,7 +5513,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 
 	/* Simulate a CTS in flight on this rxe (window refill). */
 	cts_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				    ep->efa_tx_bounce_pool,
 				    EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(cts_pkt);
 	efa_rdm_pke_set_ope(cts_pkt, rxe);
@@ -5544,7 +5525,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 
 	/* Inbound PEER_ERROR_PKT (LONGCTS direction) targeting our rxe. */
 	err_pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				    ep->efa_rx_bounce_pool,
 				    EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(err_pkt);
 	ep->efa_rx_pkts_posted += 1;
@@ -5593,7 +5573,6 @@ static void run_rtm_tx_error_with_type(struct efa_resource *resource,
 	ep = container_of(resource->ep, struct efa_rdm_ep,
 			  base_ep.util_ep.ep_fid);
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, txe);
@@ -5695,7 +5674,6 @@ static void run_medium_inbound_peer_abort(struct efa_resource *resource,
 	efa_rdm_rxe_map_insert(&peer->rxe_map, msg_id, rxe);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted += 1;
@@ -5802,7 +5780,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(voi
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -5872,7 +5849,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	/* Allocate the inbound PEER_ERROR pke early (efa_rx_pkt_pool has
 	 * limited entries). */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -5902,7 +5878,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	rxe->msg_id = msg_id;
 
 	unexp_pkt = efa_rdm_pke_alloc(ep, ep->rx_unexp_pkt_pool,
-				      ep->rx_unexp_bounce_pool,
 				      EFA_RDM_PKE_FROM_UNEXP_POOL);
 	assert_non_null(unexp_pkt);
 	rxe->unexp_pkt = unexp_pkt;
@@ -6631,7 +6606,6 @@ void test_efa_rdm_ctsdata_send_completion_aborting_txe_no_completion(void **stat
 	txe_base = efa_unit_test_get_dlist_length(&ep->base_ep.ope_list);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->ope = txe;
@@ -6872,7 +6846,6 @@ static void efa_unit_test_deliver_eager_rtm(struct efa_resource *resource,
 			  base_ep.util_ep.ep_fid);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				      ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
