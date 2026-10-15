@@ -276,7 +276,6 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 {
 	const struct fi_msg_rma *msg = &op_rma->msg;
 	struct efa_io_tx_meta_desc *meta_desc = &wqe->meta;
-	struct efa_io_rdma_req_128 *rdma_req = &wqe->data.rdma_req;
 	struct ibv_data_buf inline_data_list[EFA_IO_TX_DESC_NUM_RDMA_BUFS];
 	size_t total_len;
 	int err;
