@@ -348,7 +348,7 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, iov, desc, iov_count, src_addr, &rma_iov, 1, context, 0);
 	
-	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0, 0);
+	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, efa_rdm_tx_flags(efa_rdm_ep), 0);
 	return err;
 }
 
@@ -391,7 +391,7 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, src_addr, &rma_iov, 1, context, 0);
 	
-	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0, 0);
+	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, efa_rdm_tx_flags(efa_rdm_ep), 0);
 	return err;
 }
 
@@ -646,7 +646,7 @@ ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **de
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, iov, desc, iov_count, dest_addr, &rma_iov, 1, context, 0);
 	
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0, 0);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, efa_rdm_tx_flags(efa_rdm_ep), 0);
 	return err;
 }
 
@@ -688,7 +688,7 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, dest_addr, &rma_iov, 1, context, 0);
 	
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0, 0);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, efa_rdm_tx_flags(efa_rdm_ep), 0);
 	return err;
 }
 
@@ -730,7 +730,7 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, dest_addr, &rma_iov, 1, context, data);
 	
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_REMOTE_CQ_DATA, 0);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_REMOTE_CQ_DATA | efa_rdm_tx_flags(efa_rdm_ep), 0);
 	return err;
 }
 
