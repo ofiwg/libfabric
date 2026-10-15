@@ -45,7 +45,6 @@ void test_efa_rdm_peer_reorder_msg_impl(struct efa_resource *resource,
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -196,7 +195,6 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
 	assert_non_null(*peer);
 
 	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(*pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -270,7 +268,6 @@ void alloc_pke_in_overflow_list(struct efa_rdm_ep *efa_rdm_ep,
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
 	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				       efa_rdm_ep->efa_rx_bounce_pool,
 				       EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(*pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -367,7 +364,6 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(void **state)
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -564,7 +560,6 @@ void test_efa_rdm_peer_abort_ooo_in_recvwin(void **state)
 	/* Queue an OOO pke into the recvwin at msg_id = 3 (exp is 0). */
 	msg_id = 3;
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -638,7 +633,6 @@ void test_efa_rdm_peer_abort_ooo_recvwin_drain_progresses(void **state)
 
 	/* Buffer OOO msg_id 1 (exp is 0) into recvwin slot 1. */
 	pke1 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke1);
 	pkt_attr.msg_id = 1;
@@ -648,7 +642,6 @@ void test_efa_rdm_peer_abort_ooo_recvwin_drain_progresses(void **state)
 
 	/* Buffer OOO msg_id 2 into recvwin slot 2. */
 	pke2 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke2);
 	pkt_attr.msg_id = 2;
@@ -728,7 +721,6 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
 	struct efa_rdm_peer_error_hdr *err_hdr;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->peer = peer;
@@ -801,7 +793,6 @@ void test_efa_rdm_peer_skip_aborted_msg_id_never_arrived_unblocks_window(
 
 	/* msg_id 1 arrives OOO -> buffered in recvwin slot 1. */
 	pke1 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke1);
 	pkt_attr.msg_id = 1;
@@ -811,7 +802,6 @@ void test_efa_rdm_peer_skip_aborted_msg_id_never_arrived_unblocks_window(
 
 	/* msg_id 2 arrives OOO -> buffered in recvwin slot 2. */
 	pke2 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke2);
 	pkt_attr.msg_id = 2;
@@ -969,7 +959,6 @@ void test_efa_rdm_peer_skip_aborted_msg_id_buffered_abort_markers(
 
 	/* msg_id 1 arrives OOO (exp is 0) -> buffered in recvwin slot 1. */
 	pke1 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke1);
 	pkt_attr.msg_id = 1;
@@ -1131,7 +1120,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	/* msg_id 1 arrives OOO -> buffered in recvwin slot 1, then aborted
 	 * so the drain releases it without the full recv-match path. */
 	pke1 = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				 efa_rdm_ep->efa_rx_bounce_pool,
 				 EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke1);
 	pkt_attr.msg_id = 1;
@@ -1150,7 +1138,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	 * dispatcher finds no matched rxe and routes to the abort marker path,
 	 * consuming the packet. */
 	skip_pkt = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				     efa_rdm_ep->efa_rx_bounce_pool,
 				     EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(skip_pkt);
 	skip_pkt->peer = peer;

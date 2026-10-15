@@ -572,7 +572,7 @@ void test_proto_zero_copy_construct_pkes(void **state)
 	assert_int_equal(pke->pkt_size, 64);
 	assert_int_equal(pke->payload_size, 64);
 
-	efa_rdm_pke_release_tx(pke);
+	ofi_buf_free(pke);
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
@@ -715,7 +715,6 @@ static void test_proto_atomic_setup(struct efa_resource *resource,
 
 	/* Warm lazy pools so free-count checks detect leaked entries. */
 	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->efa_tx_pkt_pool,
-				ctx->ep->efa_tx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pke);
 	efa_rdm_pke_release_tx(pke);
@@ -754,7 +753,6 @@ test_proto_atomic_receipt(struct efa_unit_test_atomic_ctx *ctx,
 	struct efa_rdm_receipt_hdr *hdr;
 
 	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
-				ctx->ep->rx_unexp_bounce_pool,
 				EFA_RDM_PKE_FROM_UNEXP_POOL);
 	assert_non_null(pke);
 	pke->ep = ctx->ep;
