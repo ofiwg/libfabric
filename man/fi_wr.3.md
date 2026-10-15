@@ -254,6 +254,10 @@ leaving the rest of it formatted.  The following applies to all of them.
 A field may be modified while operations queued from the same work request are
 still outstanding; the change applies only to subsequent queue calls.
 
+The modify calls format in place and are not thread safe with respect to any
+other call on the same work request.  An application must serialize those
+calls.
+
 
 ## fi_wr_modify_addr
 
@@ -308,8 +312,13 @@ request with *flags*.
 
 The flags that select the layout or size of the formatted work request (e.g.
 FI_REMOTE_CQ_DATA and FI_INJECT) cannot be changed, because doing so would
-require reformatting the work request.  An application that needs such a change
-should prepare a new work request.
+require reformatting the work request.  Such a flag returns -FI_EINVAL when it
+conflicts with the prepared work request, and is accepted when it agrees with
+it.  An application that needs the layout to change should prepare a new work
+request.
+
+A provider returns -FI_EBADFLAGS for a flag whose effect it cannot
+represent in the formatted work request.
 
 The operation type is fixed at prepare and is not a flag.  fi_wr_modify_flags
 cannot change it.
