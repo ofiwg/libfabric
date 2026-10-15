@@ -8,7 +8,7 @@ from efa.efa_common import memory_type_list_symm
 # Instance types where MR Abort is selected to run by default. On every
 # other instance these tests are pre_release, which runfabtests.py only
 # runs when requested.
-MR_ABORT_SELECTED_INSTANCES = ["trn2.48xlarge"]
+MR_ABORT_SELECTED_INSTANCES = ["trn2.48xlarge", "p5.48xlarge", "hpc6a.48xlarge"]
 
 
 @functools.lru_cache(10)
