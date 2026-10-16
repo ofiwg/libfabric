@@ -169,6 +169,12 @@ size_t efa_test_device_max_tx_size(void);
 size_t efa_test_device_max_rx_size(void);
 
 /**
+ * @brief The minimum rx size of an efa-protocol endpoint, see
+ * efa_rdm_ep_get_min_rx_size().
+ */
+size_t efa_test_rdm_ep_min_rx_size(void);
+
+/**
  * @brief Whether the selected EFA device supports wide WQEs, i.e. an inject
  * size above its inline_buf_size.
  */

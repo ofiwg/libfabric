@@ -117,16 +117,34 @@ TEST_F(EfaEpQueueDepthTest, getopt_reports_configured_depth_rdm)
 
 TEST_F(EfaEpQueueDepthTest, getopt_honors_requested_depth_rdm)
 {
+	size_t rx_size = 2 * efa_test_rdm_ep_min_rx_size();
 	struct fi_info *hints =
 		efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 
 	ASSERT_NE(hints, nullptr);
+	ASSERT_LE(rx_size, efa_test_device_max_rx_size());
 	hints->tx_attr->size = 8;
-	hints->rx_attr->size = 8;
+	hints->rx_attr->size = rx_size;
 	ASSERT_NO_FATAL_FAILURE(construct(hints));
 
 	EXPECT_EQ(getopt_size(FI_OPT_TX_SIZE), 8);
-	EXPECT_EQ(getopt_size(FI_OPT_RX_SIZE), 8);
+	EXPECT_EQ(getopt_size(FI_OPT_RX_SIZE), rx_size);
+}
+
+TEST_F(EfaEpQueueDepthTest, getopt_raises_small_rx_size_rdm)
+{
+	struct fi_info *hints =
+		efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ASSERT_NE(hints, nullptr);
+	ASSERT_LT(8u, efa_test_rdm_ep_min_rx_size());
+	hints->rx_attr->size = 8;
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+
+	EXPECT_EQ(getopt_size(FI_OPT_RX_SIZE),
+		  std::min(efa_test_device_max_rx_size(),
+			   efa_test_rdm_ep_min_rx_size()));
+	expect_getopt_matches_qp_cap();
 }
 
 TEST_F(EfaEpQueueDepthTest, getopt_tx_size_reflects_wide_wqe)
