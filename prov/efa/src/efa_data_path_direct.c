@@ -195,7 +195,7 @@ int efa_data_path_direct_cq_initialize(struct efa_ibv_cq *ibv_cq)
 	 *
 	 * In these cases, fall back to standard completion processing.
 	 */
-	if (!efa_env.use_data_path_direct || efa_device_use_sub_cq()) {
+	if (!efa_device_support_data_path_direct(&g_efa_selected_device_list[0])) {
 		/* Direct CQ not enabled - use standard completion processing */
 		return FI_SUCCESS;
 	}

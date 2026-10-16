@@ -161,8 +161,10 @@ void efa_prov_info_set_ep_attr(struct fi_info *prov_info,
 		/* ep_attr->max_msg_size is the maximum of both MSG and RMA operations */
 		if (prov_info->caps & FI_RMA)
 			prov_info->ep_attr->max_msg_size = MAX(device->ibv_port_attr.max_msg_sz, device->max_rdma_size);
-		prov_info->ep_attr->max_tx_wr_size = efa_wr_tx_size();
-		prov_info->ep_attr->max_rx_wr_size = efa_wr_rx_size(device->efa_attr.max_rq_sge);
+		if (efa_device_support_data_path_direct(device)) {
+			prov_info->ep_attr->max_tx_wr_size = efa_wr_tx_size();
+			prov_info->ep_attr->max_rx_wr_size = efa_wr_rx_size(device->efa_attr.max_rq_sge);
+		}
 	} else {
 		assert(ep_type == FI_EP_DGRAM);
 		prov_info->ep_attr->msg_prefix_size = 40;

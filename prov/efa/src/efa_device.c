@@ -622,11 +622,23 @@ bool efa_device_support_cq_with_ext_mem_dmabuf(void)
 #endif
 
 /* Check whether the efa device uses a sub cq implementation */
+static inline bool efa_device_has_sub_cq(const struct efa_device *device)
+{
+	return device->ibv_attr.vendor_part_id == 0xefa0;
+}
+
 bool efa_device_use_sub_cq(void)
 {
-	uint32_t vendor_part_id;
-	vendor_part_id = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
-	return vendor_part_id == 0xefa0;
+	return efa_device_has_sub_cq(&g_efa_selected_device_list[0]);
+}
+
+bool efa_device_support_data_path_direct(const struct efa_device *device)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	return efa_env.use_data_path_direct && !efa_device_has_sub_cq(device);
+#else
+	return false;
+#endif
 }
 
 #ifndef _WIN32

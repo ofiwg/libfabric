@@ -489,6 +489,7 @@ static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
 		ep_fid, attr->op_type, wr, *wr_len);
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	assert(base_ep->qp->data_path_direct_enabled);
 
 	if (attr->op_type == FI_OP_RECV)
 		len = efa_wr_rx_size(attr->op.msg->msg.iov_count);
@@ -550,6 +551,7 @@ static ssize_t efa_wr_queue_tx(struct fid_ep *ep_fid, const fi_wr wr,
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	qp = base_ep->qp;
+	assert(qp->data_path_direct_enabled);
 	sq = &qp->data_path_direct_qp.sq;
 
 	assert(base_ep->context_mode != USE_CONTEXT2);
@@ -616,6 +618,7 @@ static ssize_t efa_wr_queue_recv(struct fid_ep *ep_fid, const fi_wr wr,
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	qp = base_ep->qp;
+	assert(qp->data_path_direct_enabled);
 	rq = &qp->data_path_direct_qp.rq;
 	wq = &rq->wq;
 
