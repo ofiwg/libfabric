@@ -71,6 +71,7 @@ bin_PROGRAMS = \
 	component/sock_test \
 	component/dmabuf-rdma/cuda_check_dmabuf \
 	regression/sighandler_test \
+	regression/sighandler_chain_test \
 	regression/pep_close_eq_read
 
 if HAVE_ZE_DEVEL
@@ -633,6 +634,14 @@ regression_sighandler_test_SOURCES = \
 regression_sighandler_test_LDADD = libfabtests.la
 
 regression_sighandler_test_CFLAGS = \
+	$(AM_CFLAGS)
+
+regression_sighandler_chain_test_SOURCES = \
+	regression/sighandler_chain_test.c
+
+regression_sighandler_chain_test_LDADD = libfabtests.la
+
+regression_sighandler_chain_test_CFLAGS = \
 	$(AM_CFLAGS)
 
 regression_pep_close_eq_read_SOURCES = \
