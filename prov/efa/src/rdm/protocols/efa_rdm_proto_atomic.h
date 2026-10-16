@@ -22,13 +22,17 @@ struct efa_rdm_ope;
 struct efa_rdm_atomic_proto {
 	int req_pkt_type;
 	int req_pkt_type_dc;
-	size_t (*get_req_data_size)(struct efa_rdm_ope *txe);
+	int (*get_req_data_size)(struct efa_rdm_ope *txe, size_t *data_size);
 	ssize_t (*init_req_pke)(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *txe);
 	efa_rdm_pke_callback handle_send_completion;
 };
 
 extern const struct efa_rdm_atomic_proto efa_rdm_atomic_write_proto;
+extern const struct efa_rdm_atomic_proto efa_rdm_atomic_fetch_proto;
+extern const struct efa_rdm_atomic_proto efa_rdm_atomic_compare_proto;
+
+const struct efa_rdm_atomic_proto *efa_rdm_proto_atomic_select(uint32_t op);
 
 ssize_t efa_rdm_proto_atomic_post(struct efa_rdm_ope *txe);
 

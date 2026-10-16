@@ -580,7 +580,7 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
  * @brief Check if a DC or atomic txe is ready for release.
  *
  * Used by: DC eager/medium/longcts msg/tag/write, callback-based DC_WRITE_RTA,
- *          DC CTSDATA, FETCH_RTA, COMPARE_RTA.
+ *          DC CTSDATA, callback-based FETCH_RTA/COMPARE_RTA.
  *
  * These protocols require a remote acknowledgment (RECEIPT for DC,
  * ATOMRSP for fetch/compare atomics) before the txe can complete.
