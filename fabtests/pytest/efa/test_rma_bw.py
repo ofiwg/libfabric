@@ -286,3 +286,14 @@ def test_rma_bw_cuda_dmabuf_over_cpu_mediated_nic(cmdline_args, operation_type, 
                                fabric=rma_fabric,
                                nic_dma_path=NIC_DMA_PATH_CPU_MEDIATED,
                                timeout=max(540, cmdline_args.timeout))
+
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_all)
+@pytest.mark.fi_wr
+def test_rma_bw_use_wr(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
+                       rma_bw_memory_type, rma_fabric):
+    command = "fi_rma_bw -e rdm -j 0 --use-wr --fi-version 2.7 -M context2"
+    command = command + " -o " + rma_operation_type
+    efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
+                               rma_bw_memory_type, None, fabric=rma_fabric)
