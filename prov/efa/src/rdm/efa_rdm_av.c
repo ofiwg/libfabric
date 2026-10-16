@@ -310,7 +310,7 @@ static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 		EFA_WARN(FI_LOG_AV, "Could not allocate memory for LRU AV entry hashset entry\n");
 		return FI_ENOMEM;
 	}
-	memcpy(ep_addr_hashable, efa_av_entry_ep_addr(&av_entry->efa_av_entry), sizeof(struct efa_ep_addr));
+	memcpy(ep_addr_hashable, efa_av_entry_ep_addr(&av_entry_to_release->efa_av_entry), sizeof(struct efa_ep_addr));
 	HASH_ADD(hh, rdm_av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
 
 	efa_rdm_av_entry_release_implicit(av, av_entry_to_release);
