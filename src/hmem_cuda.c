@@ -1202,12 +1202,18 @@ void cuda_dev_free(uint64_t device, void *addr)
 	ofi_cudaFree(addr);
 }
 
-int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
 		    uint64_t flags, void **dev_addr)
 {
 	CUresult cu_ret;
 	unsigned int reg_flags = 0;
 	CUdeviceptr dev_ptr = 0;
+
+	OFI_UNUSED(fd);
+
+	if (flags & FI_XPU_IMPORT_DMABUF)
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"cuda_dev_import: ignore FI_XPU_IMPORT_DMABUF\n");
 
 	if (flags & FI_XPU_IMPORT_IOMEMORY)
 		reg_flags |= CU_MEMHOSTREGISTER_IOMEMORY;
@@ -1570,7 +1576,7 @@ void cuda_dev_free(uint64_t device, void *addr)
 {
 }
 
-int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size, int fd,
 		    uint64_t flags, void **dev_addr)
 {
 	return -FI_ENOSYS;

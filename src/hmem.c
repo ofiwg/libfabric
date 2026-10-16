@@ -239,10 +239,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_reg_copy_from_hmem = ze_dev_reg_copy_from_hmem,
 		.get_dmabuf_fd = ze_hmem_get_dmabuf_fd,
 		.put_dmabuf_fd = ofi_hmem_no_put_dmabuf_fd,
-		.dev_alloc = ofi_hmem_no_dev_alloc,
-		.dev_import = ofi_hmem_no_dev_import,
-		.dev_unimport = ofi_hmem_no_dev_unimport,
-		.dev_free = ofi_hmem_no_dev_free,
+		.dev_alloc = ze_dev_alloc,
+		.dev_import = ze_dev_import,
+		.dev_unimport = ze_dev_unimport,
+		.dev_free = ze_dev_free,
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
@@ -887,10 +887,10 @@ int ofi_hmem_dev_alloc(enum fi_hmem_iface iface, uint64_t device,
 }
 
 int ofi_hmem_dev_import(enum fi_hmem_iface iface, uint64_t device,
-			void *host_addr, uint64_t size, uint64_t flags,
+			void *host_addr, uint64_t size, int fd, uint64_t flags,
 			void **dev_addr)
 {
-	return hmem_ops[iface].dev_import(device, host_addr, size, flags,
+	return hmem_ops[iface].dev_import(device, host_addr, size, fd, flags,
 					  dev_addr);
 }
 

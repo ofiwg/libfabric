@@ -33,6 +33,8 @@ enum {
 #define FI_XPU_IMPORT_IOMEMORY	(1ULL << 0)
 /* import: resulting pointer must be accessible from XPU kernels */
 #define FI_XPU_IMPORT_DEVICEMAP	(1ULL << 1)
+/* import: host address is interpreted as a DMA-BUF fd */
+#define FI_XPU_IMPORT_DMABUF	(1ULL << 2)
 
 /*
  * XPU Memory Operations
@@ -43,7 +45,7 @@ struct fi_xpu_ops {
 			 uint64_t alignment, uint64_t flags,
 			 void **addr, int *fd, uint64_t *offset);
 	int	(*import)(uint64_t device, void *host_addr,
-			  uint64_t size, uint64_t flags,
+			  uint64_t size, int fd, uint64_t flags,
 			  void **dev_addr);
 	int	(*unimport)(uint64_t device, void *host_addr);
 	void	(*free)(uint64_t device, void *addr);
