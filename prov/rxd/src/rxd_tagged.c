@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -91,7 +92,8 @@ ssize_t rxd_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	return rxd_ep_generic_sendmsg(ep, &msg_iov, 1, dest_addr, tag,
 				      0, context, RXD_TAGGED,
-				      ep->tx_flags | RXD_TAG_HDR);
+				      ep->tx_flags | RXD_TAG_HDR,
+				      &desc);
 }
 
 ssize_t rxd_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
@@ -104,7 +106,7 @@ ssize_t rxd_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	return rxd_ep_generic_sendmsg(ep, iov, count, dest_addr, tag,
 				      0, context, RXD_TAGGED,
-				      ep->tx_flags | RXD_TAG_HDR);
+				      ep->tx_flags | RXD_TAG_HDR, desc);
 }
 
 ssize_t rxd_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
@@ -117,7 +119,8 @@ ssize_t rxd_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	return rxd_ep_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				      msg->addr, msg->tag, msg->data, msg->context,
 				      RXD_TAGGED, rxd_tx_flags(flags |
-				      ep->util_ep.tx_msg_flags) | RXD_TAG_HDR);
+				      ep->util_ep.tx_msg_flags) | RXD_TAG_HDR,
+				      msg->desc);
 }
 
 ssize_t rxd_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -150,7 +153,8 @@ ssize_t rxd_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, tag, data, context,
 				      RXD_TAGGED, ep->tx_flags |
-				      RXD_REMOTE_CQ_DATA | RXD_TAG_HDR);
+				      RXD_REMOTE_CQ_DATA | RXD_TAG_HDR,
+				      &desc);
 }
 
 ssize_t rxd_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
