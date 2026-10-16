@@ -151,12 +151,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Atomic write");
 		break;
 	case EFA_RDM_FETCH_RTA_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_fetch_rta(pkt_entry, ope);
-		break;
 	case EFA_RDM_COMPARE_RTA_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_compare_rta(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Atomic fetch/compare");
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
@@ -560,8 +556,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
-			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
+			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			bool release_atomic_response = (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_ATOMRSP_PKT);
+
+			efa_rdm_rxe_handle_error(rxe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
+			if (release_atomic_response) {
+				assert(rxe->efa_outstanding_tx_ops == 0);
+				efa_rdm_rxe_release(rxe);
+			}
 		}
 		break;
 	default:
@@ -650,7 +653,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	case EFA_RDM_ATOMRSP_PKT:
 		efa_rdm_pke_handle_atomrsp_send_completion(pkt_entry);
-		break;
+		return;
 	case EFA_RDM_RECEIPT_PKT:
 		efa_rdm_pke_handle_receipt_send_completion(pkt_entry);
 		break;
@@ -714,10 +717,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_FETCH_RTA_PKT: /* fall through */
 	case EFA_RDM_COMPARE_RTA_PKT: /* fall through */
-		/* For fetch/compare atomics, the txe is released either
-		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
-		 * happens last. Release here if ATOMRSP already arrived.
-		 */
+		EFA_RDM_PROTO_MOVED("Atomic fetch/compare");
+		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 		/* For DC packets, use efa_outstanding_tx_ops to track TX completions

@@ -1001,6 +1001,18 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 	if (err_hdr->emitter_ope_type == EFA_RDM_RXE) {
 		ope = efa_rdm_ep_live_txe_from_id(ep, err_hdr->op_id);
 		if (ope && ope->msg_id == err_hdr->msg_id) {
+			/*
+			* PEER_ERROR is part of the two-sided msg/tagged MR-abort protocol.
+			* Atomic TXEs have their own terminal-response lifetime and must not enter 
+			* the peer-abort drain path.
+			*/
+			if (!efa_rdm_ope_is_peer_abort_capable(ope)) {
+				EFA_INFO(FI_LOG_CQ,
+					 "PEER_ERROR names txe %p with unsupported peer-abort op=%u; dropping.\n",
+					 ope, ope->op);
+				goto out;
+			}
+
 			if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
 				EFA_INFO(FI_LOG_CQ,
 					 "PEER_ERROR for a txe already "
@@ -1141,7 +1153,7 @@ int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rxe->iov, rxe->iov_count);
 	atomrsp_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
 	atomrsp_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
-	assert(sizeof(struct efa_rdm_atomrsp_hdr) + atomrsp_hdr->seg_length < rxe->ep->mtu_size);
+	assert(sizeof(struct efa_rdm_atomrsp_hdr) + atomrsp_hdr->seg_length <= rxe->ep->mtu_size);
 	/* rxe->atomrsp_data was filled in efa_rdm_pke_handle_req_recv() */
 	memcpy(atomrsp_pkt->data, rxe->atomrsp_data, atomrsp_hdr->seg_length);
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_atomrsp_hdr) + atomrsp_hdr->seg_length;
@@ -1153,8 +1165,9 @@ void efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 
 	rxe = pkt_entry->ope;
-	ofi_buf_free(rxe->atomrsp_data);
-	rxe->atomrsp_data = NULL;
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	assert(rxe->efa_outstanding_tx_ops == 0);
 	efa_rdm_rxe_release(rxe);
 }
 
@@ -1167,35 +1180,47 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
-	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, atomrsp_hdr->recv_id);
-	if (!txe) {
-		/* MR abort covers only msg and tagged operations, so an atomic
-		 * that went away mid-transfer leaves nothing to apply this
-		 * response to. Surface it rather than dropping quietly. */
-		EFA_WARN(FI_LOG_CQ,
-			 "ATOMRSP names ope id %" PRIu32 ", which no longer "
-			 "holds the atomic that requested it. Dropping the "
-			 "ATOMRSP. MR abort does not support atomics.\n",
-			 atomrsp_hdr->recv_id);
-		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
-					   FI_EOPNOTSUPP,
-					   FI_EFA_ERR_PEER_ABORTED);
+	if (pkt_entry->pkt_size < sizeof(*atomrsp_hdr)) {
+		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ETRUNC,
+			EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
-	ret = efa_copy_to_hmem_iov(txe->atomic_ex.result_desc, txe->atomic_ex.resp_iov,
-	                           txe->atomic_ex.resp_iov_count, atomrsp_pkt->data,
-	                           atomrsp_hdr->seg_length);
-	if (OFI_UNLIKELY(ret < 0)) {
-		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, -ret, EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, atomrsp_hdr->recv_id);
+	if (!txe) {
+		/*
+		 * An asynchronous request-send error does not prove that the
+		 * request failed to reach the peer. The local operation may have
+		 * already reported that terminal error and released its TXE before
+		 * the peer's ATOMRSP arrives. The application can reuse the result
+		 * buffer after the error completion, so this stale response must
+		 * not be applied as an internal error.
+		 */
+		EFA_INFO(FI_LOG_CQ,
+			 "ATOMRSP names atomic ope id %" PRIu32 ", which is no longer live; dropping it\n",
+			 atomrsp_hdr->recv_id);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
-	if (txe->fi_flags & FI_COMPLETION)
-		efa_rdm_txe_report_completion(txe);
+	if (pkt_entry->pkt_size - sizeof(*atomrsp_hdr) != atomrsp_hdr->seg_length ||
+	    ofi_total_iov_len(txe->atomic_ex.resp_iov, txe->atomic_ex.resp_iov_count) != atomrsp_hdr->seg_length)
+		ret = -FI_ETRUNC;
 	else
-		efa_cntr_report_tx_completion(&pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
+		ret = efa_copy_to_hmem_iov(txe->atomic_ex.result_desc, txe->atomic_ex.resp_iov,
+	                           txe->atomic_ex.resp_iov_count, atomrsp_pkt->data,
+	                           atomrsp_hdr->seg_length);
+	if (OFI_UNLIKELY(ret < 0)) {
+		efa_rdm_txe_handle_error(txe, -ret,ret == -FI_ETRUNC ? EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH : FI_EFA_ERR_RXE_COPY);
+		txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+			efa_rdm_txe_release(txe);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	efa_rdm_txe_report_completion(txe);
 
 	/*
 	 * Mark that the remote response (ATOMRSP) has arrived.

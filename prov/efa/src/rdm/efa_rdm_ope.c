@@ -14,6 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
+#include "protocols/efa_rdm_proto_atomic.h"
 
 void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 				  struct efa_rdm_ep *ep,
@@ -207,6 +208,11 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 
 	if (rxe->rxe_map)
 		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe);
+
+	if (rxe->atomrsp_data) {
+		ofi_buf_free(rxe->atomrsp_data);
+		rxe->atomrsp_data = NULL;
+	}
 
 	/*
 	 * Drop any deferred blocking copies that still reference this rxe. The
@@ -2571,7 +2577,7 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	case ofi_op_atomic: /* fall through */
 	case ofi_op_atomic_fetch: /* fall through */
 	case ofi_op_atomic_compare:
-		return efa_rdm_atomic_post_atomic(ope->ep, ope);
+		return efa_rdm_proto_atomic_post(ope);
 	default:
 		EFA_WARN(FI_LOG_EP_DATA, "Unknown operation type: %d\n", ope->op);
 		return -FI_EINVAL;
@@ -2581,6 +2587,7 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 {
 	int ret = 0;
+	bool release_atomic_response = false;
 	bool release_atomic_txe = false;
 	struct efa_rdm_ep *ep = ope->ep;
 	/*
@@ -2646,6 +2653,11 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		 * after a non-FI_EAGAIN repost failure, so release it below.
 		 */
 		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
+		release_atomic_response =
+			ope->type == EFA_RDM_RXE &&
+			(ope->internal_flags & EFA_RDM_OPE_INTERNAL) &&
+			(ope->op == ofi_op_atomic_fetch ||
+			 ope->op == ofi_op_atomic_compare);
 		if (ope->type == EFA_RDM_TXE)
 			efa_rdm_txe_handle_error(ope, -ret, prov_errno);
 		else
@@ -2662,6 +2674,9 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	if (release_atomic_txe) {
 		assert(ope->efa_outstanding_tx_ops == 0);
 		efa_rdm_txe_release(ope);
+	} else if (release_atomic_response) {
+		assert(ope->efa_outstanding_tx_ops == 0);
+		efa_rdm_rxe_release(ope);
 	}
 
 	return ret;

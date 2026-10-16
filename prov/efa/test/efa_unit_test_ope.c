@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
+#include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "ofi_util.h"
@@ -1809,6 +1810,7 @@ void test_efa_rdm_atomic_compare_desc_persistence(void **state)
 	compare_ioc.count = 1;
 	result_ioc.addr = result_buff.buff;
 	result_ioc.count = 1;
+	rma_ioc.count = 1;
 
 	msg.msg_iov = &ioc;
 	msg.desc = desc_array;
@@ -1840,6 +1842,8 @@ void test_efa_rdm_atomic_compare_desc_persistence(void **state)
 
 	/* Verify compare_desc was copied, not just pointer stored */
 	assert_ptr_equal(txe->atomic_ex.compare_desc[0], original_desc_value);
+	efa_rdm_pke_handle_send_completion(efa_rdm_ep->send_pkt_entry_vec[0]);
+	efa_rdm_txe_release(txe);
 
 	efa_unit_test_buff_destruct(&send_buff);
 	efa_unit_test_buff_destruct(&result_buff);
@@ -1897,9 +1901,6 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		txe->bytes_copied = 0;
 		/* Ensure CQ entry is written by efa_rdm_txe_report_completion */
 		txe->fi_flags |= FI_COMPLETION;
-	} else if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
-		txe = efa_unit_test_alloc_txe(resource, ofi_op_atomic);
-		txe->cq_entry.flags = FI_ATOMIC | FI_READ;
 	} else if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT) {
 		txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 		txe->cq_entry.flags = FI_SEND | FI_MSG;
@@ -1963,15 +1964,9 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		assert_non_null(resp_pkt_entry);
 		efa_rdm_pke_set_ope(resp_pkt_entry, txe);
 		resp_pkt_entry->ep = efa_rdm_ep;
-		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
-			struct efa_rdm_atomrsp_pkt *atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)resp_pkt_entry->wiredata;
-			atomrsp_pkt->hdr.type = EFA_RDM_ATOMRSP_PKT;
-			atomrsp_pkt->hdr.recv_id = txe->tx_id;
-			atomrsp_pkt->hdr.seg_length = 0;
-			txe->atomic_ex.resp_iov_count = 0;
-		} else if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
-			   pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT ||
-			   pkt_type == EFA_RDM_LONGREAD_RTW_PKT) {
+		if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
+		    pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT ||
+		    pkt_type == EFA_RDM_LONGREAD_RTW_PKT) {
 			/* EOR as response for longread protocols */
 			struct efa_rdm_eor_hdr *eor_hdr = (struct efa_rdm_eor_hdr *)resp_pkt_entry->wiredata;
 			eor_hdr->type = EFA_RDM_EOR_PKT;
@@ -1991,9 +1986,8 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
 
 		/* Response arrives - should release TXE now */
-		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
-			efa_rdm_pke_handle_atomrsp_recv(resp_pkt_entry);
-		} else if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
+		if (pkt_type == EFA_RDM_SHORT_RTR_PKT ||
+		    pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
 			/* Simulate all read data received and copied */
 			txe->bytes_received = txe->total_len;
 			txe->bytes_copied = txe->total_len;
@@ -2007,10 +2001,8 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		}
 	} else {
 		/* Response arrives first - should not release TXE yet */
-		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
-			efa_rdm_pke_handle_atomrsp_recv(resp_pkt_entry);
-			assert_true(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
-		} else if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
+		if (pkt_type == EFA_RDM_SHORT_RTR_PKT ||
+		    pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
 			/* Simulate all read data received and copied */
 			txe->bytes_received = txe->total_len;
 			txe->bytes_copied = txe->total_len;
@@ -2101,38 +2093,6 @@ void test_efa_rdm_txe_short_rtr_send_first(void **state)
 void test_efa_rdm_txe_short_rtr_resp_first(void **state)
 {
 	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_SHORT_RTR_PKT);
-}
-
-/**
- * @brief Test FETCH_RTA txe release: send completion before ATOMRSP
- */
-void test_efa_rdm_txe_fetch_rta_send_first(void **state)
-{
-	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_FETCH_RTA_PKT);
-}
-
-/**
- * @brief Test FETCH_RTA txe release: ATOMRSP before send completion
- */
-void test_efa_rdm_txe_fetch_rta_resp_first(void **state)
-{
-	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_FETCH_RTA_PKT);
-}
-
-/**
- * @brief Test COMPARE_RTA txe release: send completion before ATOMRSP
- */
-void test_efa_rdm_txe_compare_rta_send_first(void **state)
-{
-	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_COMPARE_RTA_PKT);
-}
-
-/**
- * @brief Test COMPARE_RTA txe release: ATOMRSP before send completion
- */
-void test_efa_rdm_txe_compare_rta_resp_first(void **state)
-{
-	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_COMPARE_RTA_PKT);
 }
 
 /**
@@ -4222,6 +4182,94 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	 * so the check does not drive the progress engine -- whose internal RX
 	 * repost would trip the rx-pkt accounting this test hand-sets up. */
 	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+}
+
+/**
+ * @brief A non-conforming PEER_ERROR_PKT naming an atomic TXE is dropped.
+ *
+ * Atomic operations are outside the msg/tagged MR-abort protocol.  Letting
+ * this packet mark the TXE peer-aborting would allow a later error CQE to
+ * release the TXE in the peer-abort drain and again in the atomic error
+ * cleanup path.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_atomic_txe_dropped(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *peer_error_pke;
+	struct efa_rdm_pke *request_pke;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
+	struct efa_rdm_ope *txe;
+	struct fi_cq_err_entry err_entry;
+	uint32_t tx_id;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_atomic_fetch);
+	assert_non_null(txe);
+	txe->msg_id = 0x1234;
+	txe->atomic_proto = &efa_rdm_atomic_fetch_proto;
+	tx_id = txe->tx_id;
+
+	request_pke = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(request_pke);
+	efa_rdm_pke_set_ope(request_pke, txe);
+	request_pke->peer = txe->peer;
+	rta_hdr = (struct efa_rdm_rta_hdr *) request_pke->wiredata;
+	rta_hdr->type = EFA_RDM_FETCH_RTA_PKT;
+	rta_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	request_pke->pkt_size = sizeof(*rta_hdr);
+	ep->efa_outstanding_tx_ops++;
+	txe->peer->efa_outstanding_tx_ops++;
+	txe->efa_outstanding_tx_ops++;
+
+	peer_error_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					   EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(peer_error_pke);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	peer_error_pke->peer = txe->peer;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) peer_error_pke->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->msg_id = txe->msg_id;
+	err_hdr->op_id = txe->tx_id;
+	err_hdr->emitter_ope_type = EFA_RDM_RXE;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
+	err_hdr->connid = 0xc0ffee;
+	peer_error_pke->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(peer_error_pke);
+
+	assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, tx_id), txe);
+	assert_int_equal(txe->state, EFA_RDM_TXE_REQ);
+	assert_false(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_false(txe->internal_flags &
+		     EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	/*
+	 * Reproduce the next error CQE from the review finding.  Because the
+	 * bogus PEER_ERROR was dropped, the ordinary atomic error path owns the
+	 * sole TXE release; the old behavior released it once in peer-abort
+	 * progress and then again below the atomic_proto gate.
+	 */
+	efa_rdm_pke_handle_tx_error(
+		request_pke, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
+
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, tx_id));
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
 	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
 }
 

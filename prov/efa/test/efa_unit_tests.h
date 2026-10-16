@@ -404,6 +404,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state);
 void test_efa_rdm_rxe_emit_peer_error_reentry_safe(void **state);
 void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_atomic_txe_dropped(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_eager_unexpected_tears_down(void **state);
@@ -447,10 +448,6 @@ void test_efa_rdm_txe_dc_eager_rtm_send_first(void **state);
 void test_efa_rdm_txe_dc_eager_rtm_resp_first(void **state);
 void test_efa_rdm_txe_short_rtr_send_first(void **state);
 void test_efa_rdm_txe_short_rtr_resp_first(void **state);
-void test_efa_rdm_txe_fetch_rta_send_first(void **state);
-void test_efa_rdm_txe_fetch_rta_resp_first(void **state);
-void test_efa_rdm_txe_compare_rta_send_first(void **state);
-void test_efa_rdm_txe_compare_rta_resp_first(void **state);
 void test_efa_rdm_txe_longread_tagrtm_send_first(void **state);
 void test_efa_rdm_txe_longread_tagrtm_resp_first(void **state);
 void test_efa_rdm_txe_longread_msgrtm_send_first(void **state);
@@ -907,4 +904,17 @@ void test_proto_atomic_write_responder_rejects_invalid_op_datatype(
 	void **state);
 void test_proto_atomic_dc_receipt_then_send_error(void **state);
 void test_proto_atomic_inject_delivery_complete(void **state);
+void test_proto_atomic_fetch_compare_request(void **state);
+void test_proto_atomic_fetch_compare_completion(void **state);
+void test_proto_atomic_responder_post_error(void **state);
+void test_proto_atomic_read_null_source(void **state);
+void test_proto_atomic_compare_responder_iov(void **state);
+void test_proto_atomic_responder_rejects_invalid_key(void **state);
+void test_proto_atomic_fetch_responder_rejects_invalid_op_datatype(
+	void **state);
+void test_proto_atomic_compare_responder_rejects_invalid_op_datatype(
+	void **state);
+void test_proto_atomic_write_responder_rejects_invalid_key(void **state);
+void test_proto_atomic_responder_requires_remote_write(void **state);
+void test_proto_atomic_read_responder_accepts_read_only_mr(void **state);
 #endif
