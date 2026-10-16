@@ -115,6 +115,7 @@ void test_efa_srx_unexp_pkt(void **state)
 	raw_addr.qpn = 0;
 	raw_addr.qkey = 0x1234;
 	memcpy(av_entry.efa_av_entry.ep_addr, &raw_addr, sizeof(raw_addr));
+	av_entry.implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	efa_rdm_peer_construct(&peer, efa_rdm_ep, &av_entry);
 	pke->peer = &peer;
 	pke->proto = &efa_rdm_proto_eager;
@@ -339,6 +340,7 @@ void test_efa_rdm_peer_construct_robuf_failure(void **state)
 
 	memcpy(av_entry.efa_av_entry.ep_addr, &raw_addr, sizeof(raw_addr));
 	av_entry.efa_av_entry.fi_addr = peer_addr;
+	av_entry.implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
 	/* Create a tiny pool with max_cnt=1 and exhaust it */
 	ret = ofi_bufpool_create(&tiny_pool,
