@@ -8,16 +8,14 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
-#include "protocols/efa_rdm_proto_eager.h"
-#include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_longcts.h"
 #include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_longread_write.h"
 #include "protocols/efa_rdm_proto_longcts_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
-#include "protocols/efa_rdm_proto_short_rtr.h"
 #include "protocols/efa_rdm_proto_runtread.h"
 #include "protocols/efa_rdm_proto_longcts_rtr.h"
+#include "protocols/efa_rdm_proto_short_rtr.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -60,6 +58,7 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+	&efa_rdm_proto_runtread,
 };
 
 /*
@@ -186,6 +185,14 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	/* can_use_protocol() reads the peer off the txe, before txe_fill runs. */
 	txe->peer = peer;
+
+	/*
+	 * The predicates need the effective flags: the runt read protocol has no
+	 * delivery complete REQ variant, so it has to rule out a
+	 * FI_DELIVERY_COMPLETE send. efa_rdm_txe_construct_common() assigns the
+	 * same value again later, from the same helper.
+	 */
+	txe->fi_flags = effective_flags;
 
 	iface = (msg->desc && msg->desc[0]) ?
 			((struct efa_mr *) msg->desc[0])->iface :
