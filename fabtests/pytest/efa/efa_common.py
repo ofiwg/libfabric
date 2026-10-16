@@ -741,6 +741,28 @@ def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices, dm
 
     return closest_nics[nic_idx]
 
+@functools.lru_cache(maxsize=None)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def has_fi_wr(hostname, binpath=None, environments=None):
+    """
+    determine whether efa-direct supports the FI_WR (fi_wr_*) API on a host.
+    efa-direct only advertises FI_WR when the data path direct is available.
+    """
+    env = environments + " " if environments else ""
+    fi_info = "command -v fi_info || echo /opt/amazon/efa/bin/fi_info"
+    if binpath:
+        build_fi_info = os.path.join(binpath, os.pardir, os.pardir,
+                                     "libfabric", "bin", "fi_info")
+        fi_info = (f"test -x '{build_fi_info}' && echo '{build_fi_info}' "
+                   f"|| {fi_info}")
+    command = f"ssh {hostname} '{env}$({fi_info}) -p efa -f efa-direct -c FI_WR'"
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+    return proc.returncode == 0
+
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def support_cq_interrupts(hostname):
     """

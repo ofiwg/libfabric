@@ -12,6 +12,7 @@ from common import (
     SshConnectionError,
 )
 from efa_common import (
+    has_fi_wr,
     has_rdma,
     _has_rdma_cached,
     has_cuda_p2p,
@@ -477,6 +478,19 @@ def pytest_collection_modifyitems(session, config, items):
                     "Could not determine completion action support: ssh to {} failed "
                     "after retries. Refusing to silently deselect comp_action tests.".format(host_id))
 
+    have_fi_wr = True
+    if any(item.get_closest_marker("fi_wr") for item in items):
+        environments = config.getoption("environments", default=None)
+        for host_id in filter(None, (server_id, client_id)):
+            try:
+                if not has_fi_wr(host_id, binpath, environments):
+                    have_fi_wr = False
+                    break
+            except SshConnectionError:
+                pytest.fail(
+                    "Could not determine FI_WR support: ssh to {} failed after "
+                    "retries. Refusing to silently deselect fi_wr tests.".format(host_id))
+
     def is_efa_mr_abort(item):
         # MR abort is not supported on emulated RMA, so the efa fabric
         # mr_abort cases only run where the device does the RMA itself.
@@ -517,6 +531,8 @@ def pytest_collection_modifyitems(session, config, items):
         if "hw_cntr" in markers and not have_hw_cntr:
             deselected.append(item)
         elif "gda" in markers and not have_gda:
+            deselected.append(item)
+        elif "fi_wr" in markers and not have_fi_wr:
             deselected.append(item)
         elif is_efa_mr_abort(item) and not has_device_rma():
             deselected.append(item)

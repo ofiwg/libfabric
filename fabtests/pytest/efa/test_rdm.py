@@ -382,3 +382,13 @@ def test_rdm_bw_mt_thread_completion(cmdline_args, iteration_type, num_eps, fabr
     test = ClientServerTest(cmdline_args, f"fi_rdm_bw_mt -g -n {num_eps} --threading completion",
                             iteration_type, "transmit_complete", fabric=fabric)
     test.run()
+
+@pytest.mark.pr_ci
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_bi_dir)
+@pytest.mark.fi_wr
+def test_rdm_bw_use_wr(cmdline_args, memory_type, fabric):
+    efa_run_client_server_test(cmdline_args, "fi_rdm_bw -e rdm -j 0 --use-wr --fi-version 2.7 -M context2",
+                               "short", "transmit_complete", memory_type,
+                               None, fabric=fabric)
