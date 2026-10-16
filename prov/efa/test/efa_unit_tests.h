@@ -903,6 +903,8 @@ void test_proto_atomic_write_post_and_complete(void **state);
 void test_proto_atomic_dc_write_completion_orders(void **state);
 void test_proto_atomic_write_sync_failures(void **state);
 void test_proto_atomic_write_async_release_paths(void **state);
+void test_proto_atomic_write_responder_rejects_invalid_op_datatype(
+	void **state);
 void test_proto_atomic_dc_receipt_then_send_error(void **state);
 void test_proto_atomic_inject_delivery_complete(void **state);
 #endif
