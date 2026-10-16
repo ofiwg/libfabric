@@ -154,6 +154,39 @@ ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry,
 	return efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_WRITE_RTA_PKT, txe);
 }
 
+static int efa_rdm_pke_validate_write_atomic(struct efa_rdm_pke *pkt_entry){
+	struct efa_rdm_rta_hdr *rta_hdr;
+	uint32_t op, datatype;
+	int err;
+
+	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
+	op = rta_hdr->atomic_op;
+	datatype = rta_hdr->atomic_datatype;
+
+	/*
+	 * The operation and datatype came from the wire. Check their raw
+	 * bounds before converting them to enums in ofi_atomic_valid().
+	 */
+	if (op >= OFI_SWAP_OP_LAST || datatype >= OFI_DATATYPE_CNT)
+		goto invalid;
+
+	err = ofi_atomic_valid(&efa_prov, datatype, op, 0);
+	if (OFI_UNLIKELY(err))
+		goto invalid;
+
+	return 0;
+
+invalid:
+	EFA_WARN(FI_LOG_CQ,
+		 "Invalid write atomic operation or datatype: op=%u "
+		 "datatype=%u\n",
+		 op, datatype);
+	efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_EINVAL,
+				   FI_EFA_ERR_INVALID_DATATYPE);
+	efa_rdm_pke_release_rx(pkt_entry);
+	return -FI_EINVAL;
+}
+
 static
 int efa_rdm_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *data,
                                  size_t dtsize, int op, int dt)
@@ -198,6 +231,10 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	op = rta_hdr->atomic_op;
 	dt = rta_hdr->atomic_datatype;
+	err = efa_rdm_pke_validate_write_atomic(pkt_entry);
+	if (OFI_UNLIKELY(err))
+		return err;
+
 	dtsize = ofi_datatype_size(dt);
 	if (OFI_UNLIKELY(!dtsize)) {
 		return -errno;
@@ -288,6 +325,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 	ret = efa_rdm_pke_proc_write_rta(pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Error while processing the write rta packet\n");
+		efa_rdm_rxe_release(rxe);
 		return ret;
 	}
 
