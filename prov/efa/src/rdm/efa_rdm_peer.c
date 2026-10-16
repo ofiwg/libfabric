@@ -19,6 +19,7 @@
  * @relates efa_rdm_peer
  */
 int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry)
+	OFI_TSA_REQUIRES(efa_ctrl_lock_sym)
 {
 	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
@@ -66,6 +67,7 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
  * @relates efa_rdm_peer
  */
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_ctrl_lock_sym)
 {
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *txe;
