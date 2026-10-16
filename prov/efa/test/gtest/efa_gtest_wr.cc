@@ -226,6 +226,14 @@ TEST_F(EfaWrFlushTest, tx_flush_without_pending_work_is_noop)
 class EfaWrTestBase : public EfaWrFlushTestBase
 {
 	protected:
+	void setup()
+	{
+		EfaWrFlushTestBase::setup();
+		if (efa_test_device_probe() || !efa_test_device_supports_fi_wr())
+			GTEST_SKIP() << "device does not support FI_WR "
+					"(no direct data path)";
+	}
+
 	uint8_t *wr() { return wr_buf.data(); }
 
 	void fill_iovs(uint8_t *buf, void *desc, size_t count, size_t seg_len)
@@ -624,6 +632,8 @@ class EfaWrModifyTest : public EfaWrTestBase, public Test
 	void SetUp() override
 	{
 		setup();
+		if (IsSkipped())
+			return;
 		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 		ASSERT_NO_FATAL_FAILURE(alloc_alt_mr());
 	}
@@ -920,8 +930,9 @@ class EfaWrModifyRmaTest : public EfaWrTestBase,
 	void SetUp() override
 	{
 		setup();
-		if (efa_test_device_probe() ||
-		    !efa_test_device_supports_rma())
+		if (IsSkipped())
+			return;
+		if (!efa_test_device_supports_rma())
 			GTEST_SKIP() << "device does not support RDMA "
 					"read/write";
 		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
@@ -1135,6 +1146,8 @@ class EfaWrModifyFlagsImmTest : public EfaWrTestBase,
 	void SetUp() override
 	{
 		setup();
+		if (IsSkipped())
+			return;
 		ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
 	}
 	void TearDown() override { teardown(); }
