@@ -1536,6 +1536,11 @@ struct cxip_cq {
 	struct cxip_domain *domain;
 	unsigned int ack_batch_size;
 	struct dlist_entry dom_entry;
+
+	/* Original util CQ owner operations installed by ofi_cq_init().
+	 * CXI delegates error writes to this table.
+	 */
+	struct fi_ops_cq_owner *util_owner_ops;
 };
 
 static inline uint16_t cxip_evtq_eqn(struct cxip_evtq *evtq)
@@ -3451,6 +3456,7 @@ void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj);
 
 int cxip_cq_trywait(struct cxip_cq *cq);
 void cxip_cq_progress(struct cxip_cq *cq);
+int cxip_cq_enable_source(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
