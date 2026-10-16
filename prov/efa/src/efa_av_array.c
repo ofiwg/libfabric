@@ -99,7 +99,7 @@ int efa_av_array_insert(struct efa_av_array *arr, uint64_t index, void *entry)
 	if (index < arr->inline_size) {
 		/* Make sure the caller's entry is written before publishing */
 		ofi_wmb();
-		arr->inline_entries[index] = entry;
+		EFA_AV_ARRAY_PUBLISH(arr->inline_entries[index], entry);
 		return FI_SUCCESS;
 	}
 
@@ -131,13 +131,13 @@ int efa_av_array_insert(struct efa_av_array *arr, uint64_t index, void *entry)
 	 * publishing the pointer to it. See function comment for more info
 	 */
 	ofi_wmb();
-	chunk[off] = entry;
+	EFA_AV_ARRAY_PUBLISH(chunk[off], entry);
 
 	/* avoid re-publishing pointers to avoid cache invalidations */
 	if (OFI_UNLIKELY(new_chunk))
-		table[chunk_idx] = chunk;
+		EFA_AV_ARRAY_PUBLISH(table[chunk_idx], chunk);
 	if (OFI_UNLIKELY(new_table))
-		arr->chunk_table = table;
+		EFA_AV_ARRAY_PUBLISH(arr->chunk_table, table);
 
 	return FI_SUCCESS;
 }
