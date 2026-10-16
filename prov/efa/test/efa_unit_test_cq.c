@@ -2319,7 +2319,8 @@ void test_efa_cq_read_mixed_success_error(void **state)
 	struct fi_cq_err_entry cq_err_entry = {0};
 	struct efa_base_ep *base_ep;
 	struct ibv_cq_ex *ibv_cqx;
-	struct efa_direct_ope *direct_ope1, *direct_ope2, *direct_ope3;
+	struct efa_direct_ope *direct_ope1 = NULL, *direct_ope2 = NULL,
+			      *direct_ope3 = NULL;
 	ssize_t ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);

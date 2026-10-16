@@ -206,9 +206,11 @@ int efa_test_proto_force_select_send(struct fid_ep *ep_fid, struct fid_av *av,
 	efa_env.rdm_force_send_proto = saved_forced;
 
 	/* Leave proto_name empty when selection picked nothing. */
-	if (proto)
+	if (proto) {
 		strncpy(out->proto_name, proto->name,
-			sizeof(out->proto_name) - 1);
+			sizeof(out->proto_name));
+		out->proto_name[sizeof(out->proto_name) - 1] = '\0';
+	}
 
 	efa_test_proto_teardown_buf(&ctx);
 	return 0;

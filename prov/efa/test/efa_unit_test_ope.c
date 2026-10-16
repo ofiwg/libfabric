@@ -1881,7 +1881,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_pke *req_pkt_entry, *resp_pkt_entry;
+	struct efa_rdm_pke *req_pkt_entry = NULL, *resp_pkt_entry = NULL;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
