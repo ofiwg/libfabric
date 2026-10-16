@@ -987,8 +987,8 @@ static int cxip_ep_close(struct fid *fid)
 static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 			   uint64_t flags)
 {
-	struct cxip_txc *txc;
-	struct cxip_rxc *rxc;
+	struct cxip_txc *txc = ep->ep_obj->txc;
+	struct cxip_rxc *rxc = ep->ep_obj->rxc;
 	int ret;
 
 	if (ep->ep_obj->domain != cq->domain) {
@@ -1002,12 +1002,30 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 	}
 
 	if (flags & FI_TRANSMIT) {
-		txc = ep->ep_obj->txc;
 		if (txc->send_cq) {
 			CXIP_WARN("SEND CQ previously bound\n");
 			return -FI_EINVAL;
 		}
+	}
 
+	if (flags & FI_RECV) {
+		if (rxc->recv_cq) {
+			CXIP_WARN("RECV CQ previously bound\n");
+			return -FI_EINVAL;
+		}
+
+		if (rxc->attr.caps & FI_SOURCE) {
+			ret = cxip_cq_enable_source(cq);
+			if (ret) {
+				CXIP_WARN("Failed to enable CQ source "
+					  "addressing: %d\n",
+					  ret);
+				return ret;
+			}
+		}
+	}
+
+	if (flags & FI_TRANSMIT) {
 		ofi_atomic_inc32(&cq->util_cq.ref);
 		txc->send_cq = cq;
 
@@ -1033,12 +1051,6 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 	}
 
 	if (flags & FI_RECV) {
-		rxc = ep->ep_obj->rxc;
-		if (rxc->recv_cq) {
-			CXIP_WARN("RECV CQ previously bound\n");
-			return -FI_EINVAL;
-		}
-
 		ofi_atomic_inc32(&cq->util_cq.ref);
 		rxc->recv_cq = cq;
 
@@ -2443,4 +2455,3 @@ int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	return FI_SUCCESS;
 }
-

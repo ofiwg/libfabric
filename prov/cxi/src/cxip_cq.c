@@ -25,6 +25,112 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
 /*
+ * cxip_peer_cq_write() - Write a completion with source address when enabled.
+ */
+static ssize_t cxip_peer_cq_write(struct fid_peer_cq *peer_cq,
+				 void *context, uint64_t flags, size_t len,
+				 void *buf, uint64_t data, uint64_t tag,
+				 fi_addr_t src)
+{
+	struct util_cq *util_cq = peer_cq->fid.context;
+	int ret;
+
+	ofi_genlock_lock(&util_cq->cq_lock);
+
+	if (ofi_cirque_freecnt(util_cq->cirq) > 1) {
+		if (util_cq->src) {
+			ofi_cq_write_src_entry(util_cq, context, flags, len,
+					       buf, data, tag, src);
+		} else {
+			ofi_cq_write_entry(util_cq, context, flags, len, buf,
+					   data, tag);
+		}
+
+		ret = 0;
+	} else {
+		ret = ofi_cq_write_overflow(util_cq, context, flags, len, buf,
+					    data, tag, util_cq->src ?
+					    src : FI_ADDR_NOTAVAIL);
+	}
+
+	ofi_genlock_unlock(&util_cq->cq_lock);
+
+	if (util_cq->wait)
+		util_cq->wait->signal(util_cq->wait);
+
+	return ret;
+}
+
+/*
+ * cxip_peer_cq_writeerr() - Delegate error writes to the original CQ owner.
+ */
+static ssize_t cxip_peer_cq_writeerr(struct fid_peer_cq *peer_cq,
+				    const struct fi_cq_err_entry *err_entry)
+{
+	struct util_cq *util_cq = peer_cq->fid.context;
+	struct cxip_cq *cq;
+
+	cq = container_of(util_cq, struct cxip_cq, util_cq);
+
+	return cq->util_owner_ops->writeerr(peer_cq, err_entry);
+}
+
+/*
+ * cxip_peer_cq_owner_ops - CXI peer CQ completion and error write operations.
+ */
+static struct fi_ops_cq_owner cxip_peer_cq_owner_ops = {
+	.size = sizeof(struct fi_ops_cq_owner),
+	.write = &cxip_peer_cq_write,
+	.writeerr = &cxip_peer_cq_writeerr,
+};
+
+/*
+ * cxip_cq_enable_source() - Enable source tracking for a shared completion
+ * queue.
+ */
+int cxip_cq_enable_source(struct cxip_cq *cq)
+{
+	struct util_cq *util_cq = &cq->util_cq;
+	fi_addr_t *src;
+	size_t i;
+	int ret = FI_SUCCESS;
+
+	/* External peer CQ owners handle source addresses in their callbacks.
+	 */
+	if (util_cq->flags & FI_PEER)
+		return FI_SUCCESS;
+
+	ofi_genlock_lock(&util_cq->cq_lock);
+
+	/* Allocate source storage only if it is not already present.
+	 * Endpoints sharing this CQ reuse the existing source array.
+	 */
+	if (!util_cq->src) {
+		if (!util_cq->cirq) {
+			ret = -FI_EINVAL;
+		} else {
+			src = calloc(util_cq->cirq->size, sizeof(*src));
+			if (src) {
+
+				/* Queued completions have no recorded source.
+				 */
+				for (i = 0; i < util_cq->cirq->size; i++)
+					src[i] = FI_ADDR_NOTAVAIL;
+				util_cq->src = src;
+				CXIP_DBG("Enabled FI_SOURCE tracking "
+					 "for CQ.\n");
+			} else {
+				ret = -FI_ENOMEM;
+			}
+		}
+	}
+
+	ofi_genlock_unlock(&util_cq->cq_lock);
+
+	return ret;
+}
+
+/*
  * cxip_cq_req_complete() - Generate a completion event for the request.
  */
 int cxip_cq_req_complete(struct cxip_req *req)
@@ -40,8 +146,8 @@ int cxip_cq_req_complete(struct cxip_req *req)
 }
 
 /*
- * cxip_cq_req_complete() - Generate a completion event with source address for
- * the request.
+ * cxip_cq_req_complete_addr() - Generate a completion event with source address
+ * for the request.
  */
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 {
@@ -523,9 +629,19 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err_util_cq;
 	}
 
-	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
-	if (!(cxi_cq->attr.flags & FI_PEER))
+	if (!(cxi_cq->util_cq.flags & FI_PEER)) {
+
+		/* Only replace operations on the peer CQ owned by CXI.
+		 * External peer CQ contexts and operations belong to the
+		 * caller.
+		 */
+		cxi_cq->util_owner_ops =
+			cxi_cq->util_cq.peer_cq->owner_ops;
+		cxi_cq->util_cq.peer_cq->owner_ops =
+			&cxip_peer_cq_owner_ops;
 		cxi_cq->util_cq.cq_fid.ops = &cxip_cq_ops;
+	}
+	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
 	cxi_cq->ep_fd = -1;
