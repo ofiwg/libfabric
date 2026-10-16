@@ -1175,7 +1175,7 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 
 	pke = (struct efa_rdm_pke *) rx_entry->peer_context;
 
-	return pke->peer->av_entry->efa_av_entry.fi_addr;
+	return efa_rdm_peer_fi_addr(pke->peer);
 }
 
 
@@ -1183,7 +1183,9 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
  * @brief Move every endpoint's peer from an implicit to an explicit fi_addr
  *
  * The explicit AV entry is a different object from the implicit one, so each
- * peer's av_entry pointer moves with it. Every explicit peer map slot is
+ * peer moves to the explicit peer map and gets the new fi_addr. The peer does
+ * not point at either entry, so the implicit entry can be freed afterwards
+ * while other threads still use the peer. Every explicit peer map slot is
  * reserved before the first peer is moved, so once moving starts it cannot fail
  * and no peer can be left out of both maps. A failure therefore means nothing
  * moved and the caller has nothing to unwind.
@@ -1229,7 +1231,11 @@ static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
 		peer = efa_rdm_ep_peer_map_remove(ep->fi_addr_to_peer_map_implicit,
 						  implicit_fi_addr);
 		if (peer) {
-			peer->av_entry = av_entry;
+			/* Lock-free readers can be using this peer on other
+			 * threads. The peer holds its own ah, qpn and qkey and
+			 * never points at the implicit entry, so the entry can
+			 * be freed once its fi_addr has been replaced. */
+			efa_rdm_peer_move_to_explicit(peer, fi_addr);
 			/* The slot was reserved above, so this cannot fail */
 			err = efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
 							 fi_addr, peer);
@@ -1257,9 +1263,9 @@ out:
  * When peers move here from an implicit fi_addr, everything the reverse AV add
  * needs is reserved before the peer maps are touched, so the add cannot fail
  * once the peers have moved. That is what keeps this function free of an unwind
- * path: moving the peers back would have to restore each peer's av_entry
- * pointer to the implicit entry, and the restore could itself fail and leave a
- * peer in neither map. A brand new entry has no peers yet, so there is nothing
+ * path: moving the peers back would have to move each peer back to the
+ * implicit peer map and restore its implicit fi_addr, and the restore could
+ * itself fail and leave a peer in neither map. A brand new entry has no peers yet, so there is nothing
  * to reserve against and the caller unwinds an add failure instead.
  *
  * @param[in]	av		address vector

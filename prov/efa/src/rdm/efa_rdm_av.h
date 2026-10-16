@@ -104,14 +104,15 @@ struct efa_rdm_av_entry {
 /*
  * Advance and check the publication state. Both are no-ops outside debug
  * builds, so callers must not depend on them for anything but the assertions.
+ * The lock-free CQ read path checks the state while a publish can be running
+ * on another thread, so both use atomics.
  */
 #if ENABLE_DEBUG
 #define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)                    \
-	do {                                                                   \
-		(av_entry)->publish_state = (state);                            \
-	} while (0)
+	__atomic_store_n(&(av_entry)->publish_state, (state), __ATOMIC_RELAXED)
 #define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)                 \
-	assert((av_entry)->publish_state == (state))
+	assert(__atomic_load_n(&(av_entry)->publish_state, __ATOMIC_RELAXED) == \
+	       (state))
 #else
 #define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)	do {} while (0)
 #define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)	do {} while (0)
