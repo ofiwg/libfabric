@@ -666,7 +666,9 @@ class ClientServerTest:
                 assert efa_device, \
                     "{} has no NIC on the {} path to GPU memory".format(host_ip, nic_dma_path)
             elif host_memory_type == "neuron":
-                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip, hmem_device_id)
+                num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
+                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip,
+                                                                                hmem_device_id * num_cores)
             else:
                 efa_device = efa.efa_common.get_efa_device_name_for_hmem_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
