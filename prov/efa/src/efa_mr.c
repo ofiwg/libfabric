@@ -28,6 +28,8 @@ struct efa_mr *efa_mr_alloc(struct efa_domain *efa_domain)
 
 	ofi_genlock_lock(&efa_domain->util_domain.lock);
 	efa_mr = ofi_buf_alloc(efa_domain->mr_pool);
+	if (efa_mr)
+		ofi_atomic_inc32(&efa_domain->util_domain.ref);
 	ofi_genlock_unlock(&efa_domain->util_domain.lock);
 
 	return efa_mr;
@@ -45,6 +47,7 @@ void efa_mr_free(struct efa_mr *efa_mr)
 	struct efa_domain *efa_domain = efa_mr->domain;
 
 	ofi_genlock_lock(&efa_domain->util_domain.lock);
+	ofi_atomic_dec32(&efa_domain->util_domain.ref);
 	ofi_buf_free(efa_mr);
 	ofi_genlock_unlock(&efa_domain->util_domain.lock);
 }

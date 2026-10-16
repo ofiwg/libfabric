@@ -217,6 +217,17 @@ static int efa_rdm_domain_close(fid_t fid)
 				  util_domain.domain_fid.fid);
 	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
+	// MR cache holds a util_domain.ref, but not user's responsibility to free
+	int internal_refs = efa_is_cache_available(rdm_domain) ? 1 : 0;
+
+	if (ofi_atomic_get32(&efa_domain->util_domain.ref) > internal_refs) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Cannot close domain: resources (endpoints, CQs, AVs, "
+			 "counters, or MRs) are still open. All domain "
+			 "resources must be closed before the domain.\n");
+		return -FI_EBUSY;
+	}
+
 	if (rdm_domain->cache) {
 		ofi_mr_cache_cleanup(rdm_domain->cache);
 		free(rdm_domain->cache);
