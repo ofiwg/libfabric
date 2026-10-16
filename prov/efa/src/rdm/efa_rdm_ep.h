@@ -794,4 +794,38 @@ static inline size_t efa_rdm_ep_get_available_tx_pkts(struct efa_rdm_ep *ep)
 	return ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops -
 	       ep->efa_rnr_queued_pkt_cnt;
 }
+
+/**
+ * @brief minimum rx size of an efa-protocol endpoint
+ *
+ * In efa-protocol, up to FI_EFA_INTERNAL_RX_REFILL_THRESHOLD rx packets can
+ * be waiting for refill and up to EFA_RDM_MAX_QUEUED_COPY can be held for
+ * batched hmem copy. The rx pool must hold at least that many, otherwise all
+ * rx packets can be held or waiting for refill. There will be no RX WQEs
+ * posted and peers get RNR forever.
+ *
+ * @return	minimum rx size
+ */
+static inline size_t efa_rdm_ep_get_min_rx_size(void)
+{
+	return efa_env.internal_rx_refill_threshold + EFA_RDM_MAX_QUEUED_COPY;
+}
+
+/**
+ * @brief rx size of an efa-protocol endpoint
+ *
+ * Raise the requested rx size to at least efa_rdm_ep_get_min_rx_size() and
+ * cap it at the device limit.
+ *
+ * @param[in]	device_rx_size	rx size supported by the device
+ * @param[in]	requested_rx_size	rx size requested by the app
+ * @return	rx size of the endpoint
+ */
+static inline size_t efa_rdm_ep_get_rx_size(size_t device_rx_size,
+					    size_t requested_rx_size)
+{
+	return MIN(device_rx_size,
+		   MAX(efa_rdm_ep_get_min_rx_size(), requested_rx_size));
+}
+
 #endif
