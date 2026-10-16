@@ -3,6 +3,7 @@
  * rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "ofi_atomic.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_utils.h"
@@ -746,6 +747,23 @@ test_proto_atomic_posted_pke(struct efa_unit_test_atomic_ctx *ctx)
 }
 
 static struct efa_rdm_pke *
+test_proto_atomic_request_rx(struct efa_unit_test_atomic_ctx *ctx,
+			     struct efa_rdm_pke *req_pke)
+{
+	struct efa_rdm_pke *req_rx;
+
+	req_rx = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
+				   ctx->ep->rx_unexp_bounce_pool,
+				   EFA_RDM_PKE_FROM_UNEXP_POOL);
+	assert_non_null(req_rx);
+	req_rx->ep = ctx->ep;
+	req_rx->peer = ctx->peer;
+	req_rx->pkt_size = req_pke->pkt_size;
+	memcpy(req_rx->wiredata, req_pke->wiredata, req_pke->pkt_size);
+	return req_rx;
+}
+
+static struct efa_rdm_pke *
 test_proto_atomic_receipt(struct efa_unit_test_atomic_ctx *ctx,
 			  uint32_t tx_id)
 {
@@ -814,6 +832,18 @@ static void test_proto_atomic_read_error(
 	assert_int_equal(fi_cq_readerr(ctx->resource->cq, &err_entry, 0), 1);
 	assert_ptr_equal(err_entry.op_context, ctx);
 	assert_int_equal(err_entry.flags, FI_ATOMIC | FI_WRITE);
+	assert_int_equal(err_entry.err, err);
+	assert_int_equal(err_entry.prov_errno, prov_errno);
+}
+
+static void
+test_proto_atomic_read_eq_error(struct efa_unit_test_atomic_ctx *ctx, int err,
+				int prov_errno)
+{
+	struct fi_eq_err_entry err_entry = {0};
+
+	assert_int_equal(fi_eq_readerr(ctx->resource->eq, &err_entry, 0),
+			 sizeof(err_entry));
 	assert_int_equal(err_entry.err, err);
 	assert_int_equal(err_entry.prov_errno, prov_errno);
 }
@@ -1041,6 +1071,93 @@ void test_proto_atomic_write_async_release_paths(void **state)
 	test_proto_atomic_read_error(&ctx, FI_EIO, FI_EFA_ERR_PKT_POST);
 	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 2);
 	test_proto_atomic_assert_cq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+void test_proto_atomic_write_responder_rejects_invalid_op_datatype(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_rta_hdr *rta_hdr;
+	struct efa_rdm_pke *req_pke, *req_rx;
+	const struct {
+		uint32_t op;
+		uint32_t datatype;
+	} invalid_hdrs[] = {
+		{FI_ATOMIC_READ, FI_UINT8},
+		{FI_BOR, FI_FLOAT},
+		{OFI_SWAP_OP_LAST, FI_UINT8},
+		{FI_SUM, OFI_DATATYPE_CNT},
+	};
+	const uint64_t flags[] = {
+		FI_COMPLETION,
+		FI_COMPLETION | FI_DELIVERY_COMPLETE,
+	};
+	uint8_t *target, *source;
+	uint32_t next_msg_id;
+	int submitted_before;
+	size_t i, j;
+
+	test_proto_atomic_setup(resource, &ctx);
+	target = ctx.send_buff.buff;
+	source = target + 16;
+	ctx.ioc.addr = source;
+	ctx.rma_ioc.addr = (uint64_t) target;
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	for (i = 0; i < ARRAY_SIZE(flags); i++) {
+		for (j = 0; j < ARRAY_SIZE(invalid_hdrs); j++) {
+			target[0] = 1;
+			source[0] = 2;
+			next_msg_id = ctx.peer->next_msg_id;
+
+			assert_int_equal(
+				test_proto_atomic_post(&ctx, 1, flags[i]), 0);
+			req_pke = test_proto_atomic_posted_pke(&ctx);
+			req_rx = test_proto_atomic_request_rx(&ctx, req_pke);
+			rta_hdr = efa_rdm_pke_get_rta_hdr(req_rx);
+			rta_hdr->atomic_op = invalid_hdrs[j].op;
+			rta_hdr->atomic_datatype = invalid_hdrs[j].datatype;
+			submitted_before = g_ibv_submitted_wr_id_cnt;
+
+			if (flags[i] & FI_DELIVERY_COMPLETE)
+				assert_int_equal(
+					efa_rdm_pke_proc_dc_write_rta(req_rx),
+					-FI_EINVAL);
+			else
+				assert_int_equal(
+					efa_rdm_pke_proc_write_rta(req_rx),
+					-FI_EINVAL);
+
+			assert_int_equal(target[0], 1);
+			assert_int_equal(g_ibv_submitted_wr_id_cnt,
+					 submitted_before);
+			test_proto_atomic_read_eq_error(
+				&ctx, FI_EINVAL, FI_EFA_ERR_INVALID_DATATYPE);
+
+			if (flags[i] & FI_DELIVERY_COMPLETE) {
+				assert_int_equal(
+					efa_unit_test_get_ope_list_length(
+						ctx.ep, EFA_RDM_RXE),
+					0);
+				efa_rdm_pke_handle_tx_error(
+					req_pke,
+					EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+				test_proto_atomic_read_error(
+					&ctx, FI_EHOSTUNREACH,
+					EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+			} else {
+				efa_rdm_pke_handle_send_completion(req_pke);
+				test_proto_atomic_read_success(&ctx, 1);
+			}
+
+			test_proto_atomic_assert_clean(&ctx, next_msg_id + 1);
+			test_proto_atomic_assert_cq_empty(&ctx);
+		}
+	}
+
 	efa_unit_test_buff_destruct(&ctx.send_buff);
 }
 
