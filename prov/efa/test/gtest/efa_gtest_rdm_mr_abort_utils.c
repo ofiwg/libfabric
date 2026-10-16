@@ -162,7 +162,6 @@ void *efa_test_mr_abort_forge_tx_pke(int pkt)
 	struct efa_rdm_base_hdr *base_hdr;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (!pkt_entry)
 		return NULL;
