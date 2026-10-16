@@ -23,6 +23,29 @@
 	((uint64_t) EFA_AV_ARRAY_INLINE_SIZE * EFA_AV_ARRAY_CHUNK_SIZE - 1)
 
 /*
+ * Accessors for the pointers that insert() publishes to lock-free readers:
+ * the inline entries, the chunk table pointer, chunk table slots and chunk
+ * slots.
+ *
+ * Ordering comes from the ofi_wmb()/ofi_rmb() pair in insert() and at().
+ * ThreadSanitizer does not model standalone fences
+ * (https://github.com/google/sanitizers/issues/1822), so it reports every
+ * concurrent insert()/at() as a data race. In TSan builds, publish and load
+ * these pointers with release/acquire atomics, which TSan does understand and
+ * which give the same ordering as the barriers. Other builds keep the plain
+ * accesses.
+ */
+#ifdef ENABLE_TSAN
+#define EFA_AV_ARRAY_PUBLISH(slot, val) \
+	__atomic_store_n(&(slot), (val), __ATOMIC_RELEASE)
+#define EFA_AV_ARRAY_LOAD(slot) \
+	__atomic_load_n(&(slot), __ATOMIC_ACQUIRE)
+#else
+#define EFA_AV_ARRAY_PUBLISH(slot, val) ((slot) = (val))
+#define EFA_AV_ARRAY_LOAD(slot) (slot)
+#endif
+
+/*
  * A pointer array indexed by a uint64_t in [0, max_idx] for endpoint peer
  * lookup by fi_addr. Each slot holds a caller-owned pointer or NULL.
  *
@@ -120,18 +143,18 @@ static inline void *efa_av_array_at(const struct efa_av_array *arr, uint64_t ind
 		return NULL;
 
 	if (index < arr->inline_size)
-		return arr->inline_entries[index];
+		return EFA_AV_ARRAY_LOAD(arr->inline_entries[index]);
 
-	table = arr->chunk_table;
+	table = EFA_AV_ARRAY_LOAD(arr->chunk_table);
 	if (!table)
 		return NULL;
 
 	rel = (size_t) index - arr->inline_size;
-	chunk = table[rel / arr->chunk_size];
+	chunk = EFA_AV_ARRAY_LOAD(table[rel / arr->chunk_size]);
 	if (!chunk)
 		return NULL;
 
-	return ((void **) chunk)[rel % arr->chunk_size];
+	return EFA_AV_ARRAY_LOAD(((void **) chunk)[rel % arr->chunk_size]);
 }
 
 #endif /* EFA_AV_ARRAY_H */
