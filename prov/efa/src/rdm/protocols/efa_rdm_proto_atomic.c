@@ -9,6 +9,7 @@
 #include "efa_rdm_pke_rta.h"
 #include <ofi_proto.h>
 #include <rdma/fi_errno.h>
+#include <stdint.h>
 
 /*
  * List of packet types used by this protocol
@@ -55,8 +56,9 @@ static ssize_t efa_rdm_proto_atomic_write_handle_send_completion(struct efa_rdm_
 	return FI_SUCCESS;
 }
 
-static size_t efa_rdm_proto_atomic_write_get_req_data_size(struct efa_rdm_ope *txe){
-	return txe->total_len;
+static int efa_rdm_proto_atomic_write_get_req_data_size(struct efa_rdm_ope *txe, size_t *data_size) {
+	*data_size = txe->total_len;
+	return FI_SUCCESS;
 }
 
 static ssize_t efa_rdm_proto_atomic_write_init_req_pke(struct efa_rdm_pke *pkt_entry,
@@ -76,6 +78,93 @@ const struct efa_rdm_atomic_proto efa_rdm_atomic_write_proto = {
 	.handle_send_completion =
 		&efa_rdm_proto_atomic_write_handle_send_completion,
 };
+
+static ssize_t efa_rdm_proto_atomic_response_handle_send_completion(
+	struct efa_rdm_pke *pkt_entry) {
+	struct efa_rdm_ope *txe = pkt_entry->ope;
+	bool release_txe;
+
+	release_txe = efa_rdm_txe_with_remote_ack_ready_for_release(txe);
+	efa_rdm_pke_release_tx(pkt_entry);
+	if (release_txe)
+		efa_rdm_txe_release(txe);
+	return FI_SUCCESS;
+}
+
+static int efa_rdm_proto_atomic_fetch_get_req_data_size(
+	struct efa_rdm_ope *txe, size_t *data_size) {
+	*data_size = txe->total_len;
+	return FI_SUCCESS;
+}
+
+static ssize_t efa_rdm_proto_atomic_fetch_init_req_pke(
+	struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe) {
+	return efa_rdm_pke_init_fetch_rta(pkt_entry, txe);
+}
+
+const struct efa_rdm_atomic_proto efa_rdm_atomic_fetch_proto = {
+	.req_pkt_type = EFA_RDM_FETCH_RTA_PKT,
+	.req_pkt_type_dc = EFA_RDM_FETCH_RTA_PKT,
+	.get_req_data_size = &efa_rdm_proto_atomic_fetch_get_req_data_size,
+	.init_req_pke = &efa_rdm_proto_atomic_fetch_init_req_pke,
+	.handle_send_completion = &efa_rdm_proto_atomic_response_handle_send_completion,
+};
+
+static int efa_rdm_proto_atomic_iov_size(
+	const struct iovec *iov, size_t iov_count, size_t *size) {
+	size_t i;
+
+	*size = 0;
+	for (i = 0; i < iov_count; i++) {
+		if (iov[i].iov_len > SIZE_MAX - *size)
+			return -FI_EMSGSIZE;
+		*size += iov[i].iov_len;
+	}
+	return FI_SUCCESS;
+}
+
+static int efa_rdm_proto_atomic_compare_get_req_data_size(
+	struct efa_rdm_ope *txe, size_t *data_size) {
+	size_t compare_size;
+	int err;
+
+	err = efa_rdm_proto_atomic_iov_size(
+		txe->atomic_ex.comp_iov, txe->atomic_ex.comp_iov_count, &compare_size);
+	if (err)
+		return err;
+	if (compare_size != txe->total_len)
+		return -FI_EINVAL;
+	if (compare_size > SIZE_MAX - txe->total_len)
+		return -FI_EMSGSIZE;
+	*data_size = txe->total_len + compare_size;
+	return FI_SUCCESS;
+}
+
+static ssize_t efa_rdm_proto_atomic_compare_init_req_pke(
+	struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe) {
+	return efa_rdm_pke_init_compare_rta(pkt_entry, txe);
+}
+
+const struct efa_rdm_atomic_proto efa_rdm_atomic_compare_proto = {
+	.req_pkt_type = EFA_RDM_COMPARE_RTA_PKT,
+	.req_pkt_type_dc = EFA_RDM_COMPARE_RTA_PKT,
+	.get_req_data_size = &efa_rdm_proto_atomic_compare_get_req_data_size,
+	.init_req_pke = &efa_rdm_proto_atomic_compare_init_req_pke,
+	.handle_send_completion = &efa_rdm_proto_atomic_response_handle_send_completion,
+};
+
+const struct efa_rdm_atomic_proto *efa_rdm_proto_atomic_select(uint32_t op) {
+	switch (op) {
+	case ofi_op_atomic:
+		return &efa_rdm_atomic_write_proto;
+	case ofi_op_atomic_fetch:
+		return &efa_rdm_atomic_fetch_proto;
+	case ofi_op_atomic_compare:
+		return &efa_rdm_atomic_compare_proto;
+	default:
+		return NULL;
+	}
+}
 
 /**
  * @brief construct the single request PKE of an atomic TXE
@@ -101,10 +190,15 @@ static ssize_t efa_rdm_proto_atomic_construct_tx_pke(struct efa_rdm_ope *txe){
 	assert(txe->atomic_proto->init_req_pke);
 	assert(txe->atomic_proto->handle_send_completion);
 
-	req_data_size = txe->atomic_proto->get_req_data_size(txe);
+	err = txe->atomic_proto->get_req_data_size(txe, &req_data_size);
+	if (OFI_UNLIKELY(err))
+		return err;
 	max_payload =
 		efa_rdm_txe_max_req_data_capacity(ep, txe, txe->req_pkt_type);
 	if (OFI_UNLIKELY(req_data_size > max_payload))
+		return -FI_EMSGSIZE;
+	if (txe->op != ofi_op_atomic &&
+	    OFI_UNLIKELY(txe->total_len > ep->mtu_size - sizeof(struct efa_rdm_atomrsp_hdr)))
 		return -FI_EMSGSIZE;
 
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
@@ -136,7 +230,8 @@ ssize_t efa_rdm_proto_atomic_post(struct efa_rdm_ope *txe)
 
 	assert(txe->atomic_proto);
 	assert(!txe->proto);
-	assert(txe->op == ofi_op_atomic);
+	assert(txe->op == ofi_op_atomic || txe->op == ofi_op_atomic_fetch ||
+	       txe->op == ofi_op_atomic_compare);
 
 	txe->req_pkt_type = efa_rdm_proto_atomic_req_pkt_type(txe);
 	err = efa_rdm_proto_atomic_construct_tx_pke(txe);

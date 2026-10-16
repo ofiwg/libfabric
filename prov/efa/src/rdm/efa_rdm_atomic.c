@@ -11,6 +11,42 @@
 #include "efa_rdm_pke_cmd.h"
 #include "protocols/efa_rdm_proto_atomic.h"
 
+static int efa_rdm_atomic_validate_counts(const struct fi_msg_atomic *msg,
+					  const struct fi_ioc *resultv, size_t result_count,
+					  bool check_source, size_t *logical_count){
+	size_t count;
+
+	if ((check_source && msg->iov_count && !msg->msg_iov) ||
+	    (result_count && !resultv) || (msg->rma_iov_count && !msg->rma_iov))
+		return -FI_EINVAL;
+
+	count = ofi_total_ioc_cnt(resultv, result_count);
+	if (count != ofi_total_rma_ioc_cnt(msg->rma_iov, msg->rma_iov_count) ||
+	    (check_source &&
+	     count != ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count)))
+		return -FI_EINVAL;
+
+	*logical_count = count;
+	return FI_SUCCESS;
+}
+
+static int efa_rdm_atomic_validate_compare_counts(
+	const struct fi_msg_atomic *msg, const struct fi_ioc *comparev,
+	size_t compare_count, const struct fi_ioc *resultv, size_t result_count)
+{
+	size_t logical_count;
+	int err;
+
+	if (compare_count && !comparev)
+		return -FI_EINVAL;
+
+	err = efa_rdm_atomic_validate_counts(msg, resultv, result_count, true, &logical_count);
+	if (err)
+		return err;
+
+	return logical_count == ofi_total_ioc_cnt(comparev, compare_count) ? FI_SUCCESS : -FI_EINVAL;
+}
+
 static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic *shm_msg,
 				    const struct fi_msg_atomic *msg,
 				    struct fi_rma_ioc *rma_iov,
@@ -85,12 +121,11 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	txe->atomic_hdr.atomic_op = msg_atomic->op;
 	txe->atomic_hdr.datatype = msg_atomic->datatype;
 
-	if (op == ofi_op_atomic) {
-		txe->atomic_proto = &efa_rdm_atomic_write_proto;
-	} else {
+	if (op == ofi_op_atomic_fetch || op == ofi_op_atomic_compare) {
 		assert(atomic_ex);
 		memcpy(&txe->atomic_ex, atomic_ex, sizeof(struct efa_rdm_atomic_ex));
 	}
+	txe->atomic_proto = efa_rdm_proto_atomic_select(op);
 
 	return txe;
 }
@@ -310,6 +345,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 			uint64_t flags)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct fi_msg_atomic efa_msg = *msg;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
 	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
@@ -317,6 +353,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	struct efa_rdm_atomic_ex atomic_ex = {
 		.resp_iov_count = result_count,
 	};
+	size_t logical_count;
 	size_t datatype_size;
 	fi_addr_t shm_addr;
 	int err;
@@ -334,9 +371,16 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	err = efa_rdm_atomic_validate_counts(
+		msg, resultv, result_count, msg->op != FI_ATOMIC_READ, &logical_count);
 	if (err)
 		return err;
+
+	if (msg->op != FI_ATOMIC_READ) {
+		err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *) msg->msg_iov, msg->desc, msg->iov_count);
+		if (err)
+			return err;
+	}
 
 	err = efa_rdm_attempt_to_sync_memops_ioc(efa_rdm_ep, (struct fi_ioc *)resultv, result_desc, result_count);
 	if (err)
@@ -354,10 +398,20 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 		}
 	}
 
-	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
-	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
+	efa_msg.msg_iov = msg->op == FI_ATOMIC_READ
+		? &(struct fi_ioc) {.count = logical_count}
+		: msg->msg_iov;
 
-	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags, 0);
+	if (msg->op == FI_ATOMIC_READ) {
+		efa_msg.desc = NULL;
+		efa_msg.iov_count = 1;
+	}
+
+	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
+	if (result_desc)
+		memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
+
+	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, &efa_msg, &atomic_ex, ofi_op_atomic_fetch, flags, 0);
 	return err;
 }
 
@@ -372,7 +426,9 @@ efa_rdm_atomic_readwritev(struct fid_ep *ep,
 	struct fi_rma_ioc rma_ioc;
 
 	rma_ioc.addr = addr;
-	rma_ioc.count = ofi_total_ioc_cnt(iov, count);
+	rma_ioc.count = op == FI_ATOMIC_READ ?
+				ofi_total_ioc_cnt(resultv, result_count) :
+				ofi_total_ioc_cnt(iov, count);
 	rma_ioc.key = key;
 
 	msg.msg_iov = iov;
@@ -444,6 +500,11 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
+	err = efa_rdm_atomic_validate_compare_counts(
+		msg, comparev, compare_count, resultv, result_count);
+	if (err)
+		return err;
+
 	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
 	if (err)
 		return err;
@@ -475,7 +536,8 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	memset(atomic_ex.compare_desc, 0, sizeof(atomic_ex.compare_desc));
 	if (compare_desc)
 		memcpy(atomic_ex.compare_desc, compare_desc, sizeof(void*) * compare_count);
-	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
+	if (result_desc)
+		memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags, 0);
 	return err;
