@@ -24,7 +24,14 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->ep = ep;
-	peer->av_entry = av_entry;
+	peer->ah = av_entry->efa_av_entry.ah;
+	peer->qpn = efa_av_entry_ep_addr(&av_entry->efa_av_entry)->qpn;
+	peer->qkey = efa_av_entry_ep_addr(&av_entry->efa_av_entry)->qkey;
+	/* The peer is not reachable by other threads yet */
+	assert((av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL) !=
+	       (av_entry->implicit_fi_addr == FI_ADDR_NOTAVAIL));
+	peer->fi_addr = av_entry->efa_av_entry.fi_addr;
+	peer->implicit_fi_addr = av_entry->implicit_fi_addr;
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, efa_av_entry_ep_addr(&av_entry->efa_av_entry));
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
