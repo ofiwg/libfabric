@@ -984,7 +984,7 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 
 	pke = (struct efa_rdm_pke *) rx_entry->peer_context;
 
-	return pke->peer->av_entry->efa_av_entry.fi_addr;
+	return efa_rdm_peer_fi_addr(pke->peer);
 }
 
 
@@ -1115,7 +1115,11 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		peer = efa_rdm_ep_peer_map_remove(ep->fi_addr_to_peer_map_implicit,
 					       implicit_fi_addr);
 		if (peer) {
-			peer->av_entry = explicit_av_entry;
+			/* Lock-free readers can be using this peer on other
+			 * threads. The peer holds its own ah, qpn and qkey and
+			 * never points at the implicit entry, so the entry can
+			 * be freed once its fi_addr has been replaced. */
+			efa_rdm_peer_move_to_explicit(peer, *fi_addr);
 			if (efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
 						       *fi_addr, peer))
 				EFA_WARN(FI_LOG_AV,

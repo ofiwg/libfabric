@@ -101,8 +101,19 @@ struct efa_rdm_peer {
 	 */
 	bool p2p_supported;
 	uint32_t device_version;	/**< EFA device version */
-	struct efa_rdm_av_entry *av_entry;		/**< pointer to the efa_rdm_av_entry in the av */
-	uint64_t host_id; 		/* Optional peer host id. Default 0 */
+	/**
+	 * @brief Address handle, QP number and QKey of the peer
+	 *
+	 * @details Copied from the AV entry when the peer is constructed and not
+	 * written afterwards, so they are read without a lock. They are the same
+	 * in the implicit and explicit AV entries, so they stay correct when the
+	 * peer moves to the explicit AV and the implicit entry is freed. Every AV
+	 * entry release path destroys the entry's peers before it releases the
+	 * address handle, so ah outlives the peer.
+	 */
+	struct efa_ah *ah;
+	uint16_t qpn;
+	uint32_t qkey;
 	/**
 	 * @brief reorder buffer
 	 *
@@ -134,6 +145,26 @@ struct efa_rdm_peer {
 	struct efa_rdm_peer_user_recv_qp user_recv_qp;
 
 	struct efa_rdm_rxe_map rxe_map; 	/**< Hashmap used to match received mulreq packets with RX entries */
+	/*
+	 * The fields below are not read on the per-packet send and receive
+	 * paths (fi_addr is read once per completion, as it was from the AV
+	 * entry before). They are kept last so that ah, qpn and qkey fit in
+	 * front of robuf and every per-packet field stays in the first two
+	 * cache lines.
+	 */
+	uint64_t host_id; 		/* Optional peer host id. Default 0 */
+	/**
+	 * @brief Explicit and implicit fi_addr of the peer
+	 *
+	 * @details Same meaning as in efa_rdm_av_entry: a peer in the explicit AV
+	 * has fi_addr set and implicit_fi_addr FI_ADDR_NOTAVAIL, and a peer only
+	 * in the implicit AV the reverse. Moving the peer to the explicit AV
+	 * changes them while lock-free readers can run, so they are only accessed
+	 * through efa_rdm_peer_fi_addr(), efa_rdm_peer_implicit_fi_addr(),
+	 * efa_rdm_peer_is_explicit() and efa_rdm_peer_move_to_explicit().
+	 */
+	fi_addr_t fi_addr;
+	fi_addr_t implicit_fi_addr;
 };
 
 /**
@@ -281,9 +312,55 @@ size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *
 
 int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
+/**
+ * @brief Return the explicit fi_addr of a peer, or FI_ADDR_NOTAVAIL if the
+ * peer is only in the implicit AV. Safe without the AV locks.
+ */
+static inline fi_addr_t efa_rdm_peer_fi_addr(const struct efa_rdm_peer *peer)
+{
+	return __atomic_load_n(&peer->fi_addr, __ATOMIC_ACQUIRE);
+}
+
+/**
+ * @brief Return the implicit fi_addr of a peer, or FI_ADDR_NOTAVAIL if the
+ * peer is in the explicit AV. Safe without the AV locks.
+ */
+static inline fi_addr_t efa_rdm_peer_implicit_fi_addr(const struct efa_rdm_peer *peer)
+{
+	return __atomic_load_n(&peer->implicit_fi_addr, __ATOMIC_ACQUIRE);
+}
+
+/**
+ * @brief Return whether the peer is in the explicit AV. Safe without the AV
+ * locks; once it returns true it keeps returning true for the peer's lifetime.
+ */
+static inline bool efa_rdm_peer_is_explicit(const struct efa_rdm_peer *peer)
+{
+	return efa_rdm_peer_fi_addr(peer) != FI_ADDR_NOTAVAIL;
+}
+
+/**
+ * @brief Record that an implicit peer moved to the explicit AV at fi_addr
+ *
+ * @details Lock-free readers can run concurrently. fi_addr is published
+ * before implicit_fi_addr is cleared, so a reader can briefly see both set,
+ * but never neither, and efa_rdm_peer_is_explicit() never goes back to false.
+ *
+ * @param[in,out]	peer	rdm peer, currently only in the implicit AV
+ * @param[in]		fi_addr	explicit fi_addr of the peer
+ */
+static inline void efa_rdm_peer_move_to_explicit(struct efa_rdm_peer *peer,
+						 fi_addr_t fi_addr)
+{
+	assert(fi_addr != FI_ADDR_NOTAVAIL);
+	assert(!efa_rdm_peer_is_explicit(peer));
+	__atomic_store_n(&peer->fi_addr, fi_addr, __ATOMIC_RELEASE);
+	__atomic_store_n(&peer->implicit_fi_addr, FI_ADDR_NOTAVAIL, __ATOMIC_RELEASE);
+}
+
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->av_entry->efa_av_entry.fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, efa_rdm_peer_fi_addr(peer), peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */

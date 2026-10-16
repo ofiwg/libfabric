@@ -99,7 +99,8 @@ int efa_test_mr_abort_setup(struct fid_ep *ep, struct fid_av *av, int req_pkt,
 	g_mr_abort.peer = efa_rdm_ep_get_peer_explicit(g_mr_abort.ep, peer_addr);
 	if (!g_mr_abort.peer)
 		return -FI_EINVAL;
-	g_mr_abort.peer->av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	container_of(efa_av_addr_to_entry(g_mr_abort.peer->ep->base_ep.av, efa_rdm_peer_fi_addr(g_mr_abort.peer)),
+		     struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	if (handshake_received) {
 		g_mr_abort.peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 		g_mr_abort.peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
