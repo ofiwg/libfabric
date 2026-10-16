@@ -86,7 +86,8 @@ int efa_test_queue_op_with_fi_more(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	/* REQ already sent, so enforce_handshake queues instead of posting a
 	 * handshake REQ; no handshake received yet. */
 	qop->peer->flags = EFA_RDM_PEER_REQ_SENT;
-	qop->peer->av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	container_of(efa_av_addr_to_entry(qop->peer->ep->base_ep.av, efa_rdm_peer_fi_addr(qop->peer)),
+		     struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr = FI_ADDR_NOTAVAIL;
 
 	ret = fi_mr_reg(domain_fid, qop->buf, sizeof(qop->buf),
 			FI_SEND | FI_RECV | FI_READ | FI_WRITE, 0, 0, 0,
@@ -261,7 +262,8 @@ int efa_test_queue_ope_with_flag(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	qop->peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	if (!qop->peer)
 		return -FI_EINVAL;
-	qop->peer->av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	container_of(efa_av_addr_to_entry(qop->peer->ep->base_ep.av, efa_rdm_peer_fi_addr(qop->peer)),
+		     struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr = FI_ADDR_NOTAVAIL;
 
 	iov.iov_base = qop->buf;
 	iov.iov_len = sizeof(qop->buf);
