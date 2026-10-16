@@ -235,6 +235,7 @@ noinst_LTLIBRARIES = libfabtests.la
 
 libfabtests_la_SOURCES = \
 	common/shared.c \
+	common/wr.c \
 	common/hmem.c \
 	common/hmem_cuda.c \
 	common/hmem_rocr.c \
