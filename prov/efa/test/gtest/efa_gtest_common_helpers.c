@@ -276,6 +276,11 @@ size_t efa_test_device_max_rx_size(void)
 	return g_efa_selected_device_list[0].rdm_info->rx_attr->size;
 }
 
+size_t efa_test_rdm_ep_min_rx_size(void)
+{
+	return efa_rdm_ep_get_min_rx_size();
+}
+
 int efa_test_device_supports_wide_wqe(void)
 {
 	if (g_efa_selected_device_cnt <= 0)

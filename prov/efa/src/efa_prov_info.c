@@ -698,8 +698,27 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		prov_info_rdm->rx_attr->op_flags = FI_COMPLETION | FI_MULTI_RECV;
 		prov_info_rdm->rx_attr->iov_limit = EFA_RDM_IOV_LIMIT;
 
-		if (efa_env.rx_size > 0)
-			prov_info_rdm->rx_attr->size = efa_env.rx_size;
+		/*
+		 * FI_EFA_RX_SIZE is only respected at or above
+		 * efa_rdm_ep_get_min_rx_size(). efa_rdm_ep_open() raises an
+		 * endpoint's rx size to that minimum, so the advertised size
+		 * must not be lower. If not, ofi_endpoint_init() rejects the
+		 * endpoint.
+		 */
+		if (efa_env.rx_size > 0) {
+			prov_info_rdm->rx_attr->size = MAX(
+				efa_env.rx_size, efa_rdm_ep_get_min_rx_size());
+
+			if (prov_info_rdm->rx_attr->size != efa_env.rx_size)
+				EFA_WARN(FI_LOG_CORE,
+					 "FI_EFA_RX_SIZE=%zu is below the "
+					 "minimum rx size "
+					 "(FI_EFA_INTERNAL_RX_REFILL_THRESHOLD"
+					 " + %d), using %zu\n",
+					 efa_env.rx_size,
+					 EFA_RDM_MAX_QUEUED_COPY,
+					 prov_info_rdm->rx_attr->size);
+		}
 	}
 
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {

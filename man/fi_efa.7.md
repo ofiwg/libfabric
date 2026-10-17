@@ -1109,6 +1109,8 @@ To prioritize the messages from a given endpoint, user can specify `fi_info->tx_
 
 *FI_EFA_RX_SIZE*
 : Maximum number of receive operations before the provider returns -FI_EAGAIN.
+  For the `efa` fabric, the minimum is FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + 8.
+  Smaller values are raised to it. The `efa-direct` fabric is unaffected.
 
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 
