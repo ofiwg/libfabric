@@ -1496,7 +1496,7 @@ static void test_efa_cq_data_path_direct_status(
 	ret = fi_cq_open(resource->domain, &cq_attr, &cq, NULL);
 	if (ret && wait_obj != FI_WAIT_NONE)
 		/* EFA device doesn't support cq notification. */
-		return;
+		goto out;
 
 	assert_int_equal(ret, 0);
 	efa_cq = container_of(cq, struct efa_cq, util_cq.cq_fid);
@@ -1505,7 +1505,11 @@ static void test_efa_cq_data_path_direct_status(
 
 	assert_int_equal(fi_close(&cq->fid), 0);
 
-	/* Recover the mocked vendor_id */
+out:
+	/*
+	 * Recover the mocked vendor_id and env on every path, otherwise the
+	 * mock leaks into later tests that look at the selected device.
+	 */
 	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = vendor_id_orig;
 	efa_env.use_data_path_direct = use_data_path_direct_orig;
 }
