@@ -355,6 +355,7 @@ static int cxip_nic_control(struct fid *fid, int command, void *arg)
 		(*dup)->prov_attr = mem_dup(nic->prov_attr, sizeof(struct cxip_nic_attr));
 		if (!(*dup)->prov_attr) {
 			cxip_nic_close(&(*dup)->fid);
+			*dup = NULL;
 			return -FI_ENOMEM;
 		}
 	}
