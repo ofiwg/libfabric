@@ -445,7 +445,7 @@ int ofi_prof_add_event(struct util_profile *prof, uint32_t event_id,
 					  prof->eventlist_size * 
 					  sizeof(struct fi_profile_desc));
 		prof->pcb = realloc(prof->pcb,
-				    prof->eventlist_size * sizeof(void *));
+				    prof->eventlist_size * sizeof(*prof->pcb));
 
 		if (!prof->eventlist || !prof->pcb) {
 			FI_WARN(prof->prov, FI_LOG_CORE,
