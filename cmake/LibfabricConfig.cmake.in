@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+
+#[[.rst:
+LibfabricConfig
+---------------
+
+Installed package entry point providing Libfabric::fabric.
+
+Static consumers rediscover the dependencies recorded at build time. The
+dependency helper isolates CMAKE_MODULE_PATH and propagates Libfabric_FOUND;
+an optional failure leaves the caller able to retry with different hints.
+The generated target export protects its own target declarations. This entry
+point is deliberately unguarded so repeated find_package requests still run.
+]]
+@PACKAGE_INIT@
+
+if(NOT @BUILD_SHARED_LIBS@)
+  # find_dependency() can return early. A function keeps the module path and
+  # dependency package variables out of the caller's scope on every exit.
+  function(_libfabric_find_dependencies)
+    include(CMakeFindDependencyMacro)
+    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/modules")
+    @LIBFABRIC_FIND_DEPENDENCIES@
+    set(Libfabric_FOUND
+        TRUE
+        PARENT_SCOPE
+    )
+  endfunction()
+  set(Libfabric_FOUND FALSE)
+  _libfabric_find_dependencies()
+  if(NOT Libfabric_FOUND)
+    set(Libfabric_NOT_FOUND_MESSAGE
+        "A dependency of the static libfabric library was not found"
+    )
+    return()
+  endif()
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/LibfabricTargets.cmake")
+check_required_components(Libfabric)
