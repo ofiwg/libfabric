@@ -27,10 +27,11 @@
 #include <config.h>
 #endif
 
-#include "ofi_hmem.h"
+#include "hmem.h"
 
-int ft_default_alloc_host(void **buf, size_t size);
-int ft_default_free_host(void *buf);
+#if HAVE_MUSA
+
+#include "ofi_hmem.h"
 
 int ft_musa_init(void)
 {
@@ -93,6 +94,57 @@ int ft_musa_copy_from_hmem(uint64_t device, void *dst, const void *src,
 {
 	return ofi_copy_from_hmem(FI_HMEM_MUSA, device, dst, src, size);
 }
+
+#else
+
+int ft_musa_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_cleanup(void)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_alloc(uint64_t device, void **buf, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_alloc_host(void **buf, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_free(void *buf)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_free_host(void *buf)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_memset(uint64_t device, void *buf, int value, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_copy_to_hmem(uint64_t device, void *dst, const void *src,
+			 size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_musa_copy_from_hmem(uint64_t device, void *dst, const void *src,
+			   size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+#endif
 
 int ft_musa_get_dmabuf_fd(void *buf, size_t len, int *fd, uint64_t *offset)
 {

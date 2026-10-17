@@ -23,9 +23,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <assert.h>
 
-#include <rdma/fi_domain.h>
+#include "hmem.h"
 
 int main(void)
 {
@@ -36,6 +40,22 @@ int main(void)
 	attr.iface = FI_HMEM_MUSA;
 	attr.device.musa = 3;
 	assert(attr.device.reserved == 3);
+
+#if !HAVE_MUSA
+	/* Disabled backends must link without libfabric's internal HMEM API. */
+	if (ft_musa_init() != -FI_ENOSYS ||
+	    ft_musa_cleanup() != -FI_ENOSYS ||
+	    ft_musa_alloc(0, NULL, 0) != -FI_ENOSYS ||
+	    ft_musa_alloc_host(NULL, 0) != -FI_ENOSYS ||
+	    ft_musa_free(NULL) != -FI_ENOSYS ||
+	    ft_musa_free_host(NULL) != -FI_ENOSYS ||
+	    ft_musa_memset(0, NULL, 0, 0) != -FI_ENOSYS ||
+	    ft_musa_copy_to_hmem(0, NULL, NULL, 0) != -FI_ENOSYS ||
+	    ft_musa_copy_from_hmem(0, NULL, NULL, 0) != -FI_ENOSYS ||
+	    ft_musa_get_dmabuf_fd(NULL, 0, NULL, NULL) != -FI_ENOSYS ||
+	    ft_musa_put_dmabuf_fd(-1) != -FI_ENOSYS)
+		return 1;
+#endif
 
 	return 0;
 }
