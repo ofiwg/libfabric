@@ -132,6 +132,19 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.get_dmabuf_fd = ft_neuron_get_dmabuf_fd,
 		.put_dmabuf_fd = ft_neuron_put_dmabuf_fd,
 	},
+	[FI_HMEM_MUSA] = {
+		.init = ft_musa_init,
+		.cleanup = ft_musa_cleanup,
+		.alloc = ft_musa_alloc,
+		.alloc_host = ft_musa_alloc_host,
+		.free = ft_musa_free,
+		.free_host = ft_musa_free_host,
+		.mem_set = ft_musa_memset,
+		.copy_to_hmem = ft_musa_copy_to_hmem,
+		.copy_from_hmem = ft_musa_copy_from_hmem,
+		.get_dmabuf_fd = ft_musa_get_dmabuf_fd,
+		.put_dmabuf_fd = ft_musa_put_dmabuf_fd,
+	},
 };
 
 int ft_hmem_init(enum fi_hmem_iface iface)

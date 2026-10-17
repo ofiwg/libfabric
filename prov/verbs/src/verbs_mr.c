@@ -75,6 +75,7 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 		[FI_HMEM_ZE] = TRY,
 		[FI_HMEM_NEURON] = NEVER,
 		[FI_HMEM_SYNAPSEAI] = NEVER,
+		[FI_HMEM_MUSA] = NEVER,
 	};
 
 	if (failover_policy[iface] == ALWAYS)
@@ -149,6 +150,9 @@ vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *base_addr
 
 	if (md->domain->ext_flags & VRB_USE_ODP && iface == FI_HMEM_SYSTEM)
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
+
+	if ((flags & FI_MR_DMABUF) && iface == FI_HMEM_MUSA)
+		return -FI_EOPNOTSUPP;
 
 #if VERBS_HAVE_DMABUF_MR
 	if (flags & FI_MR_DMABUF)
@@ -417,6 +421,9 @@ static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
 			   domain->util_domain.info_domain_caps, attr,
 			   &cur_abi_attr, flags);
+
+	if ((flags & FI_MR_DMABUF) && cur_abi_attr.iface == FI_HMEM_MUSA)
+		return -FI_EOPNOTSUPP;
 
 	if (flags & FI_MR_DMABUF)
 		return vrb_reg_dmabuf(domain, &cur_abi_attr, flags, mr);

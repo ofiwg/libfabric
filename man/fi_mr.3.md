@@ -829,6 +829,10 @@ requested the FI_HMEM capability.
 *FI_HMEM_SYNAPSEAI*
 : Uses the SynapseAI API to support Habana Gaudi devices.
 
+*FI_HMEM_MUSA*
+: Uses native MUSA runtime and driver interfaces to support Moore Threads
+  GPU memory.
+
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
 This field is ignore unless the iface field is valid.  Otherwise, the device
@@ -852,6 +856,9 @@ field is determined by the value specified through iface.
 
 *rocr*
 : For FI_HMEM_ROCR, the device index for an AMD GPU.
+
+*musa*
+: For FI_HMEM_MUSA, the MUSA device ordinal.
 
 ## hmem_data
 The hmem_data field is reserved for future use and must be null.

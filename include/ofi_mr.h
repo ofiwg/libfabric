@@ -396,7 +396,7 @@ struct ofi_mr_cache_params {
 
 extern struct ofi_mr_cache_params	cache_params;
 
-#define OFI_HMEM_MAX 6
+#define OFI_HMEM_MAX (FI_HMEM_MUSA + 1)
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;
