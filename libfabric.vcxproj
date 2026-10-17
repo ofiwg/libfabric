@@ -783,6 +783,7 @@
     <ClCompile Include="src\fasthash.c" />
     <ClCompile Include="src\fi_tostr.c" />
     <ClCompile Include="src\hmem.c" />
+    <ClCompile Include="src\hmem_musa.c" />
     <ClCompile Include="src\hmem_cuda.c" />
     <ClCompile Include="src\hmem_cuda_gdrcopy.c" />
     <ClCompile Include="src\hmem_rocr.c" />
