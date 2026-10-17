@@ -69,6 +69,28 @@ void test_efa_data_path_direct_rdma_write_multiple_sge_fail(void **state)
 }
 
 
+#if HAVE_EFA_DATA_PATH_DIRECT
+/**
+ * @brief Construct an efa-direct RDM endpoint and skip the calling test unless
+ * its QP uses the direct data path (e.g. not on EFA gen1 devices)
+ *
+ * @param resource unit test resources
+ * @return the endpoint's efa_base_ep
+ */
+static struct efa_base_ep *
+efa_unit_test_construct_data_path_direct_ep(struct efa_resource *resource)
+{
+	struct efa_base_ep *base_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	if (!base_ep->qp->data_path_direct_enabled)
+		skip();
+
+	return base_ep;
+}
+#endif
+
 /**
  * @brief Verify that QP generation counter increments on each QP creation
  * for the same QPN slot, and that gen_mask/shifted_gen are set correctly
@@ -82,9 +104,7 @@ void test_efa_data_path_direct_qp_gen_initialization(void **state)
 	struct efa_qp *qp;
 	struct efa_data_path_direct_wq *sq_wq, *rq_wq;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = efa_unit_test_construct_data_path_direct_ep(resource);
 	qp = base_ep->qp;
 
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
@@ -130,9 +150,7 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	uint64_t test_wr_id = 0xDEADBEEF;
 	uint16_t pool_next_before;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = efa_unit_test_construct_data_path_direct_ep(resource);
 	qp = base_ep->qp;
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
 
@@ -180,9 +198,7 @@ void test_efa_data_path_direct_stale_completion_detected(void **state)
 	struct efa_data_path_direct_wq *sq_wq;
 	struct efa_io_cdesc_common fake_cqe = {0};
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = efa_unit_test_construct_data_path_direct_ep(resource);
 	qp = base_ep->qp;
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
 
@@ -222,8 +238,7 @@ void test_efa_data_path_direct_qp_gen_increments_across_qps(void **state)
 	struct efa_base_ep *base_ep;
 	uint8_t first_gen;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = efa_unit_test_construct_data_path_direct_ep(resource);
 	first_gen = base_ep->qp->data_path_direct_qp.gen;
 
 	efa_unit_test_resource_destruct(resource);
@@ -304,9 +319,7 @@ void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state)
 	uint16_t pool_next_before;
 	uint32_t wqe_completed_before;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = efa_unit_test_construct_data_path_direct_ep(resource);
 	qp = base_ep->qp;
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
 
