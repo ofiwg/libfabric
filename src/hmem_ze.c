@@ -810,7 +810,12 @@ static ze_result_t ze_init_res(int dev_id)
 	if (ze_ret)
 		return ze_ret;
 
-	return ofi_bufpool_create_attr(&attr, &dev_info[dev_id].cl_pool);
+	ze_ret = ofi_bufpool_create_attr(&attr, &dev_info[dev_id].cl_pool);
+	if (ze_ret) {
+		(void) ofi_zeCommandQueueDestroy(dev_info[dev_id].cmd_queue);
+		dev_info[dev_id].cmd_queue = NULL;
+	}
+	return ze_ret;
 }
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
@@ -838,8 +843,10 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 
 	cmd_list = ofi_buf_alloc(dev_info[dev_id].cl_pool);
 	ofi_spin_unlock(&cl_lock);
-	if (!cmd_list)
+	if (!cmd_list) {
+		ze_ret = ZE_RESULT_ERROR_OUT_OF_HOST_MEMORY;
 		goto out;
+	}
 
 	ze_ret = ofi_zeCommandListReset(*cmd_list);
 	if (ze_ret)
