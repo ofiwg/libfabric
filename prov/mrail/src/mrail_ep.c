@@ -752,12 +752,12 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 	ret = ofi_bufpool_create(&mrail_ep->ooo_recv_pool,
 				 sizeof(struct mrail_ooo_recv),
 				 sizeof(void *), 0, 64, 0);
-	if (!mrail_ep->ooo_recv_pool)
-		goto err;
+	if (ret)
+		return ret;
 
 	ret = ofi_bufpool_create_attr(&attr, &mrail_ep->tx_buf_pool);
-	if (!mrail_ep->tx_buf_pool)
-		goto err;
+	if (ret)
+		return ret;
 
 	buf_size = (sizeof(struct mrail_req) +
 		    (mrail_ep->num_eps * sizeof(struct mrail_subreq)));
@@ -765,11 +765,8 @@ static int mrail_ep_alloc_bufs(struct mrail_ep *mrail_ep)
 	ret = ofi_bufpool_create(&mrail_ep->req_pool, buf_size,
 				 sizeof(void *), 0, 64, OFI_BUFPOOL_HUGEPAGES);
 	if (ret)
-		goto err;
+		return ret;
 	return 0;
-err:
-	mrail_ep_free_bufs(mrail_ep);
-	return ret;
 }
 
 static int mrail_ep_close(fid_t fid)
@@ -781,10 +778,14 @@ static int mrail_ep_close(fid_t fid)
 
 	mrail_ep_free_bufs(mrail_ep);
 
-	for (i = 0; i < mrail_ep->num_eps; i++) {
-		ret = fi_close(&mrail_ep->rails[i].ep->fid);
-		if (ret)
-			retv = ret;
+	if (mrail_ep->rails) {
+		for (i = 0; i < mrail_ep->num_eps; i++) {
+			if (!mrail_ep->rails[i].ep)
+				continue;
+			ret = fi_close(&mrail_ep->rails[i].ep->fid);
+			if (ret)
+				retv = ret;
+		}
 	}
 	free(mrail_ep->rails);
 
@@ -1062,6 +1063,7 @@ int mrail_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	return 0;
 err:
 	mrail_ep_close(&mrail_ep->util_ep.ep_fid.fid);
+	return ret;
 free_ep:
 	free(mrail_ep);
 	return ret;
