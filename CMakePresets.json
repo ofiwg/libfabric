@@ -69,6 +69,30 @@
       }
     },
     {
+      "name": "clang-tidy",
+      "inherits": "debug",
+      "displayName": "Clang-Tidy Analysis",
+      "description": "Run clang-tidy alongside Clang compilation",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_C_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy",
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy"
+      }
+    },
+    {
+      "name": "iwyu",
+      "inherits": "debug",
+      "displayName": "Include-What-You-Use Analysis",
+      "description": "Report include dependencies alongside Clang compilation",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_C_INCLUDE_WHAT_YOU_USE": "include-what-you-use;-Xiwyu;--keep=*/config.h",
+        "CMAKE_CXX_INCLUDE_WHAT_YOU_USE": "include-what-you-use;-Xiwyu;--keep=*/config.h"
+      }
+    },
+    {
       "name": "minimal",
       "inherits": "release",
       "displayName": "Minimal (tcp, sockets only)",
@@ -201,6 +225,14 @@
       "name": "ci-windows",
       "configurePreset": "ci-windows",
       "configuration": "Release"
+    },
+    {
+      "name": "clang-tidy",
+      "configurePreset": "clang-tidy"
+    },
+    {
+      "name": "iwyu",
+      "configurePreset": "iwyu"
     }
   ]
 }

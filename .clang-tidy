@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+# Focus the opt-in analysis build on memory safety and suspicious operations.
+# Annex K replacements such as memcpy_s are not portable project requirements.
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  bugprone-assert-side-effect,
+  bugprone-incorrect-roundings,
+  bugprone-infinite-loop,
+  bugprone-misplaced-operator-in-strlen-in-alloc,
+  bugprone-misplaced-pointer-arithmetic-in-alloc,
+  bugprone-misplaced-widening-cast,
+  bugprone-sizeof-expression,
+  bugprone-string-integer-assignment,
+  bugprone-suspicious-memory-comparison,
+  bugprone-suspicious-memset-usage,
+  bugprone-suspicious-missing-comma,
+  bugprone-suspicious-semicolon,
+  bugprone-suspicious-string-compare,
+  bugprone-too-small-loop-variable,
+  bugprone-unused-return-value
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle: none

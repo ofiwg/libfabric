@@ -21,6 +21,10 @@ The `debug`, `release`, `static`, `minimal`, `asan`, and `ubsan` presets provide
 starting configurations. For example, `cmake --preset minimal` selects TCP
 and sockets. Presets put their output under `build/<preset>`.
 
+The opt-in `clang-tidy` and `iwyu` presets run static analysis during Ninja
+builds. See [static analysis](static-analysis.md) for tool setup, custom
+commands, and findings from the initial experiment.
+
 With a multi-configuration generator, choose the configuration when building
 and testing, for example `cmake --build build --config Debug` and
 `ctest --test-dir build -C Debug --output-on-failure`.

@@ -1,5 +1,6 @@
 # CMake support included in source distributions.
 EXTRA_DIST += \
+    .clang-tidy \
     .cmake-format.yaml \
     CMakeLists.txt \
     CMakePresets.json \
@@ -73,6 +74,7 @@ EXTRA_DIST += \
     cmake/tests/opx.cmake \
     cmake/tests/parent/CMakeLists.txt \
     docs/cmake.md \
+    docs/static-analysis.md \
     fabtests/CMakeLists.txt \
     fabtests/component/CMakeLists.txt \
     fabtests/prov/lpp/CMakeLists.txt \
