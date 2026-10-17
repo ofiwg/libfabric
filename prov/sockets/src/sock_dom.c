@@ -174,6 +174,8 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	if (info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
 		sock_domain->progress_mode = FI_PROGRESS_AUTO;
+	else if (info->domain_attr->data_progress == FI_PROGRESS_CONTROL_UNIFIED)
+		sock_domain->progress_mode = FI_PROGRESS_MANUAL;
 	else
 		sock_domain->progress_mode = info->domain_attr->data_progress;
 
