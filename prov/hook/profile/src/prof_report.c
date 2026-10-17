@@ -36,7 +36,7 @@
 #include "hook_profile.h"
 
 #define PROF_STR_LEN	64
-#define PROF_HMEM_IFACE_MAX	  FI_HMEM_SYNAPSEAI+1
+#define PROF_HMEM_IFACE_MAX	  FI_HMEM_MUSA+1
 
 #define PROF_OUTPUT_FORMAT    " \t%-22s%-20s%-12s%-12s%-12s%-12s\n"
 

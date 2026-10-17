@@ -65,6 +65,7 @@ bin_PROGRAMS = \
 	unit/fi_getinfo_test \
 	unit/fi_setopt_test \
 	unit/fi_check_hmem \
+	unit/fi_musa_hmem \
 	ubertest/fi_ubertest	\
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
@@ -241,6 +242,7 @@ libfabtests_la_SOURCES = \
 	common/hmem_ze.c \
 	common/hmem_neuron.c \
 	common/hmem_synapseai.c \
+	common/hmem_musa.c \
 	common/ofi_atomic.c \
 	include/ofi_atomic.h \
 	include/shared.h \
@@ -497,6 +499,14 @@ unit_fi_check_hmem_SOURCES = \
 unit_fi_check_hmem_LDADD = libfabtests.la
 
 unit_fi_check_hmem_CFLAGS = \
+	$(AM_CFLAGS)
+
+unit_fi_musa_hmem_SOURCES = \
+	unit/musa_hmem.c
+
+unit_fi_musa_hmem_LDADD = libfabtests.la
+
+unit_fi_musa_hmem_CFLAGS = \
 	$(AM_CFLAGS)
 
 ubertest_fi_ubertest_SOURCES = \

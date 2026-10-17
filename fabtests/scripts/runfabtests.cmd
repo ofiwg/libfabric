@@ -49,6 +49,7 @@ set unit_tests=^
 	"eq_test"^
 	"cq_test -L 4096"^
 	"mr_test"^
+	"musa_hmem"^
 	"cntr_test"
 
 set neg_unit_tests=^

@@ -46,7 +46,8 @@ CFLAGS = $(CFLAGS) /O2 /MT
 basedeps = common\hmem.c common\shared.c \
 	common\windows\getopt.c common\windows\osd.c \
 	common\hmem_cuda.c common\hmem_rocr.c common\hmem_ze.c \
-	common\hmem_neuron.c common\hmem_synapseai.c common\ofi_atomic.c
+	common\hmem_neuron.c common\hmem_synapseai.c common\hmem_musa.c \
+	common\ofi_atomic.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt /Imultinode\include
@@ -88,7 +89,8 @@ functional: $(outdir)\av_xfer.exe $(outdir)\flood.exe $(outdir)\cm_data.exe $(ou
 	$(outdir)\unexpected_msg.exe
 
 unit: $(outdir)\av_test.exe $(outdir)\cntr_test.exe $(outdir)\cq_test.exe $(outdir)\dom_test.exe \
-	$(outdir)\eq_test.exe $(outdir)\getinfo_test.exe $(outdir)\mr_test.exe
+	$(outdir)\eq_test.exe $(outdir)\getinfo_test.exe $(outdir)\mr_test.exe \
+	$(outdir)\musa_hmem.exe
 
 multinode: $(outdir)\multinode.exe $(outdir)\multinode_coll.exe
 
@@ -180,6 +182,8 @@ $(outdir)\eq_test.exe: {unit}eq_test.c $(basedeps) {unit}common.c
 $(outdir)\getinfo_test.exe: {unit}getinfo_test.c $(basedeps) {unit}common.c
 
 $(outdir)\mr_test.exe: {unit}mr_test.c $(basedeps) {unit}common.c
+
+$(outdir)\musa_hmem.exe: {unit}musa_hmem.c $(basedeps)
 
 
 $(outdir)\multinode.exe: {multinode\src}harness.c $(basedeps) {multinode\src}core.c {multinode\src}pattern.c {multinode\src}timing.c
