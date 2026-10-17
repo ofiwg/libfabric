@@ -936,12 +936,20 @@ void test_info_direct_without_context2_api_ge_2_7(void **state)
 	assert_false(info->tx_attr->mode & FI_CONTEXT2);
 	assert_false(info->rx_attr->mode & FI_CONTEXT2);
 	assert_int_equal(info->tx_attr->inject_size, 0);
-	assert_true(info->caps & FI_WR);
-	assert_true(info->tx_attr->caps & FI_WR);
-	assert_true(info->rx_attr->caps & FI_WR);
-	assert_int_equal(info->ep_attr->max_tx_wr_size, efa_wr_tx_size());
-	assert_int_equal(info->ep_attr->max_rx_wr_size,
-			 efa_wr_rx_size(g_efa_selected_device_list[0].efa_attr.max_rq_sge));
+	if (efa_device_support_data_path_direct(&g_efa_selected_device_list[0])) {
+		assert_true(info->caps & FI_WR);
+		assert_true(info->tx_attr->caps & FI_WR);
+		assert_true(info->rx_attr->caps & FI_WR);
+		assert_int_equal(info->ep_attr->max_tx_wr_size, efa_wr_tx_size());
+		assert_int_equal(info->ep_attr->max_rx_wr_size,
+				 efa_wr_rx_size(g_efa_selected_device_list[0].efa_attr.max_rq_sge));
+	} else {
+		assert_false(info->caps & FI_WR);
+		assert_false(info->tx_attr->caps & FI_WR);
+		assert_false(info->rx_attr->caps & FI_WR);
+		assert_int_equal(info->ep_attr->max_tx_wr_size, 0);
+		assert_int_equal(info->ep_attr->max_rx_wr_size, 0);
+	}
 
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
@@ -958,6 +966,14 @@ void test_info_direct_wr_requested_drops_context2(void **state)
 	hints->caps |= FI_WR;
 
 	err = fi_getinfo(FI_VERSION(2, 7), NULL, NULL, 0, hints, &info);
+
+	if (!efa_device_support_data_path_direct(&g_efa_selected_device_list[0])) {
+		assert_int_equal(err, -FI_ENODATA);
+		assert_null(info);
+		fi_freeinfo(hints);
+		return;
+	}
+
 	assert_int_equal(err, 0);
 	assert_non_null(info);
 	assert_string_equal(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME);
