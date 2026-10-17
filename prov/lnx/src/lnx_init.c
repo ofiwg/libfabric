@@ -693,22 +693,13 @@ generate_info:
 static int lnx_setup_core_fab(struct lnx_fabric *lnx_fab, struct fi_info *info,
 			      void *context, int i)
 {
-	int rc = -FI_ENOMEM;
 	struct lnx_core_fabric *cf;
 
 	cf = &lnx_fab->lf_core_fabrics[i];
 
 	cf->cf_info = info;
 
-	rc = fi_fabric(info->fabric_attr, &cf->cf_fabric, context);
-	if (rc)
-		goto fail;
-
-	return 0;
-
-fail:
-	free(cf);
-	return rc;
+	return fi_fabric(info->fabric_attr, &cf->cf_fabric, context);
 }
 
 int lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab, void *context)
@@ -737,8 +728,14 @@ int lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab, void *context)
 	dlist_foreach_container(&link->link_providers,
 				struct lnx_fi_cache_entry, e, entry) {
 		rc = lnx_setup_core_fab(lnx_fab, e->fi, context, i);
-		if (rc)
+		if (rc) {
+			while (i--)
+				fi_close(&lnx_fab->lf_core_fabrics[i].cf_fabric->fid);
+			free(lnx_fab->lf_core_fabrics);
+			lnx_fab->lf_core_fabrics = NULL;
+			lnx_fab->lf_num_fabs = 0;
 			return rc;
+		}
 		i++;
 	}
 
