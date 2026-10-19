@@ -306,6 +306,38 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unimport = ofi_hmem_no_dev_unimport,
 		.dev_free = ofi_hmem_no_dev_free,
 	},
+	[FI_HMEM_MUSA] = {
+		.initialized = false,
+		.async_copy_enabled = false,
+		.init = musa_hmem_init,
+		.cleanup = musa_hmem_cleanup,
+		.copy_to_hmem = musa_copy_to_dev,
+		.copy_from_hmem = musa_copy_from_dev,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
+		.is_addr_valid = musa_is_addr_valid,
+		.get_handle = ofi_hmem_no_get_handle,
+		.open_handle = ofi_hmem_no_open_handle,
+		.close_handle = ofi_hmem_no_close_handle,
+		.host_register = musa_host_register,
+		.host_unregister = musa_host_unregister,
+		.get_base_addr = musa_get_base_addr,
+		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
+		.put_dmabuf_fd = ofi_hmem_no_put_dmabuf_fd,
+		.dev_alloc = musa_dev_alloc,
+		.dev_import = ofi_hmem_no_dev_import,
+		.dev_unimport = ofi_hmem_no_dev_unimport,
+		.dev_free = musa_dev_free,
+	},
 };
 
 bool ofi_hmem_any_ipc_enabled(void)
@@ -632,7 +664,8 @@ void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
 		"rocr",
 		"ze",
 		"neuron",
-		"synapseai"
+		"synapseai",
+		"musa"
 	};
 	char *iface_filter_str_copy = strdup(iface_filter_str);
 	char *saveptr;
