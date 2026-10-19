@@ -738,13 +738,11 @@ ParameterizedTest(struct ep_ctrl_null_params *param, ep, ctrl_null_arg)
 struct ep_getopt_args {
 	int level;
 	int optname;
-	size_t *optval;
-	size_t *optlen;
+	bool pass_optval;
+	bool pass_optlen;
 	int retval;
 };
 
-static size_t optvalue;
-static size_t optlength = sizeof(size_t);
 static struct ep_getopt_args ep_null_params[] = {
 	{.level = -1,
 	 .retval = -FI_ENOPROTOOPT},
@@ -756,18 +754,18 @@ static struct ep_getopt_args ep_null_params[] = {
 	 .retval = -FI_ENOPROTOOPT},
 	{.level = FI_OPT_ENDPOINT,
 	 .optname = FI_OPT_MIN_MULTI_RECV,
-	 .optval = NULL,
-	 .optlen = NULL,
+	 .pass_optval = false,
+	 .pass_optlen = false,
 	 .retval = -FI_EINVAL},
 	{.level = FI_OPT_ENDPOINT,
 	 .optname = FI_OPT_MIN_MULTI_RECV,
-	 .optval = &optvalue,
-	 .optlen = NULL,
+	 .pass_optval = true,
+	 .pass_optlen = false,
 	 .retval = -FI_EINVAL},
 	{.level = FI_OPT_ENDPOINT,
 	 .optname = FI_OPT_MIN_MULTI_RECV,
-	 .optval = &optvalue,
-	 .optlen = &optlength,
+	 .pass_optval = true,
+	 .pass_optlen = true,
 	 .retval = FI_SUCCESS},
 };
 
@@ -784,28 +782,32 @@ ParameterizedTest(struct ep_getopt_args *param, ep, getopt_args)
 {
 	int ret;
 	struct cxip_ep *cxi_ep;
+	size_t optvalue = 0;
+	size_t optlength = sizeof(size_t);
+	size_t *optval = param->pass_optval ? &optvalue : NULL;
+	size_t *optlen = param->pass_optlen ? &optlength : NULL;
 
 	cxit_create_ep();
 
 	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
 
 	ret = fi_getopt(&cxit_ep->fid, param->level, param->optname,
-			(void *)param->optval, param->optlen);
+			(void *)optval, optlen);
 	cr_assert_eq(ret, param->retval,
 		     "fi_getopt lvl %d name %d val %p len %p. %d != %d",
-		     param->level, param->optname, param->optval,
-		     param->optlen, ret, param->retval);
+		     param->level, param->optname, optval, optlen, ret,
+		     param->retval);
 
 	if (ret == FI_SUCCESS) {
 		cr_assert_not_null(cxi_ep->ep_obj);
-		cr_assert_eq(*param->optval,
+		cr_assert_eq(*optval,
 			     cxi_ep->ep_obj->rxc->min_multi_recv,
 			     "fi_getopt val mismatch. %zd != %zd",
-			     *param->optval,
+			     *optval,
 			     cxi_ep->ep_obj->rxc->min_multi_recv);
-		cr_assert_eq(*param->optlen, sizeof(size_t),
+		cr_assert_eq(*optlen, sizeof(size_t),
 			     "fi_getopt len mismatch. %zd != %zd",
-			     *param->optlen, sizeof(size_t));
+			     *optlen, sizeof(size_t));
 	}
 
 	cxit_destroy_ep();
