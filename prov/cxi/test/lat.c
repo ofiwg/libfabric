@@ -22,9 +22,9 @@ void do_tsend(size_t len)
 	ret = fi_tsend(cxit_ep, buf, len, NULL, cxit_ep_fi_addr, 0, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "ret is %d\n", ret);
 }
-void do_tsend_0() { do_tsend(0); }
-void do_tsend_8() { do_tsend(8); }
-void do_tsend_256() { do_tsend(256); }
+void do_tsend_0(void) { do_tsend(0); }
+void do_tsend_8(void) { do_tsend(8); }
+void do_tsend_256(void) { do_tsend(256); }
 
 void do_trecv(size_t len)
 {
@@ -33,9 +33,9 @@ void do_trecv(size_t len)
 	ret = fi_trecv(cxit_ep, buf, len, NULL, FI_ADDR_UNSPEC, 0, 0, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "ret is %d\n", ret);
 }
-void do_trecv_0() { do_trecv(0); }
-void do_trecv_8() { do_trecv(8); }
-void do_trecv_256() { do_trecv(256); }
+void do_trecv_0(void) { do_trecv(0); }
+void do_trecv_8(void) { do_trecv(8); }
+void do_trecv_256(void) { do_trecv(256); }
 
 void do_tsend_more(size_t len)
 {
@@ -53,8 +53,8 @@ void do_tsend_more(size_t len)
 	ret = fi_tsendmsg(cxit_ep, &msg, FI_MORE);
 	cr_assert_eq(ret, FI_SUCCESS, "ret is %d\n", ret);
 }
-void do_tsend_more_8() { do_tsend_more(8); }
-void do_tsend_more_256() { do_tsend_more(256); }
+void do_tsend_more_8(void) { do_tsend_more(8); }
+void do_tsend_more_256(void) { do_tsend_more(256); }
 
 void do_trecv_more(size_t len)
 {
@@ -72,15 +72,53 @@ void do_trecv_more(size_t len)
 	ret = fi_trecvmsg(cxit_ep, &msg, FI_MORE);
 	cr_assert_eq(ret, FI_SUCCESS, "ret is %d\n", ret);
 }
-void do_trecv_more_8() { do_trecv_more(8); }
-void do_trecv_more_256() { do_trecv_more(256); }
+void do_trecv_more_8(void) { do_trecv_more(8); }
+void do_trecv_more_256(void) { do_trecv_more(256); }
 
 TestSuite(latency, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
+enum latency_api {
+	LAT_TSEND_0,
+	LAT_TRECV_0,
+	LAT_TSEND_8,
+	LAT_TRECV_8,
+	LAT_TSEND_256,
+	LAT_TRECV_256,
+	LAT_TSEND_MORE_8,
+	LAT_TRECV_MORE_8,
+	LAT_TSEND_MORE_256,
+	LAT_TRECV_MORE_256,
+};
+
+static const char *const latency_api_name[] = {
+	[LAT_TSEND_0] = "tsend (0-byte)",
+	[LAT_TRECV_0] = "trecv (0-byte)",
+	[LAT_TSEND_8] = "tsend (8-byte)",
+	[LAT_TRECV_8] = "trecv (8-byte)",
+	[LAT_TSEND_256] = "tsend (256-byte)",
+	[LAT_TRECV_256] = "trecv (256-byte)",
+	[LAT_TSEND_MORE_8] = "tsend_more (8b, no doorbell)",
+	[LAT_TRECV_MORE_8] = "trecv_more (8b, no doorbell)",
+	[LAT_TSEND_MORE_256] = "tsend_more (256b, no doorbell)",
+	[LAT_TRECV_MORE_256] = "trecv_more (256b, no doorbell)",
+};
+
+static void (*const latency_api_func[])(void) = {
+	[LAT_TSEND_0] = do_tsend_0,
+	[LAT_TRECV_0] = do_trecv_0,
+	[LAT_TSEND_8] = do_tsend_8,
+	[LAT_TRECV_8] = do_trecv_8,
+	[LAT_TSEND_256] = do_tsend_256,
+	[LAT_TRECV_256] = do_trecv_256,
+	[LAT_TSEND_MORE_8] = do_tsend_more_8,
+	[LAT_TRECV_MORE_8] = do_trecv_more_8,
+	[LAT_TSEND_MORE_256] = do_tsend_more_256,
+	[LAT_TRECV_MORE_256] = do_trecv_more_256,
+};
+
 struct latency_params {
-	char *api;
-	void (*func)();
+	enum latency_api api;
 	bool flush_send;
 };
 
@@ -90,53 +128,43 @@ ParameterizedTestParameters(latency, basic)
 
 	static struct latency_params params[] = {
 		{
-			.api = "tsend (0-byte)",
-			.func = do_tsend_0,
+			.api = LAT_TSEND_0,
 			.flush_send = false,
 		},
 		{
-			.api = "trecv (0-byte)",
-			.func = do_trecv_0,
+			.api = LAT_TRECV_0,
 			.flush_send = false,
 		},
 		{
-			.api = "tsend (8-byte)",
-			.func = do_tsend_8,
+			.api = LAT_TSEND_8,
 			.flush_send = false,
 		},
 		{
-			.api = "trecv (8-byte)",
-			.func = do_trecv_8,
+			.api = LAT_TRECV_8,
 			.flush_send = false,
 		},
 		{
-			.api = "tsend (256-byte)",
-			.func = do_tsend_256,
+			.api = LAT_TSEND_256,
 			.flush_send = false,
 		},
 		{
-			.api = "trecv (256-byte)",
-			.func = do_trecv_256,
+			.api = LAT_TRECV_256,
 			.flush_send = false,
 		},
 		{
-			.api = "tsend_more (8b, no doorbell)",
-			.func = do_tsend_more_8,
+			.api = LAT_TSEND_MORE_8,
 			.flush_send = true,
 		},
 		{
-			.api = "trecv_more (8b, no doorbell)",
-			.func = do_trecv_more_8,
+			.api = LAT_TRECV_MORE_8,
 			.flush_send = false,
 		},
 		{
-			.api = "tsend_more (256b, no doorbell)",
-			.func = do_tsend_more_256,
+			.api = LAT_TSEND_MORE_256,
 			.flush_send = true,
 		},
 		{
-			.api = "trecv_more (256b, no doorbell)",
-			.func = do_trecv_more_256,
+			.api = LAT_TRECV_MORE_256,
 			.flush_send = false,
 		},
 	};
@@ -150,24 +178,29 @@ ParameterizedTest(struct latency_params *params, latency, basic)
 {
 	int warmup = 10;
 	uint64_t loops = 200;
+	void (*func)(void);
 	int i;
 	uint64_t start;
 	uint64_t end;
+
+	cr_assert_lt((size_t)params->api, ARRAY_SIZE(latency_api_func));
+	func = latency_api_func[params->api];
 
 	buf = malloc(0x1000);
 	cr_assert(buf);
 
 	for (i = 0; i < warmup; i++)
-		params->func();
+		func();
 
 	start = ofi_gettime_ns();
 
 	for (i = 0; i < loops; i++)
-		params->func();
+		func();
 
 	end = ofi_gettime_ns();
 
-	printf("%s latency: %lu ns\n", params->api, (end - start) / loops);
+	printf("%s latency: %lu ns\n", latency_api_name[params->api],
+	       (end - start) / loops);
 
 	/* Cleanup all outstanding more sends. */
 	if (params->flush_send) {
