@@ -287,10 +287,10 @@ struct fi_efa_ops_mem_comp_action {
 *create_mem_comp_action*
 : Registers a memory completion action: a target region of *mem_size* bytes
   starting at *location*, which is either host memory (a virtual address) or
-  accelerator (XPU) memory (a dmabuf `fd`/`offset`). *op_mem_size* is the width
-  of the device's write. A region larger than one write is not supported yet,
-  so *mem_size* must equal *op_mem_size* and the target is effectively a scalar
-  at *location*. Returns a *struct
+  accelerator (XPU) memory (a dmabuf `fd`/`offset`). *mem_modify_size* is the
+  width of the device's write. A region larger than one write is not supported
+  yet, so *mem_size* must equal *mem_modify_size* and the target is effectively a
+  scalar at *location*. Returns a *struct
   fid_efa_comp_action* handle; release it with *fi_close(&action->fid)*, after
   which the target memory is the application's to free. The action id a work
   request names the action by is read with *fid_efa_comp_action_get_id()*; for
@@ -304,10 +304,10 @@ struct fi_efa_ops_mem_comp_action {
 
 *create_mem_comp_action* rejects the following with *-FI_EINVAL*: a non-zero
 *comp_mask*, *flags* or *reserved* (all reserved to be zero today, so they are
-rejected rather than silently ignored), an *op_mem_size* other than 1, 2 or 4,
-a *mem_size* that is not a non-zero multiple of *op_mem_size*, a VA *location*
-not aligned to *op_mem_size*, and an *op* outside
-*enum fi_efa_mem_comp_action_op*. A *mem_size* larger than *op_mem_size* is
+rejected rather than silently ignored), a *mem_modify_size* other than 1, 2 or
+4, a *mem_size* that is not a non-zero multiple of *mem_modify_size*, a VA
+*location* not aligned to *mem_modify_size*, and a *mem_modify_type* outside
+*enum fi_efa_mem_modify_type*. A *mem_size* larger than *mem_modify_size* is
 rejected with *-FI_EOPNOTSUPP*: selecting where in a larger region a work
 request writes would be a new data-path field and feature bit, not a change to
 this interface.
@@ -317,22 +317,22 @@ The control path uses the following types, all defined in *rdma/fi_ext_efa.h*.
 section below.
 
 ```c
-/* Operation a memory completion action performs. Mirrors efadv_comp_op:
- * SET_INITIATOR_VAL writes (sets, does not accumulate) a value the initiator
- * supplies per work request. */
-enum fi_efa_mem_comp_action_op {
+/* How a memory completion action modifies its target. Mirrors efadv
+ * comp_mem_modify_type: SET_INITIATOR_VAL writes (sets, does not accumulate) a
+ * value the initiator supplies per work request. */
+enum fi_efa_mem_modify_type {
 	FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL = 0,
 };
 
 /* Attributes for create_mem_comp_action. comp_mask versions this struct. */
 struct fi_efa_mem_comp_action_attr {
 	uint64_t                       comp_mask;
-	uint32_t                       flags;       /* 0 today */
-	uint32_t                       op_mem_size; /* 1, 2 or 4 */
-	uint64_t                       mem_size;    /* == op_mem_size today */
-	struct fi_efa_memory_location  location;    /* VA or dmabuf */
-	enum fi_efa_mem_comp_action_op op;
-	uint8_t                        reserved[4]; /* must be 0 */
+	uint32_t                       flags;           /* 0 today */
+	uint32_t                       mem_modify_size; /* 1, 2 or 4 */
+	uint64_t                       mem_size;        /* == mem_modify_size today */
+	struct fi_efa_memory_location  location;        /* VA or dmabuf */
+	enum fi_efa_mem_modify_type    mem_modify_type;
+	uint8_t                        reserved[4];     /* must be 0 */
 };
 
 /* Action handle (a fid; fi_close() releases it). */
@@ -419,8 +419,8 @@ leaving what this flag means untouched.
 
 *FI_EFA_LOCAL_ACTION_VALUE* / *FI_EFA_REMOTE_ACTION_VALUE*
 : Supply the value that action's memory write sets, truncated to the action's
-  *op_mem_size*. An action may be attached without a value (leave the bit unset),
-  which the device treats as its default operand.
+  *mem_modify_size*. An action may be attached without a value (leave the bit
+  unset), which the device treats as its default operand.
 
 Constraints:
 
@@ -495,11 +495,11 @@ uint32_t sem = 0;
 fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
 
 struct fi_efa_mem_comp_action_attr attr = {
-	.op          = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
-	.location    = { .type = FI_EFA_MEMORY_LOCATION_VA,
-			 .ptr  = (uint8_t *)&sem },
-	.op_mem_size = sizeof(sem),
-	.mem_size    = sizeof(sem),
+	.mem_modify_type = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
+	.location        = { .type = FI_EFA_MEMORY_LOCATION_VA,
+			     .ptr  = (uint8_t *)&sem },
+	.mem_modify_size = sizeof(sem),
+	.mem_size        = sizeof(sem),
 };
 ops->create_mem_comp_action(domain, &attr, &action);
 /* send fid_efa_comp_action_get_id(action) to the initiator out of band */

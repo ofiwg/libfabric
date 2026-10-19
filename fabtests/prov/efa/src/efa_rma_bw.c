@@ -316,7 +316,7 @@ static int register_mem_action(struct action_sem *sem,
 	struct fi_efa_mem_comp_action_attr attr = {0};
 	int ret;
 
-	attr.op = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL;
+	attr.mem_modify_type = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL;
 	if (ACTION_MEM_IS_HOST) {
 		attr.location.type = FI_EFA_MEMORY_LOCATION_VA;
 		attr.location.ptr = (uint8_t *) sem->ptr;
@@ -325,8 +325,8 @@ static int register_mem_action(struct action_sem *sem,
 		attr.location.dmabuf.fd = sem->dmabuf_fd;
 		attr.location.dmabuf.offset = sem->dmabuf_offset;
 	}
-	attr.op_mem_size = action_width / 8;
-	attr.mem_size = attr.op_mem_size;
+	attr.mem_modify_size = action_width / 8;
+	attr.mem_size = attr.mem_modify_size;
 
 	ret = action_ops->create_mem_comp_action(domain, &attr, action);
 	if (ret) {
@@ -339,7 +339,7 @@ static int register_mem_action(struct action_sem *sem,
 		"%" PRIu64 " byte region, %u byte writes, id %u",
 		(void *) sem->ptr,
 		ACTION_MEM_IS_HOST ? "host VA" : "device dmabuf",
-		attr.mem_size, attr.op_mem_size, *action_id);
+		attr.mem_size, attr.mem_modify_size, *action_id);
 	return FI_SUCCESS;
 }
 

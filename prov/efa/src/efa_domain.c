@@ -751,16 +751,16 @@ static struct fi_ops efa_comp_action_fi_ops = {
 };
 
 /*
- * Translate a public memory action op into the efadv comp_mem_modify_type.
- * Returns 0 and sets *efadv_op on success, a negative fi errno otherwise.
+ * Translate a public memory modify type into the efadv comp_mem_modify_type.
+ * Returns 0 and sets *efadv_type on success, a negative fi errno otherwise.
  */
 static int
-efa_domain_fi_to_efadv_mem_comp_action_op(enum fi_efa_mem_comp_action_op fi_op,
-					  uint16_t *efadv_op)
+efa_domain_fi_to_efadv_mem_modify_type(enum fi_efa_mem_modify_type fi_type,
+				       uint16_t *efadv_type)
 {
-	switch (fi_op) {
+	switch (fi_type) {
 	case FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL:
-		*efadv_op = EFADV_MEM_COMP_ACTION_SET_INITIATOR_VAL;
+		*efadv_type = EFADV_MEM_COMP_ACTION_SET_INITIATOR_VAL;
 		return FI_SUCCESS;
 	default:
 		return -FI_EINVAL;
@@ -769,7 +769,7 @@ efa_domain_fi_to_efadv_mem_comp_action_op(enum fi_efa_mem_comp_action_op fi_op,
 
 /*
  * comp_mask, flags and reserved must be zero today. The device writes
- * op_mem_size bytes into a region of mem_size bytes at location. Only 1, 2 and
+ * mem_modify_size bytes into a region of mem_size bytes at location. Only 1, 2 and
  * 4 byte writes exist, the target must be aligned to the write, and a region
  * larger than one write is not supported yet.
  */
@@ -798,35 +798,35 @@ efa_domain_check_mem_comp_action_attr(struct fi_efa_mem_comp_action_attr *attr)
 		return -FI_EINVAL;
 	}
 
-	if (attr->op_mem_size != 1 && attr->op_mem_size != 2 &&
-	    attr->op_mem_size != 4) {
+	if (attr->mem_modify_size != 1 && attr->mem_modify_size != 2 &&
+	    attr->mem_modify_size != 4) {
 		EFA_WARN(FI_LOG_DOMAIN,
-			 "Unsupported memory completion action op_mem_size %u, must be 1, 2 or 4\n",
-			 attr->op_mem_size);
+			 "Unsupported memory completion action mem_modify_size %u, must be 1, 2 or 4\n",
+			 attr->mem_modify_size);
 		return -FI_EINVAL;
 	}
 
-	if (!attr->mem_size || attr->mem_size % attr->op_mem_size) {
+	if (!attr->mem_size || attr->mem_size % attr->mem_modify_size) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "Memory completion action mem_size %" PRIu64
-			 " is not a non-zero multiple of op_mem_size %u\n",
-			 attr->mem_size, attr->op_mem_size);
+			 " is not a non-zero multiple of mem_modify_size %u\n",
+			 attr->mem_size, attr->mem_modify_size);
 		return -FI_EINVAL;
 	}
 
-	if (attr->mem_size != attr->op_mem_size) {
+	if (attr->mem_size != attr->mem_modify_size) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "Memory completion action regions larger than one write "
-			 "(mem_size %" PRIu64 ", op_mem_size %u) are not supported\n",
-			 attr->mem_size, attr->op_mem_size);
+			 "(mem_size %" PRIu64 ", mem_modify_size %u) are not supported\n",
+			 attr->mem_size, attr->mem_modify_size);
 		return -FI_EOPNOTSUPP;
 	}
 
 	if (attr->location.type == FI_EFA_MEMORY_LOCATION_VA &&
-	    (uintptr_t) attr->location.ptr % attr->op_mem_size) {
+	    (uintptr_t) attr->location.ptr % attr->mem_modify_size) {
 		EFA_WARN(FI_LOG_DOMAIN,
-			 "Memory completion action target %p is not aligned to op_mem_size %u\n",
-			 attr->location.ptr, attr->op_mem_size);
+			 "Memory completion action target %p is not aligned to mem_modify_size %u\n",
+			 attr->location.ptr, attr->mem_modify_size);
 		return -FI_EINVAL;
 	}
 
@@ -856,12 +856,12 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 	if (ret)
 		return ret;
 
-	ret = efa_domain_fi_to_efadv_mem_comp_action_op(
-		attr->op, &efa_attr.comp_mem_modify_type);
+	ret = efa_domain_fi_to_efadv_mem_modify_type(
+		attr->mem_modify_type, &efa_attr.comp_mem_modify_type);
 	if (ret) {
 		EFA_WARN(FI_LOG_DOMAIN,
-			 "Unsupported memory completion action op %d\n",
-			 attr->op);
+			 "Unsupported memory completion action modify type %d\n",
+			 attr->mem_modify_type);
 		return ret;
 	}
 
@@ -871,7 +871,7 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 		return ret;
 
 	efa_attr.pd = domain->ibv_pd;
-	efa_attr.mem_modify_size = attr->op_mem_size;
+	efa_attr.mem_modify_size = attr->mem_modify_size;
 	efa_attr.mem_size = attr->mem_size;
 
 	action = calloc(1, sizeof(*action));
