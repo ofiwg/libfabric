@@ -44,7 +44,7 @@ struct fi_efa_wq_attr_2_7 {
 	uint16_t caps;
 };
 
-/* 2.8 added comp_action_with_data_block_offset. */
+/* 2.8 added wqe_blocks and comp_action_with_data_block_offset. */
 
 static_assert(offsetof(struct fi_efa_wq_attr, max_batch) ==
 		      offsetof(struct fi_efa_wq_attr_2_3, max_batch),

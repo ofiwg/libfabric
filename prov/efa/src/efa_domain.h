@@ -60,7 +60,7 @@ struct efa_domain {
  */
 struct efa_comp_action {
 	struct fid_efa_comp_action comp_action;
-	struct efadv_comp_action *efadv_action;
+	struct efadv_mem_comp_action *efadv_action;
 };
 #endif
 

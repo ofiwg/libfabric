@@ -330,8 +330,7 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 	EXPECT_EQ(gda_ops->query_qp_wqs(resource.ep, &sq_attr, &rq_attr), 0);
 
 	if (param.defines_caps)
-		expected_caps = efa_test_mock_efadv_sq_caps() |
-				efa_test_mock_efadv_sq_comp_action_caps();
+		expected_caps = efa_test_mock_efadv_sq_caps();
 
 	EXPECT_EQ(sq_attr.caps, expected_caps);
 	EXPECT_EQ(rq_attr.caps, 0);
@@ -347,6 +346,7 @@ TEST_P(EfaGdaQueryQpWqsTest, block_offset_reported_only_to_a_caller_that_defines
 	const QueryQpWqsCase &param = GetParam();
 	struct fi_efa_wq_attr sq_attr = {};
 	struct fi_efa_wq_attr rq_attr = {};
+	uint16_t expected_blocks = 0;
 	uint16_t expected_offset = 0;
 
 	ASSERT_NO_FATAL_FAILURE(construct(param.api_version));
@@ -357,10 +357,14 @@ TEST_P(EfaGdaQueryQpWqsTest, block_offset_reported_only_to_a_caller_that_defines
 	EXPECT_EQ(gda_ops->query_qp_wqs(resource.ep, &sq_attr, &rq_attr), 0);
 
 #if HAVE_EFADV_COMP_ACTION
-	if (param.defines_block_offset)
+	if (param.defines_block_offset) {
+		expected_blocks = efa_test_mock_efadv_sq_wqe_blocks();
 		expected_offset = EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
+	}
 #endif
 
+	EXPECT_EQ(sq_attr.wqe_blocks, expected_blocks);
+	EXPECT_EQ(rq_attr.wqe_blocks, 0);
 	EXPECT_EQ(sq_attr.comp_action_with_data_block_offset, expected_offset);
 	EXPECT_EQ(rq_attr.comp_action_with_data_block_offset, 0);
 }

@@ -812,6 +812,7 @@ struct fi_efa_wq_attr {
     uint32_t *doorbell;
     uint32_t max_batch;
     uint16_t caps;
+    uint16_t wqe_blocks;
     uint16_t comp_action_with_data_block_offset;
 };
 ```
@@ -840,9 +841,13 @@ struct fi_efa_wq_attr {
 		When set, the associated completion queue is guaranteed
 		to return 64-bit request IDs as well.
 
-	FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA
-		Work queue entries carry a completion action block, so a
-		request posted to this queue may name a registered memory
+*wqe_blocks*
+:	Only filled in when the application uses API version 2.8 or later.
+	Feature blocks the entries of the queue carry, a bitwise OR of:
+
+	FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA
+		Each entry carries a completion action block, so a request
+		posted to this queue may name a registered memory
 		completion action. Set only on a send queue, and only when
 		the endpoint was opened with completion actions enabled.
 		Where the block sits inside an entry is reported in
@@ -854,8 +859,8 @@ struct fi_efa_wq_attr {
 	offset of the completion action block within a send queue entry, for a
 	caller that builds its own entries and attaches a completion action to
 	one: where the block sits inside the entry is the device's to report.
-	Set only for a send queue whose *caps* carry
-	FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA, 0 otherwise.
+	Set only for a send queue whose *wqe_blocks* carry
+	FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA, 0 otherwise.
 
 #### Return value
 **query_qp_wqs()** returns 0 on success, or the value of errno on failure

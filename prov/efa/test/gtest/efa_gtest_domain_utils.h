@@ -42,10 +42,10 @@ int efa_test_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp,
 uint16_t efa_test_mock_efadv_sq_caps(void);
 
 /**
- * @brief The completion action fi_efa_wq_caps bit the mock above makes the
- * device report, which is none on a build without efadv completion actions.
+ * @brief The fi_efa_wqe_blocks bits the mock above makes the device report for
+ * the send queue, which is none on a build without efadv completion actions.
  */
-uint16_t efa_test_mock_efadv_sq_comp_action_caps(void);
+uint16_t efa_test_mock_efadv_sq_wqe_blocks(void);
 
 /**
  * @brief Read the QKEY the provider recorded on the endpoint's EFA QP. The
