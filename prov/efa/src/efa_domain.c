@@ -403,17 +403,15 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 		if (qp_sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID)
 			sq_attr->caps |= FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
 #endif
-#if HAVE_EFADV_COMP_ACTION
-		/* Reported only for a send queue created with completion actions. */
-		if (qp_sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA)
-			sq_attr->caps |= FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA;
-#endif
 	}
 #if HAVE_EFADV_COMP_ACTION
+	/* Reported only for a send queue created with completion actions. */
 	if (FI_VERSION_GE(api_version, FI_VERSION(2, 8)) &&
-	    (qp_sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA))
+	    (qp_sq_attr.wqe_blocks & EFADV_WQE_BLOCK_COMP_ACTION_WITH_DATA)) {
+		sq_attr->wqe_blocks |= FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA;
 		sq_attr->comp_action_with_data_block_offset =
 			qp_sq_attr.comp_action_with_data_block_offset;
+	}
 #endif
 
 	rq_attr->buffer = qp_rq_attr.buffer;
@@ -736,7 +734,7 @@ static int efa_comp_action_close(struct fid *fid)
 		container_of(fid, struct efa_comp_action, comp_action.fid);
 	int ret;
 
-	ret = efadv_destroy_comp_action(action->efadv_action);
+	ret = efadv_destroy_comp_action(&action->efadv_action->comp_action);
 	if (ret)
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "efadv_destroy_comp_action failed: %d\n", ret);
@@ -753,8 +751,8 @@ static struct fi_ops efa_comp_action_fi_ops = {
 };
 
 /*
- * Translate a public memory action op into the efadv comp_op. Returns 0 and
- * sets *efadv_op on success, a negative fi errno otherwise.
+ * Translate a public memory action op into the efadv comp_mem_modify_type.
+ * Returns 0 and sets *efadv_op on success, a negative fi errno otherwise.
  */
 static int
 efa_domain_fi_to_efadv_mem_comp_action_op(enum fi_efa_mem_comp_action_op fi_op,
@@ -858,8 +856,8 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 	if (ret)
 		return ret;
 
-	ret = efa_domain_fi_to_efadv_mem_comp_action_op(attr->op,
-							&efa_attr.comp_op);
+	ret = efa_domain_fi_to_efadv_mem_comp_action_op(
+		attr->op, &efa_attr.comp_mem_modify_type);
 	if (ret) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "Unsupported memory completion action op %d\n",
@@ -873,7 +871,7 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 		return ret;
 
 	efa_attr.pd = domain->ibv_pd;
-	efa_attr.op_mem_size = attr->op_mem_size;
+	efa_attr.mem_modify_size = attr->op_mem_size;
 	efa_attr.mem_size = attr->mem_size;
 
 	action = calloc(1, sizeof(*action));
@@ -892,7 +890,8 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 
 	action->comp_action.fid.fclass = FI_CLASS_UNSPEC;
 	action->comp_action.fid.ops = &efa_comp_action_fi_ops;
-	action->comp_action.action_id = action->efadv_action->action_id;
+	action->comp_action.action_id =
+		action->efadv_action->comp_action.action_id;
 
 	*action_fid = &action->comp_action;
 	return FI_SUCCESS;

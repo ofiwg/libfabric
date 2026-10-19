@@ -35,7 +35,10 @@ enum {
 
 enum fi_efa_wq_caps {
     FI_EFA_WQ_CAPS_64_BIT_REQ_ID = 1 << 0,
-    FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA = 1 << 1,
+};
+
+enum fi_efa_wqe_blocks {
+    FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA = 1 << 0,
 };
 
 struct fi_efa_wq_attr {
@@ -45,6 +48,7 @@ struct fi_efa_wq_attr {
     uint32_t *doorbell;
     uint32_t max_batch;
     uint16_t caps;
+    uint16_t wqe_blocks;
     uint16_t comp_action_with_data_block_offset;
 };
 

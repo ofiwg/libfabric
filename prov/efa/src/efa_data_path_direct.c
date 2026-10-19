@@ -115,7 +115,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp,
 	 * layout. It is reported only for an SQ created with
 	 * EFADV_WR_EX_WITH_COMP_ACTION_WITH_DATA, and is 0 otherwise.
 	 */
-	if (sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA)
+	if (sq_attr.wqe_blocks & EFADV_WQE_BLOCK_COMP_ACTION_WITH_DATA)
 		direct_qp->sq.action_block_offset =
 			sq_attr.comp_action_with_data_block_offset;
 #endif
