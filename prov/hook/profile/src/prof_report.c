@@ -34,9 +34,10 @@
 
 #include "ofi_str.h"
 #include "hook_profile.h"
+#include <ofi_mr.h>
 
 #define PROF_STR_LEN	64
-#define PROF_HMEM_IFACE_MAX	  FI_HMEM_SYNAPSEAI+1
+#define PROF_HMEM_IFACE_MAX	OFI_HMEM_MAX
 
 #define PROF_OUTPUT_FORMAT    " \t%-22s%-20s%-12s%-12s%-12s%-12s\n"
 

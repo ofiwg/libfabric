@@ -75,6 +75,7 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 		[FI_HMEM_ZE] = TRY,
 		[FI_HMEM_NEURON] = NEVER,
 		[FI_HMEM_SYNAPSEAI] = NEVER,
+		[FI_HMEM_MUSA] = NEVER,
 	};
 
 	if (failover_policy[iface] == ALWAYS)
