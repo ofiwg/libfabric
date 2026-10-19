@@ -117,13 +117,14 @@ TEST_F(EfaRdmCqRaceTest, reverse_lookup_under_locks_finds_racing_insert)
 
 	/* The lookup runs for real and really misses -- the insert has not
 	 * happened yet -- and its actual result is what is returned. */
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_av_reverse_lookup)
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_av_reverse_lookup_entry)
 		.WillOnce([&](struct efa_av *av, uint16_t ahn, uint16_t qpn,
 			      struct efa_rdm_pke *pkt_entry) {
-			fi_addr_t missed = __real_efa_rdm_av_reverse_lookup(
-				av, ahn, qpn, pkt_entry);
+			struct efa_rdm_av_entry *missed =
+				__real_efa_rdm_av_reverse_lookup_entry(
+					av, ahn, qpn, pkt_entry);
 
-			EXPECT_EQ(missed, (fi_addr_t) FI_ADDR_NOTAVAIL);
+			EXPECT_EQ(missed, nullptr);
 			EXPECT_NE(efa_test_rdm_cq_race_insert(&ctx),
 				  (fi_addr_t) FI_ADDR_NOTAVAIL);
 			return missed;
@@ -171,8 +172,8 @@ TEST_F(EfaRdmCqRaceTest, raw_addr_lookup_under_locks_finds_racing_insert)
 		});
 	/* Pins that miss, so the raw address lookup is the only lookup under the
 	 * locks that can resolve the peer. */
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_av_reverse_lookup_unsafe)
-		.WillOnce(Return(FI_ADDR_NOTAVAIL));
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_av_reverse_lookup_entry_unsafe)
+		.WillOnce(Return(nullptr));
 
 	EXPECT_EQ(efa_test_rdm_cq_race_poll(&ctx), 0);
 
