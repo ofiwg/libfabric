@@ -226,6 +226,13 @@ void cxip_coll_trace_init(struct cxip_ep_obj *ep_obj)
 	if (cxip_coll_trace_initialized)
 		return;
 
+	/* Allow FI_THREAD_DOMAIN optimizaiton on tracing lock */
+	if (ep_obj->domain->util_domain.threading == FI_THREAD_DOMAIN ||
+	    ep_obj->domain->util_domain.threading == FI_THREAD_COMPLETION)
+		ofi_genlock_init(&ep_obj->coll.prod_trace_lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&ep_obj->coll.prod_trace_lock, OFI_LOCK_SPINLOCK);
+
 	cxip_coll_trace_mask = 0L;
 	cxip_coll_trace_fid = NULL;
 	cxip_coll_trace_pathname = NULL;
@@ -254,7 +261,7 @@ void cxip_coll_trace_init(struct cxip_ep_obj *ep_obj)
 	if (getenv_is_set("CXIP_COLL_PROD_TRACE")) {
 		cxip_coll_prod_trace_initialized = true;
 
-		ep_lock = &ep_obj->lock;
+		ep_lock = &ep_obj->coll.prod_trace_lock;
 
 		cxip_coll_prod_trace_max_idx =
 			getenv_int("CXIP_COLL_PROD_TRACE_NUM_LINES");
