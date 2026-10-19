@@ -241,6 +241,20 @@ int ft_synapseai_copy_to_hmem(uint64_t device, void *dst, const void *src, size_
 int ft_synapseai_copy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
 int ft_synapseai_get_dmabuf_fd(void *buf, size_t len, int *dmabuf_fd, uint64_t *dmabuf_offset);
 
+int ft_musa_init(void);
+int ft_musa_cleanup(void);
+int ft_musa_alloc(uint64_t device, void **buf, size_t size);
+int ft_musa_alloc_host(void **buf, size_t size);
+int ft_musa_free(void *buf);
+int ft_musa_free_host(void *buf);
+int ft_musa_memset(uint64_t device, void *buf, int value, size_t size);
+int ft_musa_copy_to_hmem(uint64_t device, void *dst, const void *src,
+			 size_t size);
+int ft_musa_copy_from_hmem(uint64_t device, void *dst, const void *src,
+			   size_t size);
+int ft_musa_get_dmabuf_fd(void *buf, size_t len, int *fd, uint64_t *offset);
+int ft_musa_put_dmabuf_fd(int fd);
+
 int ft_hmem_init(enum fi_hmem_iface iface);
 int ft_hmem_init_thread(enum fi_hmem_iface iface, uint64_t device);
 int ft_hmem_cleanup(enum fi_hmem_iface iface);

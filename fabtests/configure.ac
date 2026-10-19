@@ -202,6 +202,23 @@ AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support
 
 AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE], [$have_cuda_dmabuf_mapping_type_pcie], [CUDA dmabuf PCIe BAR1 support])
 
+dnl Check for MUSA support. Require fabtests to dlopen MUSA runtime.
+have_musa=0
+AC_ARG_WITH([musa],
+            [AS_HELP_STRING([--with-musa=DIR],
+                            [Provide path to where the MUSA development
+                             and runtime libraries are installed.])],
+            [AS_IF([test "$freebsd" == "0"],
+                   [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
+                   [])
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             AC_CHECK_HEADER([musa_runtime.h],
+                             [have_musa=1],
+                             [AC_MSG_ERROR([<musa_runtime.h> not found])])],
+            [])
+
+AC_DEFINE_UNQUOTED([HAVE_MUSA], [$have_musa], [MUSA support])
+
 dnl Check for ROCR support. Require fabtests to dlopen ROCR.
 have_rocr=0
 AC_ARG_WITH([rocr],
@@ -220,7 +237,7 @@ AC_ARG_WITH([rocr],
             [])
 
 AM_CONDITIONAL([HAVE_ROCR], [test $have_rocr -eq 1])
-AM_CONDITIONAL([HAVE_HMEM], [[test $have_rocr -eq 1] || [test $have_cuda -eq 1]])
+AM_CONDITIONAL([HAVE_HMEM], [[test $have_rocr -eq 1] || [test $have_cuda -eq 1] || [test $have_musa -eq 1]])
 
 dnl Check for Neuron support.
 AC_ARG_WITH([neuron],
