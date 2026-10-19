@@ -98,6 +98,40 @@ bool efa_test_device_supports_comp_action(void)
 	return efa_device_support_comp_action();
 }
 
+uint32_t efa_test_set_comp_action_supp_ops(struct fid_domain *domain_fid,
+					   bool write, bool remote_write,
+					   bool remote_write_imm)
+{
+#if HAVE_EFADV_COMP_ACTION
+	struct efa_domain *domain = container_of(domain_fid, struct efa_domain,
+						 util_domain.domain_fid);
+	uint32_t prev = domain->device->efa_attr.comp_action_supp_ops;
+	uint32_t ops = 0;
+
+	if (write)
+		ops |= EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_RDMA_WRITE;
+	if (remote_write)
+		ops |= EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE;
+	if (remote_write_imm)
+		ops |= EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE_IMM;
+	domain->device->efa_attr.comp_action_supp_ops = ops;
+	return prev;
+#else
+	return 0;
+#endif
+}
+
+void efa_test_restore_comp_action_supp_ops(struct fid_domain *domain_fid,
+					   uint32_t supp_ops)
+{
+#if HAVE_EFADV_COMP_ACTION
+	struct efa_domain *domain = container_of(domain_fid, struct efa_domain,
+						 util_domain.domain_fid);
+
+	domain->device->efa_attr.comp_action_supp_ops = supp_ops;
+#endif
+}
+
 bool efa_test_build_has_comp_action(void)
 {
 #if HAVE_EFADV_COMP_ACTION

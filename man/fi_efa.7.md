@@ -281,6 +281,8 @@ struct fi_efa_ops_comp_action {
 				      struct fid_efa_comp_action **action);
 	int (*query_max_comp_actions)(struct fid_domain *domain,
 				      uint32_t *max_comp_actions);
+	int (*query_comp_action_supp_ops)(struct fid_domain *domain,
+					  uint64_t *supp_ops);
 };
 ```
 
@@ -301,6 +303,27 @@ struct fi_efa_ops_comp_action {
 : Reports how many completion actions the domain can have registered at once.
   A value of 0 means the device does not support them and
   *create_mem_comp_action* fails.
+
+*query_comp_action_supp_ops*
+: Reports which operations the device can trigger a completion action on, as
+  a bitwise OR of:
+
+	FI_EFA_COMP_ACTION_OP_WRITE
+		A local action attached to an RDMA write, executed when the write
+		completes at the initiator.
+
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE
+		A remote action attached to an RDMA write, executed when the write
+		completes at the target.
+
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE_CQ_DATA
+		A remote action attached to an RDMA write that carries
+		*FI_REMOTE_CQ_DATA*.
+
+  A value of 0 means the device does not support completion actions. An
+  action attached to a write these operations do not cover is rejected; see
+  the data path rules below. New bits may be added later, for operations
+  completion actions can be attached to then.
 
 *create_mem_comp_action* rejects the following with *-FI_EINVAL*: a non-zero
 *comp_mask*, *flags* or *reserved* (all reserved to be zero today, so they are
@@ -432,11 +455,17 @@ Constraints:
   *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()* and the other variants never read the
   EFA metadata fields, so the flag has no effect there and no action is
   attached.
-- The validation above does not depend on how libfabric was built. Where the
-  device or the build lacks completion action support, *fi_setopt()* fails
-  and the endpoint is never action enabled, so the flag is rejected with
-  *-FI_EINVAL* by the rule above.
+- Where the device lacks completion action support, *fi_setopt()* fails and
+  the endpoint is never action enabled, so the flag is rejected with
+  *-FI_EINVAL* by the rule above. A libfabric built without completion action
+  support rejects *FI_EFA_EXTENDED_MSG* itself, with *-FI_EOPNOTSUPP*.
 - Local and remote actions are independent: attach either or both.
+- The device decides which completions can trigger an action, as
+  *query_comp_action_supp_ops()* reports. A local action fires on the write's
+  completion at the initiator, a remote one on its completion at the target,
+  with or without *FI_REMOTE_CQ_DATA*. An action the device cannot trigger for
+  the write it is attached to is rejected with *-FI_EOPNOTSUPP*, and the write
+  is not posted.
 - *feature_bits* beyond the four bits defined above are rejected with
   *-FI_EOPNOTSUPP*. This is how the descriptor stays compatible across versions,
   and it is why the gated members are append-only: a new bit only ever gates a

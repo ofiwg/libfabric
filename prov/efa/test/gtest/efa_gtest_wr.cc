@@ -1408,6 +1408,19 @@ class EfaWrCompActionTestBase : public EfaWrTestBase
 	protected:
 	int prev_enable_comp_action = 0;
 	struct fi_efa_op_rma eop = {};
+	struct fid_domain *supp_ops_domain = nullptr;
+	uint32_t prev_supp_ops = 0;
+
+	void allow_ops(bool write, bool remote_write, bool remote_write_imm)
+	{
+		uint32_t prev = efa_test_set_comp_action_supp_ops(
+			resource.domain, write, remote_write, remote_write_imm);
+
+		if (!supp_ops_domain) {
+			supp_ops_domain = resource.domain;
+			prev_supp_ops = prev;
+		}
+	}
 
 	void setup()
 	{
@@ -1423,6 +1436,9 @@ class EfaWrCompActionTestBase : public EfaWrTestBase
 
 	void teardown()
 	{
+		if (supp_ops_domain)
+			efa_test_restore_comp_action_supp_ops(supp_ops_domain,
+							      prev_supp_ops);
 		EfaWrTestBase::teardown();
 		efa_test_set_enable_comp_action(prev_enable_comp_action);
 	}
@@ -1452,6 +1468,7 @@ class EfaWrCompActionTestBase : public EfaWrTestBase
 		ASSERT_EQ(fi_enable(resource.ep), 0);
 		ASSERT_EQ(efa_test_get_comp_action_enabled(resource.ep),
 			  enable_actions);
+		allow_ops(true, true, true);
 
 		local_buf = (uint8_t *) calloc(2 * EFA_TEST_WR_SEG_LEN, 1);
 		ASSERT_NE(local_buf, nullptr);
@@ -1621,6 +1638,35 @@ TEST_F(EfaWrCompActionTest, modify_iov_inline_to_sgl_keeps_actions)
 	EXPECT_TRUE(remote_req);
 	EXPECT_EQ(remote_id, 9u);
 	EXPECT_EQ(remote_data, 0xa5u);
+}
+
+TEST_F(EfaWrCompActionTest, prepare_write_needs_a_supported_op)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+
+	allow_ops(false, true, true);
+	prepare_write_ext(&attr, &wr_len, FI_EFA_LOCAL_ACTION_ID);
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len),
+		  -FI_EOPNOTSUPP);
+
+	allow_ops(true, false, true);
+	prepare_write_ext(&attr, &wr_len, FI_EFA_REMOTE_ACTION_ID);
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len),
+		  -FI_EOPNOTSUPP);
+
+	allow_ops(true, true, false);
+	prepare_write_ext(&attr, &wr_len, FI_EFA_REMOTE_ACTION_ID);
+	eop.op.flags |= FI_REMOTE_CQ_DATA;
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len),
+		  -FI_EOPNOTSUPP);
+
+	allow_ops(false, false, true);
+	prepare_write_ext(&attr, &wr_len, FI_EFA_REMOTE_ACTION_ID);
+	eop.op.flags |= FI_REMOTE_CQ_DATA;
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
 }
 
 struct WrCompActionRejectCase {

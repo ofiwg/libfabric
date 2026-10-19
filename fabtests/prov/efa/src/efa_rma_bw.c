@@ -400,6 +400,7 @@ static int report_action_ep_limits(struct fid_ep *target_ep)
 static int open_action_ops(void)
 {
 	uint32_t max_comp_actions;
+	uint64_t supp_ops;
 	int ret;
 
 	ret = fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0,
@@ -420,6 +421,14 @@ static int open_action_ops(void)
 	else
 		FT_INFO("Device reports max_comp_actions %u",
 			max_comp_actions);
+
+	ret = action_ops->query_comp_action_supp_ops(domain, &supp_ops);
+	if (ret)
+		FT_WARN("query_comp_action_supp_ops failed: %d (%s)", ret,
+			fi_strerror(-ret));
+	else
+		FT_INFO("Device reports completion action ops 0x%lx",
+			(unsigned long) supp_ops);
 
 	return FI_SUCCESS;
 }

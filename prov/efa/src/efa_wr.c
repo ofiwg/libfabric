@@ -292,13 +292,21 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 	int err;
 
 	if (op_rma->flags & FI_EFA_EXTENDED_MSG) {
+#if HAVE_EFADV_COMP_ACTION
 		const struct fi_efa_op_rma *eop =
 			(const struct fi_efa_op_rma *) op_rma;
 
-		err = efa_comp_action_wr_init(
-			base_ep, efa_comp_action_fields(eop), &sig);
+		err = efa_comp_action_wr_init(base_ep,
+					      efa_comp_action_fields(eop),
+					      op_rma->flags, &sig);
 		if (OFI_UNLIKELY(err))
 			return err;
+#else
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG used, but libfabric was built "
+			 "without completion action support\n");
+		return -FI_EOPNOTSUPP;
+#endif
 	}
 
 	err = efa_wr_prepare_rdma_common(base_ep, op_rma, wqe,
