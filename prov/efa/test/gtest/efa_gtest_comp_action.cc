@@ -135,6 +135,7 @@ TEST_F(EfaCompActionTest, ops_present)
 
 	EXPECT_NE(action_ops->create_mem_comp_action, nullptr);
 	EXPECT_NE(action_ops->query_max_comp_actions, nullptr);
+	EXPECT_NE(action_ops->query_comp_action_supp_ops, nullptr);
 }
 
 /*
@@ -164,6 +165,45 @@ TEST_F(EfaCompActionTest, query_max_comp_actions)
 				  resource.domain, &max_comp_actions),
 			  -FI_ENOSYS);
 	}
+}
+
+TEST_F(EfaCompActionTest, query_comp_action_supp_ops)
+{
+	uint64_t supp_ops = ~0ULL;
+	uint32_t prev;
+
+	ASSERT_NO_FATAL_FAILURE(construct(false));
+	ASSERT_NO_FATAL_FAILURE(open_ops());
+
+	if (!efa_test_build_has_comp_action()) {
+		EXPECT_EQ(action_ops->query_comp_action_supp_ops(resource.domain,
+								 &supp_ops),
+			  -FI_ENOSYS);
+		return;
+	}
+
+	EXPECT_EQ(action_ops->query_comp_action_supp_ops(resource.domain,
+							 nullptr),
+		  -FI_EINVAL);
+
+	prev = efa_test_set_comp_action_supp_ops(resource.domain, true, false,
+						 true);
+	EXPECT_EQ(action_ops->query_comp_action_supp_ops(resource.domain,
+							 &supp_ops),
+		  0);
+	EXPECT_EQ(supp_ops, efa_test_device_supports_comp_action() ?
+				    (uint64_t) (FI_EFA_COMP_ACTION_OP_WRITE |
+						FI_EFA_COMP_ACTION_OP_REMOTE_WRITE_CQ_DATA) :
+				    0ULL);
+
+	efa_test_set_enable_comp_action(0);
+	supp_ops = ~0ULL;
+	EXPECT_EQ(action_ops->query_comp_action_supp_ops(resource.domain,
+							 &supp_ops),
+		  0);
+	EXPECT_EQ(supp_ops, 0ULL);
+
+	efa_test_restore_comp_action_supp_ops(resource.domain, prev);
 }
 
 /*
@@ -369,7 +409,8 @@ TEST_F(EfaCompActionTest, setopt_enable)
  * build without it rejects the flag outright). Which error comes back depends
  * on the device: with RDMA write the flag itself is rejected (-FI_EINVAL),
  * while a device without it leaves FI_RMA out of the endpoint's caps, so the
- * write is turned away earlier by efa_rma_check_cap (-FI_EOPNOTSUPP).
+ * write is turned away earlier by efa_rma_check_cap (-FI_EOPNOTSUPP). A build
+ * without completion actions rejects the flag itself (-FI_EOPNOTSUPP).
  */
 TEST_F(EfaCompActionTest, writemsg_requires_enable)
 {
@@ -384,8 +425,10 @@ TEST_F(EfaCompActionTest, writemsg_requires_enable)
 	/* Checked after construct: the device list is only populated by
 	 * fi_getinfo. A device without RDMA write is turned away by
 	 * efa_rma_check_cap one step earlier, with a different code. */
-	int expected_err = efa_test_device_supports_rma() ? -FI_EINVAL
-							  : -FI_EOPNOTSUPP;
+	int expected_err = efa_test_build_has_comp_action() &&
+					   efa_test_device_supports_rma() ?
+				   -FI_EINVAL :
+				   -FI_EOPNOTSUPP;
 
 	ASSERT_FALSE(efa_test_get_comp_action_enabled(resource.ep));
 
@@ -464,8 +507,10 @@ TEST_F(EfaCompActionTest, writemsg_value_without_id)
 
 	construct_action_enabled();
 
-	int expected_err = efa_test_device_supports_rma() ? -FI_EINVAL
-							 : -FI_EOPNOTSUPP;
+	int expected_err = efa_test_build_has_comp_action() &&
+					   efa_test_device_supports_rma() ?
+				   -FI_EINVAL :
+				   -FI_EOPNOTSUPP;
 
 	iov.iov_base = buf;
 	iov.iov_len = sizeof(buf);
@@ -491,18 +536,8 @@ class EfaCompActionWriteTest : public EfaCompActionTest
 {
       protected:
 	StrictMock<MockEfa> mock_efa;
-
-	void TearDown() override
-	{
-		MockEfa::set(nullptr);
-		EfaCompActionTest::TearDown();
-	}
-};
-
-TEST_F(EfaCompActionWriteTest, writemsg_attaches_actions)
-{
-	const uint64_t fb = FI_EFA_LOCAL_ACTION_ID | FI_EFA_LOCAL_ACTION_VALUE |
-			    FI_EFA_REMOTE_ACTION_ID | FI_EFA_REMOTE_ACTION_VALUE;
+	struct fid_domain *supp_ops_domain = nullptr;
+	uint32_t prev_supp_ops = 0;
 	struct fi_efa_msg_rma emsg = {};
 	struct iovec iov = {};
 	struct fi_rma_iov rma_iov = {};
@@ -511,36 +546,70 @@ TEST_F(EfaCompActionWriteTest, writemsg_attaches_actions)
 	void *desc = nullptr;
 	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
 
+	void allow_ops(bool write, bool remote_write, bool remote_write_imm)
+	{
+		uint32_t prev = efa_test_set_comp_action_supp_ops(
+			resource.domain, write, remote_write, remote_write_imm);
+
+		if (!supp_ops_domain) {
+			supp_ops_domain = resource.domain;
+			prev_supp_ops = prev;
+		}
+	}
+
+	void build_writemsg(uint64_t fb)
+	{
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
+		ASSERT_EQ(fi_mr_reg(resource.domain, buf, sizeof(buf), FI_WRITE,
+				    0, 0, 0, &mr, nullptr),
+			  0);
+		desc = fi_mr_desc(mr);
+
+		iov.iov_base = buf;
+		iov.iov_len = sizeof(buf);
+		rma_iov.addr = 0x1000;
+		rma_iov.len = sizeof(buf);
+		rma_iov.key = 0x1;
+
+		emsg.msg.msg_iov = &iov;
+		emsg.msg.iov_count = 1;
+		emsg.msg.desc = &desc;
+		emsg.msg.addr = peer_addr;
+		emsg.msg.rma_iov = &rma_iov;
+		emsg.msg.rma_iov_count = 1;
+		emsg.feature_bits = fb;
+		emsg.local_id = 7;
+		emsg.local_value = 0x1122334455667788ULL;
+		emsg.remote_id = 9;
+		emsg.remote_value = 0xa5;
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		if (mr)
+			fi_close(&mr->fid);
+		if (supp_ops_domain)
+			efa_test_restore_comp_action_supp_ops(supp_ops_domain,
+							      prev_supp_ops);
+		EfaCompActionTest::TearDown();
+	}
+};
+
+TEST_F(EfaCompActionWriteTest, writemsg_attaches_actions)
+{
+	const uint64_t fb = FI_EFA_LOCAL_ACTION_ID | FI_EFA_LOCAL_ACTION_VALUE |
+			    FI_EFA_REMOTE_ACTION_ID | FI_EFA_REMOTE_ACTION_VALUE;
+
 	if (!construct_action_enabled())
 		GTEST_SKIP() << "device without completion action support";
 	if (!efa_test_device_supports_rma())
 		GTEST_SKIP() << "device without RDMA write";
 
-	ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
-					  &peer_addr),
-		  1);
-	ASSERT_EQ(fi_mr_reg(resource.domain, buf, sizeof(buf), FI_WRITE, 0, 0,
-			    0, &mr, nullptr),
-		  0);
-	desc = fi_mr_desc(mr);
-
-	iov.iov_base = buf;
-	iov.iov_len = sizeof(buf);
-	rma_iov.addr = 0x1000;
-	rma_iov.len = sizeof(buf);
-	rma_iov.key = 0x1;
-
-	emsg.msg.msg_iov = &iov;
-	emsg.msg.iov_count = 1;
-	emsg.msg.desc = &desc;
-	emsg.msg.addr = peer_addr;
-	emsg.msg.rma_iov = &rma_iov;
-	emsg.msg.rma_iov_count = 1;
-	emsg.feature_bits = fb;
-	emsg.local_id = 7;
-	emsg.local_value = 0x1122334455667788ULL;
-	emsg.remote_id = 9;
-	emsg.remote_value = 0xa5;
+	allow_ops(true, true, true);
+	ASSERT_NO_FATAL_FAILURE(build_writemsg(fb));
 
 	auto sig_matches = Truly([fb](const struct efa_comp_action_wr *sig) {
 		return efa_test_comp_action_wr_matches(
@@ -554,10 +623,70 @@ TEST_F(EfaCompActionWriteTest, writemsg_attaches_actions)
 	EXPECT_EQ(fi_writemsg(resource.ep, (struct fi_msg_rma *) &emsg,
 			      FI_EFA_EXTENDED_MSG),
 		  0);
-
-	MockEfa::set(nullptr);
-	fi_close(&mr->fid);
 }
+
+struct SuppOpsCase {
+	const char *name;
+	bool write;
+	bool remote_write;
+	bool remote_write_imm;
+	uint64_t feature_bits;
+	uint64_t flags;
+	bool posted;
+};
+
+class EfaCompActionSuppOpsTest
+	: public EfaCompActionWriteTest,
+	  public testing::WithParamInterface<SuppOpsCase>
+{
+};
+
+TEST_P(EfaCompActionSuppOpsTest, writemsg_needs_a_supported_op)
+{
+	const SuppOpsCase &param = GetParam();
+
+	if (!construct_action_enabled())
+		GTEST_SKIP() << "device without completion action support";
+	if (!efa_test_device_supports_rma())
+		GTEST_SKIP() << "device without RDMA write";
+
+	allow_ops(param.write, param.remote_write, param.remote_write_imm);
+	ASSERT_NO_FATAL_FAILURE(build_writemsg(param.feature_bits));
+
+	MockEfa::set(&mock_efa);
+	if (param.posted)
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_write)
+			.WillOnce(Return(0));
+	else
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_write).Times(0);
+
+	EXPECT_EQ(fi_writemsg(resource.ep, (struct fi_msg_rma *) &emsg,
+			      FI_EFA_EXTENDED_MSG | param.flags),
+		  param.posted ? 0 : -FI_EOPNOTSUPP);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaCompActionSuppOpsTest,
+	testing::Values(
+		SuppOpsCase{"local_on_write", true, false, false,
+			    FI_EFA_LOCAL_ACTION_ID, 0, true},
+		SuppOpsCase{"local_without_write", false, true, true,
+			    FI_EFA_LOCAL_ACTION_ID, 0, false},
+		SuppOpsCase{"remote_on_remote_write", false, true, false,
+			    FI_EFA_REMOTE_ACTION_ID, 0, true},
+		SuppOpsCase{"remote_without_remote_write", true, false, true,
+			    FI_EFA_REMOTE_ACTION_ID, 0, false},
+		SuppOpsCase{"remote_cq_data_on_remote_write_cq_data", false, false, true,
+			    FI_EFA_REMOTE_ACTION_ID, FI_REMOTE_CQ_DATA, true},
+		SuppOpsCase{"remote_cq_data_without_remote_write_cq_data", true, true,
+			    false, FI_EFA_REMOTE_ACTION_ID, FI_REMOTE_CQ_DATA,
+			    false},
+		SuppOpsCase{"local_and_remote_without_remote_write", true, false,
+			    false, FI_EFA_LOCAL_ACTION_ID | FI_EFA_REMOTE_ACTION_ID,
+			    0, false}),
+	[](const testing::TestParamInfo<SuppOpsCase> &info) {
+		return std::string(info.param.name);
+	});
 
 /*
  * fi_getopt(FI_OPT_TX_SIZE) reports the effective send-queue depth, which must

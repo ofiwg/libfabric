@@ -914,6 +914,39 @@ efa_domain_query_max_comp_actions(struct fid_domain *domain_fid,
 	return FI_SUCCESS;
 }
 
+/*
+ * Report the RDMA write completions the device can trigger a completion
+ * action on, translated from rdma-core's mask into the FI_EFA_COMP_ACTION_OP_*
+ * operations libfabric can attach an action to.
+ */
+static int
+efa_domain_query_comp_action_supp_ops(struct fid_domain *domain_fid,
+				      uint64_t *supp_ops)
+{
+	struct efa_domain *domain;
+	uint32_t efadv_ops;
+
+	if (!supp_ops)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	*supp_ops = 0;
+	if (!efa_device_support_comp_action())
+		return FI_SUCCESS;
+
+	efadv_ops = domain->device->efa_attr.comp_action_supp_ops;
+	if (efadv_ops & EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_RDMA_WRITE)
+		*supp_ops |= FI_EFA_COMP_ACTION_OP_WRITE;
+	if (efadv_ops & EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE)
+		*supp_ops |= FI_EFA_COMP_ACTION_OP_REMOTE_WRITE;
+	if (efadv_ops &
+	    EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE_IMM)
+		*supp_ops |= FI_EFA_COMP_ACTION_OP_REMOTE_WRITE_CQ_DATA;
+	return FI_SUCCESS;
+}
+
 #else /* HAVE_EFADV_COMP_ACTION */
 
 static int
@@ -931,11 +964,19 @@ efa_domain_query_max_comp_actions(struct fid_domain *domain_fid,
 	return -FI_ENOSYS;
 }
 
+static int
+efa_domain_query_comp_action_supp_ops(struct fid_domain *domain_fid,
+				      uint64_t *supp_ops)
+{
+	return -FI_ENOSYS;
+}
+
 #endif /* HAVE_EFADV_COMP_ACTION */
 
 static struct fi_efa_ops_comp_action efa_ops_comp_action = {
 	.create_mem_comp_action = efa_domain_create_mem_comp_action,
 	.query_max_comp_actions = efa_domain_query_max_comp_actions,
+	.query_comp_action_supp_ops = efa_domain_query_comp_action_supp_ops,
 };
 
 struct fi_efa_ops_domain efa_ops_domain = {

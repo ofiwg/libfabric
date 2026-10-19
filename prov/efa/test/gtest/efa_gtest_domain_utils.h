@@ -86,6 +86,24 @@ bool efa_test_get_comp_action_enabled(struct fid_ep *ep);
 bool efa_test_device_supports_comp_action(void);
 
 /**
+ * @brief Set which RDMA write completions the domain's device reports it can
+ * trigger a completion action on: the initiator's (@p write), the target's
+ * (@p remote_write) and the target's for a write with immediate data
+ * (@p remote_write_imm). Returns the previous mask, to restore with
+ * efa_test_restore_comp_action_supp_ops(). No-op on a build without
+ * completion actions.
+ */
+uint32_t efa_test_set_comp_action_supp_ops(struct fid_domain *domain_fid,
+					   bool write, bool remote_write,
+					   bool remote_write_imm);
+
+/**
+ * @brief Restore a mask returned by efa_test_set_comp_action_supp_ops().
+ */
+void efa_test_restore_comp_action_supp_ops(struct fid_domain *domain_fid,
+					   uint32_t supp_ops);
+
+/**
  * @brief Whether the provider was compiled with efadv completion-action
  * support (HAVE_EFADV_COMP_ACTION). When false, the action ops are stubs that
  * return -FI_ENOSYS. Distinct from device capability: a build may support the

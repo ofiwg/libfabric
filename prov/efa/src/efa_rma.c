@@ -216,7 +216,9 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	struct efa_context *efa_ctx;
 	struct efa_direct_ope *direct_ope = NULL;
+#if HAVE_EFADV_COMP_ACTION
 	struct efa_comp_action_wr sig = {0};
+#endif
 	const struct efa_comp_action_wr *sig_ptr = NULL;
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
@@ -227,14 +229,22 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
 	if (flags & FI_EFA_EXTENDED_MSG) {
+#if HAVE_EFADV_COMP_ACTION
 		const struct fi_efa_msg_rma *emsg =
 			(const struct fi_efa_msg_rma *) msg;
 
 		err = efa_comp_action_wr_init(
-			base_ep, efa_comp_action_fields(emsg), &sig);
+			base_ep, efa_comp_action_fields(emsg), flags, &sig);
 		if (err)
 			goto out_err;
 		sig_ptr = &sig;
+#else
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG used, but libfabric was built "
+			 "without completion action support\n");
+		err = -FI_EOPNOTSUPP;
+		goto out_err;
+#endif
 	}
 
 	/* Prepare work request ID */

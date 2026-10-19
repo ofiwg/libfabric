@@ -191,6 +191,7 @@ EFA_COMP_ACTION_FIELDS_ASSERT_ALL(struct fi_efa_op_rma);
 #define efa_comp_action_fields(desc)                                           \
 	((const struct efa_comp_action_fields *) &(desc)->feature_bits)
 
+#if HAVE_EFADV_COMP_ACTION
 /**
  * @brief Validate the completion-action fields of a WR and pack them for the
  *        WQE builders
@@ -204,17 +205,23 @@ EFA_COMP_ACTION_FIELDS_ASSERT_ALL(struct fi_efa_op_rma);
  *
  * @param base_ep  endpoint the WR is posted on
  * @param fields   the caller's completion-action fields
+ * @param flags    the WR's operation flags
  * @param sig[out] per-WR action descriptor handed to the WQE builders
  * @return 0 on success, otherwise a negative libfabric error code.
  */
 static inline int
 efa_comp_action_wr_init(struct efa_base_ep *base_ep,
 			const struct efa_comp_action_fields *fields,
-			struct efa_comp_action_wr *sig)
+			uint64_t flags, struct efa_comp_action_wr *sig)
 {
 	uint64_t fb = fields->feature_bits;
 	uint64_t unknown =
 		fb & ~(uint64_t) EFA_EXTENDED_MSG_SUPPORTED_FEATURE_BITS;
+	uint32_t supp_ops =
+		base_ep->domain->device->efa_attr.comp_action_supp_ops;
+	uint32_t remote_op = (flags & FI_REMOTE_CQ_DATA) ?
+		EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE_IMM :
+		EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_REMOTE_RDMA_WRITE;
 
 	/*
 	 * Checked before the endpoint state so a descriptor built against a
@@ -247,6 +254,20 @@ efa_comp_action_wr_init(struct efa_base_ep *base_ep,
 		return -FI_EINVAL;
 	}
 
+	/*
+	 * The local action fires on the write's completion at the initiator,
+	 * the remote one on its completion at the target.
+	 */
+	if (((fb & FI_EFA_LOCAL_ACTION_ID) &&
+	     !(supp_ops & EFADV_DEVICE_ATTR_COMP_ACTION_SUPPORTED_OP_RDMA_WRITE)) ||
+	    ((fb & FI_EFA_REMOTE_ACTION_ID) && !(supp_ops & remote_op))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "The device cannot trigger the requested completion "
+			 "action on this RDMA write (supported ops 0x%x)\n",
+			 supp_ops);
+		return -FI_EOPNOTSUPP;
+	}
+
 	sig->feature_bits = fb;
 
 	if (fb & FI_EFA_LOCAL_ACTION_ID) {
@@ -264,6 +285,7 @@ efa_comp_action_wr_init(struct efa_base_ep *base_ep,
 
 	return 0;
 }
+#endif /* HAVE_EFADV_COMP_ACTION */
 
 #define EFA_SETUP_IOV(iov, buf, len)           \
 	do {                                   \

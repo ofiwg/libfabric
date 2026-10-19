@@ -148,12 +148,20 @@ struct fi_efa_ops_gda {
 			     struct fi_efa_comp_cntr_init_attr *efa_attr);
 };
 
+enum {
+	FI_EFA_COMP_ACTION_OP_WRITE = 1 << 0,
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE = 1 << 1,
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE_CQ_DATA = 1 << 2,
+};
+
 struct fi_efa_ops_comp_action {
 	int (*create_mem_comp_action)(struct fid_domain *domain,
 				      struct fi_efa_mem_comp_action_attr *attr,
 				      struct fid_efa_comp_action **action);
 	int (*query_max_comp_actions)(struct fid_domain *domain,
 				      uint32_t *max_comp_actions);
+	int (*query_comp_action_supp_ops)(struct fid_domain *domain,
+					  uint64_t *supp_ops);
 };
 
 /*
