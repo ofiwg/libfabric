@@ -129,7 +129,7 @@ struct efa_comp_action_wr {
 	/*
 	 * The action's device operand: one 64-bit word holding the value the
 	 * action writes, as the efadv setter and the WQE field take it; the
-	 * device truncates it to the action's op_mem_size.
+	 * device truncates it to the action's mem_modify_size.
 	 */
 	uint64_t local_action_data;
 	uint64_t remote_action_data;

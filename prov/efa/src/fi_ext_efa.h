@@ -111,17 +111,17 @@ fid_efa_comp_action_get_id(struct fid_efa_comp_action *action)
 	return action->action_id;
 }
 
-enum fi_efa_mem_comp_action_op {
+enum fi_efa_mem_modify_type {
 	FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL = 0,
 };
 
 struct fi_efa_mem_comp_action_attr {
 	uint64_t comp_mask;
 	uint32_t flags;
-	uint32_t op_mem_size;
+	uint32_t mem_modify_size;
 	uint64_t mem_size;
 	struct fi_efa_memory_location location;
-	enum fi_efa_mem_comp_action_op op;
+	enum fi_efa_mem_modify_type mem_modify_type;
 	uint8_t reserved[4];
 };
 

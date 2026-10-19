@@ -46,10 +46,10 @@ class EfaCompActionTest : public Test
 	void init_attr(struct fi_efa_mem_comp_action_attr *attr)
 	{
 		memset(attr, 0, sizeof(*attr));
-		attr->op = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL;
+		attr->mem_modify_type = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL;
 		attr->location.type = FI_EFA_MEMORY_LOCATION_VA;
 		attr->location.ptr = (uint8_t *) target;
-		attr->op_mem_size = sizeof(uint32_t);
+		attr->mem_modify_size = sizeof(uint32_t);
 		attr->mem_size = sizeof(uint32_t);
 	}
 
@@ -224,9 +224,9 @@ TEST_F(EfaCompActionTest, create_mem_comp_action_reserved_fields)
 }
 
 /*
- * The device writes op_mem_size bytes, so op_mem_size must be 1, 2 or 4,
- * mem_size must be a non-zero multiple of it, and a VA target must be aligned
- * to it; each is rejected with -FI_EINVAL. A region larger than one write is
+ * The device writes mem_modify_size bytes, so mem_modify_size must be 1, 2 or
+ * 4, mem_size must be a non-zero multiple of it, and a VA target must be
+ * aligned to it; each is rejected with -FI_EINVAL. A region larger than one write is
  * not supported yet (-FI_EOPNOTSUPP). Without build support the stub returns
  * -FI_ENOSYS.
  */
@@ -243,13 +243,13 @@ TEST_F(EfaCompActionTest, create_mem_comp_action_bad_region)
 	ASSERT_NO_FATAL_FAILURE(open_ops());
 
 	init_attr(&attr);
-	attr.op_mem_size = 3;
+	attr.mem_modify_size = 3;
 	EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain, &attr,
 						     &action),
 		  expected);
 
 	init_attr(&attr);
-	attr.op_mem_size = 0;
+	attr.mem_modify_size = 0;
 	EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain, &attr,
 						     &action),
 		  expected);
@@ -267,7 +267,7 @@ TEST_F(EfaCompActionTest, create_mem_comp_action_bad_region)
 		  expected);
 
 	init_attr(&attr);
-	attr.mem_size = 2 * attr.op_mem_size;
+	attr.mem_size = 2 * attr.mem_modify_size;
 	EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain, &attr,
 						     &action),
 		  expected_larger);
@@ -281,9 +281,9 @@ TEST_F(EfaCompActionTest, create_mem_comp_action_bad_region)
 }
 
 /*
- * An op outside enum fi_efa_mem_comp_action_op -- what an application built
- * against a newer header would pass -- is rejected (-FI_EINVAL) rather than
- * mapped onto some other device op. Without build support the stub returns
+ * A modify type outside enum fi_efa_mem_modify_type -- what an application
+ * built against a newer header would pass -- is rejected (-FI_EINVAL) rather
+ * than mapped onto some other device modify type. Without build support the stub returns
  * -FI_ENOSYS.
  */
 TEST_F(EfaCompActionTest, create_mem_comp_action_unknown_op)
@@ -297,7 +297,7 @@ TEST_F(EfaCompActionTest, create_mem_comp_action_unknown_op)
 	ASSERT_NO_FATAL_FAILURE(open_ops());
 
 	init_attr(&attr);
-	attr.op = (enum fi_efa_mem_comp_action_op) (
+	attr.mem_modify_type = (enum fi_efa_mem_modify_type) (
 		FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL + 1);
 	EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain, &attr,
 						     &action),
