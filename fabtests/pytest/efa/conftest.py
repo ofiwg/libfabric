@@ -420,8 +420,8 @@ def host_has_comp_action(host_id, binpath, environments):
     fi_efa_rma_bw --action-check reports by exiting 0. It exits 61 (ENODATA)
     when the device, driver, firmware or libfabric build lacks them.
     """
-    command = "timeout 60 " + os.path.join(binpath, "fi_efa_rma_bw") + \
-              " -p efa --action-check"
+    command = "FI_EFA_ENABLE_COMP_ACTION=1 timeout 60 " + \
+              os.path.join(binpath, "fi_efa_rma_bw") + " -p efa --action-check"
     if environments:
         command = environments + " " + command
     proc = subprocess.run("ssh {} {}".format(host_id, command), shell=True,

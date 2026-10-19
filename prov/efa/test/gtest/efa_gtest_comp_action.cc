@@ -111,14 +111,18 @@ class EfaCompActionTest : public Test
 		return supported;
 	}
 
+	int prev_enable_comp_action = 0;
+
 	void SetUp() override
 	{
 		memset(&resource, 0, sizeof(resource));
+		prev_enable_comp_action = efa_test_set_enable_comp_action(1);
 	}
 
 	void TearDown() override
 	{
 		efa_test_resource_destruct(&resource);
+		efa_test_set_enable_comp_action(prev_enable_comp_action);
 	}
 };
 
@@ -859,4 +863,40 @@ TEST_F(EfaCompActionInlineLimitTest,
 	expect_inject_sizes(expected,
 			    efa_test_device_supports_rdma_write() ? expected : 0);
 	expect_tx_size();
+}
+
+TEST_F(EfaCompActionTest, disabled_by_env)
+{
+	struct fi_efa_mem_comp_action_attr attr;
+	struct fid_efa_comp_action *action = nullptr;
+	uint32_t max_mem_comp_actions = 1;
+	bool on = true;
+
+	efa_test_set_enable_comp_action(0);
+	ASSERT_NO_FATAL_FAILURE(construct(false));
+	ASSERT_NO_FATAL_FAILURE(open_ops());
+
+	EXPECT_FALSE(efa_test_device_supports_comp_action());
+	EXPECT_EQ(fi_setopt(&resource.ep->fid, FI_OPT_ENDPOINT,
+			    FI_OPT_EFA_COMP_ACTION, &on, sizeof(on)),
+		  -FI_EOPNOTSUPP);
+
+	init_attr(&attr);
+	if (efa_test_build_has_comp_action()) {
+		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
+				  resource.domain, &max_mem_comp_actions),
+			  0);
+		EXPECT_EQ(max_mem_comp_actions, 0u);
+		EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain,
+							     &attr, &action),
+			  -FI_EOPNOTSUPP);
+	} else {
+		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
+				  resource.domain, &max_mem_comp_actions),
+			  -FI_ENOSYS);
+		EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain,
+							     &attr, &action),
+			  -FI_ENOSYS);
+	}
+	EXPECT_EQ(action, nullptr);
 }

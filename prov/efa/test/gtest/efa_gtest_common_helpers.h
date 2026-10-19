@@ -43,6 +43,11 @@ int efa_test_device_supports_rma(void);
 int efa_test_set_track_mr(int value);
 
 /**
+ * @brief Set efa_env.enable_comp_action and return its previous value.
+ */
+int efa_test_set_enable_comp_action(int value);
+
+/**
  * @brief Read the domain's zero-byte bounce buffer address and lkey for the
  * endpoint behind @p ep.
  */

@@ -44,6 +44,7 @@ struct efa_env efa_env = {
 	.track_mr = 0,
 	.use_hw_cntr = 1,
 	.use_sq_req_id_64_bit = 1,
+	.enable_comp_action = 0,
 	.rdm_force_send_proto = NULL,
 };
 
@@ -64,6 +65,10 @@ static void efa_env_unregistered_param_get(void)
 	tmp = getenv("FI_EFA_USE_SQ_REQ_ID_64_BIT");
 	if (tmp)
 		efa_env.use_sq_req_id_64_bit = atoi(tmp);
+
+	tmp = getenv("FI_EFA_ENABLE_COMP_ACTION");
+	if (tmp)
+		efa_env.enable_comp_action = atoi(tmp);
 }
 
 /* @brief Read and store the FI_EFA_* environment variables.
