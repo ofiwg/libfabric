@@ -242,6 +242,7 @@ libfabtests_la_SOURCES = \
 	common/hmem_ze.c \
 	common/hmem_neuron.c \
 	common/hmem_synapseai.c \
+	common/hmem_musa.c \
 	common/ofi_atomic.c \
 	include/ofi_atomic.h \
 	include/shared.h \

@@ -46,8 +46,8 @@ CFLAGS = $(CFLAGS) /O2 /MT
 basedeps = common\hmem.c common\shared.c \
 	common\windows\getopt.c common\windows\osd.c \
 	common\hmem_cuda.c common\hmem_rocr.c common\hmem_ze.c \
-	common\hmem_neuron.c common\hmem_synapseai.c common\ofi_atomic.c \
-	common\wr.c
+	common\hmem_neuron.c common\hmem_synapseai.c common\hmem_musa.c \
+	common\ofi_atomic.c common\wr.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt /Imultinode\include
@@ -195,7 +195,6 @@ $(outdir)\multinode_coll.exe: {multinode\src}harness.c $(basedeps) {multinode\sr
 $(outdir)\complex.exe: {complex}ft_comm.c {complex}ft_comp.c {complex}ft_config.c {complex}ft_domain.c {complex}ft_endpoint.c {complex}ft_main.c {complex}ft_msg.c {complex}ft_test.c $(basedeps)
 	if not exist $(@D) mkdir $(@D)
 	$(CC) /Fe$@ $** $(baseincludes) $(CFLAGS) $(libs)
-
 
 
 

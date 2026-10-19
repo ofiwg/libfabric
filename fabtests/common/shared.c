@@ -3710,6 +3710,8 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->iface = FI_HMEM_NEURON;
 		else if (!strncasecmp("rocr", optarg, 4))
 			opts->iface = FI_HMEM_ROCR;
+		else if (!strncasecmp("musa", optarg, 4))
+			opts->iface = FI_HMEM_MUSA;
 		else if (!strncasecmp("synapseai", optarg, 9)) {
 			opts->iface = FI_HMEM_SYNAPSEAI;
 			opts->options |= FT_OPT_REG_DMABUF_MR;
