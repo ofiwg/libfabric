@@ -84,6 +84,12 @@ struct efa_env {
 	int use_hw_cntr;
 	int use_sq_req_id_64_bit;
 	/**
+	 * Enable completion actions (FI_EFA_ENABLE_COMP_ACTION, default 0).
+	 * Left off while the rdma-core and firmware interfaces are still
+	 * changing; when 0 the provider reports no completion action support.
+	 */
+	int enable_comp_action;
+	/**
 	 * Name of the RDM send protocol that selection is pinned to, as set by
 	 * FI_EFA_RDM_FORCE_SEND_PROTO, or NULL to use the default protocol
 	 * selection logic.

@@ -848,6 +848,9 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 	if (!attr || !action_fid)
 		return -FI_EINVAL;
 
+	if (!efa_device_support_comp_action())
+		return -FI_EOPNOTSUPP;
+
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
 
@@ -907,7 +910,8 @@ efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
 
-	*max_mem_comp_actions = domain->device->efa_attr.max_comp_actions;
+	*max_mem_comp_actions = efa_device_support_comp_action() ?
+		domain->device->efa_attr.max_comp_actions : 0;
 	return FI_SUCCESS;
 }
 

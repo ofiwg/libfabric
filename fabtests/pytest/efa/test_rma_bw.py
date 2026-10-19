@@ -199,7 +199,8 @@ def test_efa_rma_bw_comp_action(cmdline_args, memory_type, action_mode,
                " --action-width " + action_width)
     efa_run_client_server_test(cmdline_args, command, None,
                                "transmit_complete", memory_type, 4096,
-                               fabric=rma_fabric)
+                               fabric=rma_fabric,
+                               additional_env="FI_EFA_ENABLE_COMP_ACTION=1")
 
 
 # Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE

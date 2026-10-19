@@ -128,6 +128,14 @@ int efa_test_set_track_mr(int value)
 	return prev;
 }
 
+int efa_test_set_enable_comp_action(int value)
+{
+	int prev = efa_env.enable_comp_action;
+
+	efa_env.enable_comp_action = value;
+	return prev;
+}
+
 int efa_test_device_supports_rma(void)
 {
 	if (g_efa_selected_device_cnt <= 0)

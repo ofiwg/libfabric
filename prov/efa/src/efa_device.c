@@ -571,6 +571,9 @@ bool efa_device_support_comp_action(void)
 {
 	assert(g_efa_selected_device_cnt > 0);
 
+	if (!efa_env.enable_comp_action)
+		return false;
+
 	return g_efa_selected_device_list[0].device_caps &
 	       EFADV_DEVICE_ATTR_CAPS_COMP_ACTION;
 }
