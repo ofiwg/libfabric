@@ -94,15 +94,13 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 
 ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_pke_proc_rta(struct efa_rdm_pke *pkt_entry);
-
 void efa_rdm_pke_handle_rtm_recv(struct efa_rdm_pke *pkt_entry,
 				 struct efa_rdm_proto *proto);
 
 void efa_rdm_pke_handle_mulreq_rtm_recv(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_proto *proto);
 
-void efa_rdm_pke_handle_rta_recv(struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_handle_rta_recv(struct efa_rdm_pke *pkt_entry, efa_rdm_pke_callback handle_rta);
 
 ssize_t efa_rdm_pke_proc_rtm_after_robuf(struct efa_rdm_pke *pkt_entry);
 

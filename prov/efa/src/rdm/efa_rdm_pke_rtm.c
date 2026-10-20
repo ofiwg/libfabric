@@ -15,7 +15,6 @@
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_rtm.h"
-#include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_proto.h"
@@ -348,44 +347,6 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 		pkt_entry, proto->handle_unexp_pke_match);
 }
 
-/**
- * @brief process a received RTA packet entry
- *
- * @details
- * The RTA passed to this function is ordered
- * by msg_id in the packet header
- *
- * @param[in,out]	pkt_entry	received RTA packet entry
- */
-ssize_t efa_rdm_pke_proc_rta(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_base_hdr *base_hdr;
-
-	ep = pkt_entry->ep;
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
-
-	switch (base_hdr->type) {
-	case EFA_RDM_WRITE_RTA_PKT:
-		return efa_rdm_pke_proc_write_rta(pkt_entry);
-	case EFA_RDM_DC_WRITE_RTA_PKT:
-		return efa_rdm_pke_proc_dc_write_rta(pkt_entry);
-	case EFA_RDM_FETCH_RTA_PKT:
-		return efa_rdm_pke_proc_fetch_rta(pkt_entry);
-	case EFA_RDM_COMPARE_RTA_PKT:
-		return efa_rdm_pke_proc_compare_rta(pkt_entry);
-	default:
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unknown packet type ID: %d\n",
-		       base_hdr->type);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE);
-		efa_rdm_pke_release_rx(pkt_entry);
-	}
-
-	return -FI_EINVAL;
-}
-
 static void
 efa_rdm_pke_handle_ordered_req_recv(struct efa_rdm_pke *pkt_entry)
 {
@@ -491,14 +452,15 @@ void efa_rdm_pke_handle_mulreq_rtm_recv(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
 }
 
-void efa_rdm_pke_handle_rta_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_rta_recv(struct efa_rdm_pke *pkt_entry, efa_rdm_pke_callback handle_rta)
 {
 	assert(efa_rdm_pkt_type_is_rta(
 		efa_rdm_pke_get_base_hdr(pkt_entry)->type));
+	assert(handle_rta);
 	assert(!pkt_entry->proto);
 	assert(!pkt_entry->handle_pke);
 
-	pkt_entry->handle_pke = efa_rdm_pke_proc_rta;
+	pkt_entry->handle_pke = handle_rta;
 	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
 }
 

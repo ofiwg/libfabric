@@ -929,10 +929,16 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 						  &efa_rdm_proto_runtread);
 		return;
 	case EFA_RDM_WRITE_RTA_PKT:
+		efa_rdm_pke_handle_rta_recv(pkt_entry, &efa_rdm_pke_proc_write_rta);
+		return;
 	case EFA_RDM_DC_WRITE_RTA_PKT:
+		efa_rdm_pke_handle_rta_recv(pkt_entry, &efa_rdm_pke_proc_dc_write_rta);
+		return;
 	case EFA_RDM_FETCH_RTA_PKT:
+		efa_rdm_pke_handle_rta_recv(pkt_entry, &efa_rdm_pke_proc_fetch_rta);
+		return;
 	case EFA_RDM_COMPARE_RTA_PKT:
-		efa_rdm_pke_handle_rta_recv(pkt_entry);
+		efa_rdm_pke_handle_rta_recv(pkt_entry, &efa_rdm_pke_proc_compare_rta);
 		return;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_proto_eager_write_handle_rtw_recv(pkt_entry);
