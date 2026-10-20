@@ -621,11 +621,15 @@ static void sm2_do_atomic(void *src, void *dst, void *cmp,
 	} else {
 		FI_WARN(&sm2_prov, FI_LOG_EP_DATA,
 			"invalid atomic operation\n");
+		/*
+		 * Write ops are a subset of read-write ops, so an RMA write is
+		 * handled above. Avoid copying an uninitialized tmp_result.
+		 */
+		return;
 	}
 
 	if (proto_flags & SM2_RMA_REQ)
-		memcpy(src, op == FI_ATOMIC_READ ? dst : tmp_result,
-		       cnt * ofi_datatype_size(datatype));
+		memcpy(src, tmp_result, cnt * ofi_datatype_size(datatype));
 }
 
 static int sm2_progress_inject_atomic(struct sm2_xfer_entry *xfer_entry,
