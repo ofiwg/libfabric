@@ -1169,6 +1169,16 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 	/* Check if this address already exists in the explicit AV */
 	efa_fiaddr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
 	if (efa_fiaddr != FI_ADDR_NOTAVAIL) {
+		if (efa_env.strict_mode) {
+			EFA_WARN(FI_LOG_AV,
+				 "Attempting to insert a duplicate copy of "
+				 "address GID[%s] QP[%u] already in the AV "
+				 "(fi_addr %" PRId64
+				 ") may result in undefined behavior\n",
+				 raw_gid_str, addr->qpn, efa_fiaddr);
+			EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
+			return -FI_EINVAL;
+		}
 		EFA_INFO(FI_LOG_AV,
 			 "Found existing AV entry pointing to this "
 			 "address! fi_addr: %" PRId64 "\n",
