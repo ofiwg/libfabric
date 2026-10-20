@@ -167,6 +167,14 @@ void efa_env_param_get(void)
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
 	fi_param_get_bool(&efa_prov, "strict_mode", &efa_env.strict_mode);
 
+	/*
+	 * MR tracking detects operations still referencing an MR when it is
+	 * closed, which is one of the undefined-behavior checks, so force it on
+	 * whenever strict mode is enabled.
+	 */
+	if (efa_env.strict_mode)
+		efa_env.track_mr = 1;
+
 	fi_param_get_str(&efa_prov, "rdm_force_send_proto",
 			 &efa_env.rdm_force_send_proto);
 	/*
