@@ -1266,3 +1266,52 @@ void test_efa_rdm_rma_inject_write_bumps_tx_counter(void **state)
 	resource->ep = NULL;
 	fi_close(&cntr->fid);
 }
+
+/**
+ * @brief Only works on nodes with EFA devices
+ *
+ * fi_writemsg to an fi_addr removed by fi_av_remove returns an error instead
+ * of crashing.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_rma_writemsg_to_removed_addr(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff local_buff;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct iovec iov;
+	struct fi_msg_rma msg = {0};
+	struct fi_rma_iov rma_iov;
+	fi_addr_t addr;
+	void *desc;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	assert_int_equal(fi_av_remove(resource->av, &addr, 1, 0), 0);
+
+	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
+	desc = fi_mr_desc(local_buff.mr);
+	iov.iov_base = local_buff.buff;
+	iov.iov_len = local_buff.size;
+	rma_iov.addr = 0x87654321;
+	rma_iov.len = local_buff.size;
+	rma_iov.key = 123456;
+	efa_unit_test_construct_msg_rma(&msg, &iov, &desc, 1, addr, &rma_iov, 1,
+					NULL, 0);
+
+	ret = fi_writemsg(resource->ep, &msg, 0);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	efa_unit_test_buff_destruct(&local_buff);
+}

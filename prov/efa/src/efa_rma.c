@@ -108,7 +108,13 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	}
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
-	assert(entry);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "fi_read to fi_addr %lu which has no AV entry. Was it "
+			 "removed by fi_av_remove?\n", msg->addr);
+		err = -FI_EINVAL;
+		goto out_err;
+	}
 
 	/* Use consolidated RDMA read function */
 	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
@@ -311,7 +317,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	}
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
-	assert(entry);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "fi_write to fi_addr %lu which has no AV entry. Was it "
+			 "removed by fi_av_remove?\n", msg->addr);
+		err = -FI_EINVAL;
+		goto out_err;
+	}
 
 	/* Use consolidated RDMA write function */
 	err = efa_qp_post_write(base_ep->qp, sge_list, iov_count,
