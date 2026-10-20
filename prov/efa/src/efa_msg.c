@@ -236,7 +236,12 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	dump_msg(msg, "send");
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
-	assert(entry);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "fi_send to fi_addr %lu which has no AV entry. Was it "
+			 "removed by fi_av_remove?\n", msg->addr);
+		return -FI_EINVAL;
+	}
 
 	assert(msg->iov_count <= base_ep->info->tx_attr->iov_limit);
 
