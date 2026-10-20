@@ -114,7 +114,12 @@ static inline int efa_wr_prepare_send(struct efa_base_ep *base_ep,
 	int err;
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
-	assert(entry);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "WR send to fi_addr %lu which has no AV entry. Was it "
+			 "removed by fi_av_remove?\n", msg->addr);
+		return -FI_EINVAL;
+	}
 
 	assert(msg->iov_count <= base_ep->info->tx_attr->iov_limit);
 
@@ -203,7 +208,12 @@ static inline int efa_wr_prepare_rdma_common(struct efa_base_ep *base_ep,
 	assert(*total_len <= base_ep->domain->device->max_rdma_size);
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
-	assert(entry);
+	if (OFI_UNLIKELY(!entry)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "WR RMA op to fi_addr %lu which has no AV entry. Was "
+			 "it removed by fi_av_remove?\n", msg->addr);
+		return -FI_EINVAL;
+	}
 
 	efa_data_path_direct_set_ud_addr(meta_desc, entry->ah,
 					 efa_av_entry_ep_addr(entry)->qpn,

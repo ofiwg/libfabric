@@ -140,6 +140,46 @@ void test_efa_msg_fi_send(void **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
+/**
+ * @brief Only works on nodes with EFA devices
+ *
+ * fi_send to an fi_addr removed by fi_av_remove returns an error instead of
+ * crashing.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_msg_fi_send_to_removed_addr(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t addr;
+	void *desc;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	assert_int_equal(fi_av_remove(resource->av, &addr, 1, 0), 0);
+
+	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
+	desc = fi_mr_desc(send_buff.mr);
+
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size, desc, addr,
+		      NULL /* context */);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
 void test_efa_msg_fi_sendv(void **state)
 {
 	struct efa_resource *resource = *state;
