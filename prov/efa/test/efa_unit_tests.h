@@ -131,6 +131,8 @@ void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry);
 /* begin efa_unit_test_av.c */
 void test_av_insert_duplicate_raw_addr(void **state);
 void test_av_insert_duplicate_gid(void **state);
+void test_av_insert_duplicate_raw_addr_strict_mode(void **state);
+void test_av_insert_duplicate_raw_addr_efa_direct_strict_mode(void **state);
 void test_efa_ah_cnt_one_av_efa(void **state);
 void test_efa_ah_cnt_one_av_efa_direct(void **state);
 void test_efa_ah_cnt_multi_av_efa(void **state);
