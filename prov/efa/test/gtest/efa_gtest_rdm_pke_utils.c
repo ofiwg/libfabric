@@ -11,6 +11,7 @@
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_req.h"
+#include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
@@ -271,39 +272,68 @@ int efa_test_reordered_rta_retains_callback(
 		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	struct efa_rdm_peer *peer =
 		efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	const struct {
+		int pkt_type;
+		efa_rdm_pke_callback callback;
+	} cases[] = {
+		{EFA_RDM_WRITE_RTA_PKT, efa_rdm_pke_proc_write_rta},
+		{EFA_RDM_DC_WRITE_RTA_PKT, efa_rdm_pke_proc_dc_write_rta},
+		{EFA_RDM_FETCH_RTA_PKT, efa_rdm_pke_proc_fetch_rta},
+		{EFA_RDM_COMPARE_RTA_PKT, efa_rdm_pke_proc_compare_rta},
+	};
 	struct efa_rdm_pke *pke;
 	struct efa_rdm_rta_hdr hdr = {0};
+	uint32_t exp_msg_id;
+	size_t pending_wcnt;
+	size_t i;
 	int saved_rx_copy_ooo;
 
 	memset(out, 0, sizeof *out);
 	if (!peer)
 		return -FI_EINVAL;
 
-	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
-				EFA_RDM_PKE_FROM_EFA_RX_POOL);
-	if (!pke)
-		return -FI_ENOMEM;
-
-	pke->peer = peer;
-	hdr.type = EFA_RDM_WRITE_RTA_PKT;
 	hdr.version = EFA_RDM_PROTOCOL_VERSION;
 	hdr.flags = EFA_RDM_REQ_ATOMIC;
-	hdr.msg_id = 1;
-	memcpy(pke->wiredata, &hdr, sizeof hdr);
-	pke->pkt_size = sizeof hdr;
-
 	saved_rx_copy_ooo = efa_env.rx_copy_ooo;
 	efa_env.rx_copy_ooo = 0;
-	efa_rdm_pke_proc_received(pke);
-	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	out->callback_set = 1;
+	out->protocol_correct = 1;
 
-	pke = *ofi_recvwin_get_msg(&peer->robuf, 1);
-	if (!pke)
-		return -FI_EINVAL;
-	out->callback_set = pke->handle_pke == efa_rdm_pke_proc_rta;
-	out->protocol_correct = pke->proto == NULL;
-	*ofi_recvwin_get_msg(&peer->robuf, 1) = NULL;
-	efa_rdm_pke_release_rx(pke);
+	for (i = 0; i < ARRAY_SIZE(cases); i++) {
+		pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		if (!pke) {
+			efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+			return -FI_ENOMEM;
+		}
+
+		exp_msg_id = ofi_recvwin_next_exp_id(&peer->robuf);
+		pending_wcnt = peer->robuf.pending->wcnt;
+		pke->peer = peer;
+		hdr.type = cases[i].pkt_type;
+		hdr.msg_id = exp_msg_id + 1;
+		memcpy(pke->wiredata, &hdr, sizeof hdr);
+		pke->pkt_size = sizeof hdr;
+
+		efa_rdm_pke_proc_received(pke);
+		pke = *ofi_recvwin_get_msg(&peer->robuf, hdr.msg_id);
+		if (!pke) {
+			peer->robuf.pending->wcnt = pending_wcnt;
+			efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+			return -FI_EINVAL;
+		}
+
+		out->callback_set &=
+			pke->handle_pke == cases[i].callback;
+		out->protocol_correct &=
+			pke->proto == NULL &&
+			ofi_recvwin_next_exp_id(&peer->robuf) == exp_msg_id;
+		*ofi_recvwin_get_msg(&peer->robuf, hdr.msg_id) = NULL;
+		peer->robuf.pending->wcnt = pending_wcnt;
+		efa_rdm_pke_release_rx(pke);
+	}
+
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
 	return 0;
 }
 
@@ -329,8 +359,9 @@ int efa_test_reorder_drain_invokes_callback(
 	efa_env.rx_copy_ooo = 1;
 	efa_test_reorder_callback_invocations = 0;
 	int ret = efa_rdm_peer_reorder_msg(peer, ep, pke);
+	int pre_drain_invocations = efa_test_reorder_callback_invocations;
 
-	if (ret == 1) {
+	if (ret == 1 && pre_drain_invocations == 0) {
 		ofi_recvwin_slide(&peer->robuf);
 		efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
 	}
@@ -338,7 +369,9 @@ int efa_test_reorder_drain_invokes_callback(
 
 	out->callback_invocations = efa_test_reorder_callback_invocations;
 	out->exp_msg_id = peer->robuf.exp_msg_id;
-	return ret == 1 ? 0 : -FI_EINVAL;
+	return ret == 1 && pre_drain_invocations == 0 &&
+		       efa_test_reorder_callback_invocations == 1 ?
+		       0 : -FI_EINVAL;
 }
 
 int efa_test_get_tx_min_credits(void)

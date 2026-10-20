@@ -1812,6 +1812,7 @@ void test_proto_atomic_compare_responder_iov(void **state) {
 	uint8_t old[] = {1, 2}, updated[] = {11, 22};
 	uint8_t *target, *source, *compare, *result;
 	uint64_t key;
+	int submitted_before;
 
 	test_proto_atomic_setup(resource, &ctx);
 	ctx.ep->base_ep.info->tx_attr->rma_iov_limit = 2;
@@ -1855,7 +1856,9 @@ void test_proto_atomic_compare_responder_iov(void **state) {
 			 0);
 	req_pke = test_proto_atomic_posted_pke(&ctx);
 	req_rx = test_proto_atomic_request_rx(&ctx, req_pke);
-	assert_int_equal(efa_rdm_pke_proc_compare_rta(req_rx), 0);
+	submitted_before = g_ibv_submitted_wr_id_cnt;
+	efa_rdm_pke_proc_received(req_rx);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, submitted_before + 1);
 	resp_pke = test_proto_atomic_posted_pke(&ctx);
 	assert_int_equal(efa_rdm_pkt_type_of(resp_pke), EFA_RDM_ATOMRSP_PKT);
 	atomrsp = (struct efa_rdm_atomrsp_pkt *) resp_pke->wiredata;

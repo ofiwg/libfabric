@@ -264,7 +264,7 @@ int efa_rdm_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *da
  *
  * @param[in]	pkt_entry	received WRITE RTA packet
  */
-int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	struct efa_mr *efa_mr;
@@ -358,12 +358,12 @@ ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
  *
  * @param[in]	pkt_entry	received DC WRITE RTA packet
  */
-int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_rta_hdr *rta_hdr;
 	ssize_t err;
-	int ret;
+	ssize_t ret;
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic);
 	if (OFI_UNLIKELY(!rxe)) {
@@ -462,7 +462,7 @@ int efa_rdm_fetch_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *da
  *
  * @param[in]	pkt_entry	received FETCH RTA packet
  */
-int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
@@ -614,7 +614,7 @@ int efa_rdm_compare_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *
  *
  * @param[in]		pkt_entry	packet entry
  */
-int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_mr *efa_mr;
 	struct efa_rdm_ep *ep;
