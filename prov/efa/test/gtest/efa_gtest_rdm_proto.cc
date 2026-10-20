@@ -394,8 +394,8 @@ INSTANTIATE_TEST_SUITE_P(
 	       /* A read protocol's predicate would decline a 64 byte send. */
 	       EfaRdmProtoForceCase{"runtread_picks_runtread", "runtread", 64,
 				    "runtread"},
-	       /* Not on the interface yet, so nothing in the registry answers. */
-	       EfaRdmProtoForceCase{"longread_fails", "longread", 64, nullptr},
+	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
+				    "longread"},
 	       /* A write protocol's name is not a send protocol's name. */
 	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
 				    nullptr},

@@ -59,6 +59,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
 };
 
 /*
