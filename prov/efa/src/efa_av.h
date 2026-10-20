@@ -4,6 +4,7 @@
 #ifndef EFA_AV_H
 #define EFA_AV_H
 
+#include <stdbool.h>
 #include <infiniband/verbs.h>
 #include "efa_ah.h"
 #include "efa_av_array.h"
@@ -154,10 +155,60 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 			     struct fi_av_attr *attr,
 			     struct efa_domain **efa_domain_out);
 
-struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
-
 struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
 					       fi_addr_t fi_addr);
+
+/*
+ * FI_AV_MAP: the fi_addr handed to the application is the address of the
+ * efa_av_entry, so turning an fi_addr into its entry needs no lookup. The
+ * entry's fi_addr field always stays the util_av index, which keys the
+ * internal arrays (forward map, peer maps), for both AV types.
+ */
+bool efa_av_map_enabled(void);
+
+static inline bool efa_av_is_map(const struct efa_av *av)
+{
+	return av->type == FI_AV_MAP;
+}
+
+/**
+ * @brief find the efa_av_entry using fi_addr in the explicit AV
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	fi_addr	fi_addr of the AV entry, as the application sees it
+ */
+static inline struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	if (efa_av_is_map(av))
+		return (fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL)
+			       ? NULL
+			       : (struct efa_av_entry *) (uintptr_t) fi_addr;
+	return efa_av_addr_to_entry_impl(av->addr_to_entry_map, fi_addr);
+}
+
+/**
+ * @brief the fi_addr the application sees for an explicit AV entry
+ *
+ * An entry that is not in the explicit AV (an implicit entry) has no
+ * application fi_addr: FI_ADDR_NOTAVAIL is returned for both AV types.
+ */
+static inline fi_addr_t efa_av_entry_app_fi_addr(const struct efa_av *av,
+						 const struct efa_av_entry *entry)
+{
+	if (efa_av_is_map(av) && entry->fi_addr != FI_ADDR_NOTAVAIL)
+		return (fi_addr_t) (uintptr_t) entry;
+	return entry->fi_addr;
+}
+
+/**
+ * @brief the util_av index of an application fi_addr
+ */
+static inline fi_addr_t efa_av_fi_addr_to_index(struct efa_av *av, fi_addr_t fi_addr)
+{
+	if (!efa_av_is_map(av) || fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL)
+		return fi_addr;
+	return ((struct efa_av_entry *) (uintptr_t) fi_addr)->fi_addr;
+}
 
 int efa_av_is_valid_address(struct efa_ep_addr *addr);
 

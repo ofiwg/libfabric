@@ -40,6 +40,7 @@ struct efa_env efa_env = {
 	.internal_rx_refill_threshold = 8,
 	.rdm_txe_pool_size = EFA_RDM_TXE_POOL_SIZE_DEFAULT,
 	.use_data_path_direct = true,
+	.use_av_map = true,
 	.implicit_av_size = 0,
 	.track_mr = 0,
 	.strict_mode = 0,
@@ -169,6 +170,7 @@ void efa_env_param_get(void)
 		efa_env.huge_page_setting = use_huge_page ? EFA_ENV_HUGE_PAGE_ENABLED : EFA_ENV_HUGE_PAGE_DISABLED;
 	}
 	fi_param_get_bool(&efa_prov, "use_data_path_direct", &efa_env.use_data_path_direct);
+	fi_param_get_bool(&efa_prov, "use_av_map", &efa_env.use_av_map);
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
 	fi_param_get_bool(&efa_prov, "strict_mode", &efa_env.strict_mode);
 
@@ -278,6 +280,13 @@ void efa_env_define()
 		"the CQ polling and TX/RX submissions, when it's available. Setting this variable as 0"
 		"will disable this feature (Default: %d)",
 		efa_env.use_data_path_direct);
+	fi_param_define(&efa_prov, "use_av_map", FI_PARAM_BOOL,
+			"Honor FI_AV_MAP when the application requests it: the "
+			"fi_addr of an AV entry is then the address of the "
+			"provider's entry, which saves a lookup on every operation. "
+			"Setting this variable as 0 uses FI_AV_TABLE for every AV "
+			"(Default: %d)",
+			efa_env.use_av_map);
 	fi_param_define(&efa_prov, "implicit_av_size", FI_PARAM_SIZE_T,
 			"The maximum size of the implicit AV used to store AV "
 			"entries of peers that were not explicitly inserted "
