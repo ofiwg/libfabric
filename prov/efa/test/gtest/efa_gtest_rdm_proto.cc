@@ -394,8 +394,8 @@ INSTANTIATE_TEST_SUITE_P(
 	       /* A read protocol's predicate would decline a 64 byte send. */
 	       EfaRdmProtoForceCase{"runtread_picks_runtread", "runtread", 64,
 				    "runtread"},
-	       /* Not on the interface yet, so nothing in the registry answers. */
-	       EfaRdmProtoForceCase{"longread_fails", "longread", 64, nullptr},
+	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
+				    "longread"},
 	       /* A write protocol's name is not a send protocol's name. */
 	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
 				    nullptr},
@@ -404,3 +404,146 @@ INSTANTIATE_TEST_SUITE_P(
 	[](const testing::TestParamInfo<EfaRdmProtoForceCase> &info) {
 		return std::string(info.param.name);
 	});
+
+class EfaRdmProtoReadTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	bool globals_saved = false;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+
+		if (!efa_test_proto_device_supports_rdma_read())
+			GTEST_SKIP() << "device does not support RDMA read";
+
+		if (!efa_test_proto_large_len_beyond_medium(resource.ep))
+			GTEST_SKIP() << "device's medium band includes "
+				     << EFA_TEST_PROTO_LARGE_LEN;
+
+		efa_test_proto_save_globals();
+		globals_saved = true;
+	}
+
+	void TearDown() override
+	{
+		if (globals_saved)
+			efa_test_proto_restore_globals();
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmProtoReadTest, longread_selected_for_large_msg)
+{
+	struct efa_test_proto_select_result res = {};
+
+	ASSERT_EQ(efa_test_proto_select(resource.ep, resource.av,
+					resource.domain, 1, 0, 1, 0, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	EXPECT_STREQ(res.proto_name, "longread");
+}
+
+TEST_F(EfaRdmProtoReadTest, longread_declined_without_mr)
+{
+	struct efa_test_proto_select_result res = {};
+
+	ASSERT_EQ(efa_test_proto_select(resource.ep, resource.av,
+					resource.domain, 1, 0, 0, 0, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	EXPECT_STRNE(res.proto_name, "longread");
+	EXPECT_STRNE(res.proto_name, "runtread");
+}
+
+TEST_F(EfaRdmProtoReadTest, runtread_declined_for_delivery_complete)
+{
+	struct efa_test_proto_select_result res = {};
+
+	ASSERT_EQ(efa_test_proto_select(resource.ep, resource.av,
+					resource.domain, 1,
+					EFA_TEST_PROTO_RUNT_SIZE, 1,
+					FI_DELIVERY_COMPLETE, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	EXPECT_STREQ(res.proto_name, "longread");
+}
+
+TEST_F(EfaRdmProtoReadTest, longread_construct_builds_one_pke)
+{
+	struct efa_test_proto_longread_construct_result res = {};
+
+	ASSERT_EQ(efa_test_longread_construct_builds_one_pke(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_TRUE(res.selected);
+	ASSERT_EQ(res.ret, 0);
+
+	EXPECT_EQ(res.pke_cnt, 1u);
+	EXPECT_EQ(res.req_pkt_type, res.expected_req_pkt_type);
+	EXPECT_TRUE(res.handler_set);
+	EXPECT_TRUE(res.ope_set);
+	EXPECT_EQ(res.payload_size, 0u);
+	EXPECT_EQ(res.msg_length, res.total_len);
+	EXPECT_EQ(res.send_id, res.tx_id);
+	EXPECT_EQ(res.read_iov_count, res.iov_count);
+	EXPECT_EQ(res.read_iov_addr, res.buf_addr);
+	EXPECT_EQ(res.read_iov_len, res.buf_len);
+	EXPECT_EQ(res.read_iov_key, res.mr_key);
+	EXPECT_EQ(res.pkt_size, res.expected_pkt_size);
+}
+
+TEST_F(EfaRdmProtoReadTest, longread_construct_is_repeatable)
+{
+	struct efa_test_proto_repeat_result res = {};
+
+	ASSERT_EQ(efa_test_longread_construct_is_repeatable(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_TRUE(res.selected);
+	ASSERT_EQ(res.first_ret, 0);
+	ASSERT_EQ(res.second_ret, 0);
+
+	EXPECT_EQ(res.first_pke_cnt, 1u);
+	EXPECT_TRUE(res.read_msg_counted_after_first_hook);
+	EXPECT_EQ(res.read_msg_in_flight_after_first_hook, 1);
+
+	EXPECT_EQ(res.second_pke_cnt, 1u);
+	EXPECT_EQ(res.second_req_pkt_type, res.first_req_pkt_type);
+	EXPECT_EQ(res.second_msg_length, res.total_len);
+	EXPECT_EQ(res.read_msg_in_flight_after_second_hook, 1);
+}
+
+TEST_F(EfaRdmProtoReadTest, runtread_construct_is_repeatable)
+{
+	struct efa_test_proto_repeat_result res = {};
+
+	ASSERT_EQ(efa_test_runtread_construct_is_repeatable(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_TRUE(res.selected);
+	ASSERT_EQ(res.first_ret, 0);
+	ASSERT_EQ(res.second_ret, 0);
+
+	ASSERT_GT(res.first_pke_cnt, 1u);
+	EXPECT_EQ(res.bytes_sent_after_first_hook, res.first_bytes_runt);
+	EXPECT_TRUE(res.read_msg_counted_after_first_hook);
+	EXPECT_EQ(res.read_msg_in_flight_after_first_hook, 1);
+
+	ASSERT_EQ(res.second_pke_cnt, res.first_pke_cnt);
+	EXPECT_EQ(res.second_req_pkt_type, res.first_req_pkt_type);
+	EXPECT_EQ(res.second_bytes_runt, res.first_bytes_runt);
+	for (size_t i = 0; i < res.first_pke_cnt; ++i)
+		EXPECT_EQ(res.second_seg_offsets[i], res.first_seg_offsets[i])
+			<< "packet " << i;
+
+	EXPECT_EQ(res.bytes_sent_after_second_hook,
+		  res.bytes_sent_after_first_hook);
+	EXPECT_EQ(res.read_msg_in_flight_after_second_hook, 1);
+	EXPECT_STREQ(res.next_proto_name, "longread");
+}

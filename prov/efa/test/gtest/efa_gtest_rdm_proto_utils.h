@@ -157,6 +157,117 @@ int efa_test_proto_force_select_send(struct fid_ep *ep, struct fid_av *av,
 				     const char *forced, size_t len,
 				     struct efa_test_proto_force_result *out);
 
+#define EFA_TEST_PROTO_LARGE_LEN 131072
+#define EFA_TEST_PROTO_RUNT_SIZE 32768
+
+/** @brief Whether EFA_TEST_PROTO_LARGE_LEN is too large for eager and medium. */
+int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep);
+
+/** @brief Whether the selected device can do RDMA read. */
+int efa_test_proto_device_supports_rdma_read(void);
+
+/**
+ * @brief Save the host hmem thresholds and the device generation that the read
+ * protocol tests override.
+ */
+void efa_test_proto_save_globals(void);
+
+/** @brief Restore what efa_test_proto_save_globals() saved. */
+void efa_test_proto_restore_globals(void);
+
+struct efa_test_proto_select_result {
+	ssize_t ret;
+	/** Name of the protocol selection picked, empty when it picked none. */
+	char proto_name[32];
+};
+
+/**
+ * @brief Select a send protocol for an EFA_TEST_PROTO_LARGE_LEN byte host
+ * message.
+ *
+ * @param[in]	read_peer	peer advertises RDMA read on a matching device
+ * @param[in]	runt_size	host runt size, used when @p read_peer is set
+ * @param[in]	with_desc	pass the registered descriptor; without it the
+ *				MR cache is disabled for the selection
+ * @param[in]	flags		send flags
+ * @return	0 if @p out was filled, negative on setup failure
+ */
+int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
+			  struct fid_domain *domain, int read_peer,
+			  size_t runt_size, int with_desc, uint64_t flags,
+			  struct efa_test_proto_select_result *out);
+
+struct efa_test_proto_longread_construct_result {
+	ssize_t ret;
+	int selected;
+	size_t pke_cnt;
+	int req_pkt_type;
+	int expected_req_pkt_type;
+	int handler_set;
+	int ope_set;
+	size_t payload_size;
+	uint64_t msg_length;
+	uint64_t total_len;
+	uint32_t send_id;
+	uint32_t tx_id;
+	uint32_t read_iov_count;
+	size_t iov_count;
+	uint64_t read_iov_addr;
+	uint64_t buf_addr;
+	uint64_t read_iov_len;
+	uint64_t buf_len;
+	uint64_t read_iov_key;
+	uint64_t mr_key;
+	size_t pkt_size;
+	size_t expected_pkt_size;
+};
+
+/** @brief Select long read, fill the txe and construct its REQ. */
+int efa_test_longread_construct_builds_one_pke(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_longread_construct_result *out);
+
+struct efa_test_proto_repeat_result {
+	ssize_t first_ret;
+	ssize_t second_ret;
+	int selected;
+	size_t first_pke_cnt;
+	size_t second_pke_cnt;
+	int first_req_pkt_type;
+	int second_req_pkt_type;
+	uint64_t total_len;
+	uint64_t second_msg_length;
+	size_t first_payload_size;
+	size_t second_payload_size;
+	uint64_t first_seg_offsets[EFA_TEST_PROTO_MAX_PKES];
+	uint64_t second_seg_offsets[EFA_TEST_PROTO_MAX_PKES];
+	uint64_t first_bytes_runt;
+	uint64_t second_bytes_runt;
+	uint64_t bytes_sent_after_first_hook;
+	uint64_t bytes_sent_after_second_hook;
+	int read_msg_counted_after_first_hook;
+	int64_t read_msg_in_flight_after_first_hook;
+	int64_t read_msg_in_flight_after_second_hook;
+	/** Protocol a second send picks while the first one is in flight. */
+	char next_proto_name[32];
+};
+
+/**
+ * @brief Construct the long read REQ twice on one txe, running the post-send
+ * hook after each attempt.
+ */
+int efa_test_longread_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out);
+
+/**
+ * @brief Construct the runt read REQs twice on one txe, running the post-send
+ * hook after each attempt, then select a protocol for a second send.
+ */
+int efa_test_runtread_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -20,6 +20,7 @@ enum efa_test_mr_abort_pkt {
 	EFA_TEST_MR_ABORT_PKT_LONGCTS_TAGRTM,
 	EFA_TEST_MR_ABORT_PKT_PEER_ERROR,
 	EFA_TEST_MR_ABORT_PKT_HANDSHAKE,
+	EFA_TEST_MR_ABORT_PKT_LONGREAD_TAGRTM,
 };
 
 enum efa_test_mr_abort_err {
@@ -41,6 +42,9 @@ struct efa_test_mr_abort_state {
 	bool peer_handshake_sent;
 	bool peer_handshake_queued;
 	size_t handshake_queued_peers;
+	bool read_msg_counted;
+	int64_t read_msg_in_flight;
+	bool peer_error_prov_errno_is_pkt_post;
 };
 
 int efa_test_mr_abort_setup(struct fid_ep *ep, struct fid_av *av, int req_pkt,
@@ -54,6 +58,10 @@ void efa_test_mr_abort_set_peer_error_emitted(void);
 void efa_test_mr_abort_set_aborting_with_wr_in_flight(void);
 
 int efa_test_mr_abort_complete_ctsdata(void);
+
+void efa_test_mr_abort_count_read_msg(void);
+
+void efa_test_mr_abort_set_read_msg_in_flight(int64_t count);
 
 void *efa_test_mr_abort_forge_tx_pke(int pkt);
 

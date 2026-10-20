@@ -10,6 +10,7 @@
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
+#include "rdm/efa_rdm_domain.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
@@ -603,6 +604,427 @@ int efa_test_proto_medium_peer_abort(
 	}
 
 out:
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+static struct efa_hmem_info efa_test_proto_saved_system_hmem_info;
+static uint32_t efa_test_proto_saved_vendor_part_id;
+
+int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep)
+{
+	struct efa_rdm_ep *efa_rdm_ep = efa_test_proto_ep(ep);
+
+	return EFA_TEST_PROTO_LARGE_LEN > efa_rdm_ep->mtu_size &&
+	       EFA_TEST_PROTO_LARGE_LEN >
+		       g_efa_hmem_info[FI_HMEM_SYSTEM].max_medium_msg_size;
+}
+
+int efa_test_proto_device_supports_rdma_read(void)
+{
+	return g_efa_selected_device_cnt > 0 && efa_device_support_rdma_read();
+}
+
+void efa_test_proto_save_globals(void)
+{
+	efa_test_proto_saved_system_hmem_info = g_efa_hmem_info[FI_HMEM_SYSTEM];
+	if (g_efa_selected_device_cnt > 0)
+		efa_test_proto_saved_vendor_part_id =
+			g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+}
+
+void efa_test_proto_restore_globals(void)
+{
+	g_efa_hmem_info[FI_HMEM_SYSTEM] = efa_test_proto_saved_system_hmem_info;
+	if (g_efa_selected_device_cnt > 0)
+		g_efa_selected_device_list[0].ibv_attr.vendor_part_id =
+			efa_test_proto_saved_vendor_part_id;
+}
+
+static void efa_test_proto_enable_read(struct efa_test_proto_ctx *ctx,
+				       size_t runt_size)
+{
+	struct efa_hmem_info *info = &g_efa_hmem_info[FI_HMEM_SYSTEM];
+
+	ctx->peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = 0xEFA1;
+	ctx->peer->device_version = 0xEFA1;
+	ctx->ep->use_device_rdma = true;
+
+	info->runt_size = runt_size;
+	info->min_read_msg_size = EFA_TEST_PROTO_LARGE_LEN;
+}
+
+static int efa_test_proto_setup(struct fid_ep *ep, struct fid_av *av,
+				struct fid_domain *domain, int read_peer,
+				size_t runt_size, size_t len,
+				struct efa_test_proto_ctx *ctx)
+{
+	int err;
+
+	err = efa_test_proto_setup_peer(ep, av, ctx);
+	if (err)
+		return err;
+
+	if (read_peer)
+		efa_test_proto_enable_read(ctx, runt_size);
+
+	return efa_test_proto_setup_buf(domain, ctx, len);
+}
+
+static void efa_test_proto_build_msg(struct efa_test_proto_ctx *ctx,
+				     int with_desc, struct fi_msg *msg,
+				     struct iovec *iov, void **desc)
+{
+	memset(msg, 0, sizeof(*msg));
+	iov->iov_base = ctx->buf;
+	iov->iov_len = ctx->len;
+	*desc = fi_mr_desc(ctx->mr);
+	msg->msg_iov = iov;
+	msg->desc = with_desc ? desc : NULL;
+	msg->iov_count = 1;
+	msg->addr = ctx->peer_addr;
+}
+
+static void efa_test_proto_copy_name(char *dst, size_t size,
+				     struct efa_rdm_proto *proto)
+{
+	if (!proto)
+		return;
+	strncpy(dst, proto->name, size);
+	dst[size - 1] = '\0';
+}
+
+int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
+			  struct fid_domain *domain, int read_peer,
+			  size_t runt_size, int with_desc, uint64_t flags,
+			  struct efa_test_proto_select_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_domain *rdm_domain;
+	struct ofi_mr_cache *saved_cache;
+	struct efa_rdm_ope *txe;
+	struct fi_msg msg;
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, read_peer, runt_size,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	efa_test_proto_build_msg(&ctx, with_desc, &msg, &iov, &desc);
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	rdm_domain = efa_rdm_ep_rdm_domain(ctx.ep);
+	saved_cache = rdm_domain->cache;
+	if (!with_desc)
+		rdm_domain->cache = NULL;
+
+	out->ret = efa_rdm_proto_select_send_protocol(
+		ctx.ep, ctx.peer, &msg, ofi_op_msg, flags, txe, &proto);
+
+	rdm_domain->cache = saved_cache;
+
+	efa_test_proto_copy_name(out->proto_name, sizeof(out->proto_name),
+				 proto);
+
+	ofi_buf_free(txe);
+	efa_test_proto_teardown_buf(&ctx);
+	return 0;
+}
+
+static int efa_test_proto_select_and_construct(struct efa_test_proto_ctx *ctx,
+					       struct efa_rdm_ope *txe,
+					       struct efa_rdm_proto *expected,
+					       int *selected, int *filled,
+					       ssize_t *construct_ret)
+{
+	struct efa_rdm_proto *proto = NULL;
+	uint64_t pke_send_flags;
+	struct fi_msg msg;
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	*selected = 0;
+	*filled = 0;
+
+	efa_test_proto_build_msg(ctx, 1, &msg, &iov, &desc);
+
+	err = efa_rdm_proto_select_send_protocol(ctx->ep, ctx->peer, &msg,
+						 ofi_op_msg, 0, txe, &proto);
+	if (err)
+		return err;
+
+	*selected = (proto == expected);
+	if (!*selected)
+		return 0;
+
+	efa_rdm_proto_txe_fill(txe, ctx->ep, ctx->peer, &msg, ofi_op_msg, 0, 0,
+			       0, proto);
+	*filled = 1;
+	txe->msg_id = ctx->peer->next_msg_id++;
+
+	*construct_ret = proto->construct_tx_pkes(ctx->ep, txe, &pke_send_flags);
+	return 0;
+}
+
+static void efa_test_proto_release_send_pkes(struct efa_rdm_ep *ep)
+{
+	size_t i;
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+}
+
+static void efa_test_proto_release_txe(struct efa_rdm_ope *txe, int filled)
+{
+	if (filled)
+		efa_rdm_txe_release(txe);
+	else
+		ofi_buf_free(txe);
+}
+
+int efa_test_longread_construct_builds_one_pke(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_longread_construct_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	size_t hdr_size;
+	int filled, err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	err = efa_test_proto_select_and_construct(&ctx, txe,
+						  &efa_rdm_proto_longread,
+						  &out->selected, &filled,
+						  &out->ret);
+	if (err || !out->selected || out->ret)
+		goto out;
+
+	out->pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->req_pkt_type = txe->req_pkt_type;
+	out->expected_req_pkt_type = EFA_RDM_LONGREAD_MSGRTM_PKT;
+	out->total_len = txe->total_len;
+	out->tx_id = txe->tx_id;
+	out->iov_count = txe->iov_count;
+	out->buf_addr = (uint64_t) ctx.buf;
+	out->buf_len = ctx.len;
+	out->mr_key = fi_mr_key(ctx.mr);
+
+	pke = ctx.ep->send_pkt_entry_vec[0];
+	out->handler_set = pke->handle_pke ==
+			   &efa_rdm_proto_longread_handle_rtm_send_completion;
+	out->ope_set = pke->ope == txe;
+	out->payload_size = pke->payload_size;
+
+	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pke);
+	out->msg_length = rtm_hdr->msg_length;
+	out->send_id = rtm_hdr->send_id;
+	out->read_iov_count = rtm_hdr->read_iov_count;
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pke);
+	read_iov = (struct fi_rma_iov *) (pke->wiredata + hdr_size);
+	out->read_iov_addr = read_iov[0].addr;
+	out->read_iov_len = read_iov[0].len;
+	out->read_iov_key = read_iov[0].key;
+	out->pkt_size = pke->pkt_size;
+	out->expected_pkt_size =
+		hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
+
+	efa_test_proto_release_send_pkes(ctx.ep);
+out:
+	efa_test_proto_release_txe(txe, filled);
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+static int64_t efa_test_proto_read_msg_in_flight(struct efa_rdm_ep *ep)
+{
+	return ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight);
+}
+
+int efa_test_longread_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_ope *txe;
+	uint64_t pke_send_flags;
+	int filled, err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	err = efa_test_proto_select_and_construct(&ctx, txe,
+						  &efa_rdm_proto_longread,
+						  &out->selected, &filled,
+						  &out->first_ret);
+	if (err || !out->selected || out->first_ret)
+		goto out;
+
+	out->total_len = txe->total_len;
+	out->first_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->first_req_pkt_type = txe->req_pkt_type;
+	efa_test_proto_release_send_pkes(ctx.ep);
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->read_msg_counted_after_first_hook =
+		!!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	out->read_msg_in_flight_after_first_hook =
+		efa_test_proto_read_msg_in_flight(ctx.ep);
+
+	out->second_ret = txe->proto->construct_tx_pkes(ctx.ep, txe,
+							&pke_send_flags);
+	if (out->second_ret)
+		goto release_slot;
+
+	out->second_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->second_req_pkt_type = txe->req_pkt_type;
+	out->second_msg_length = efa_rdm_pke_get_longread_rtm_base_hdr(
+					 ctx.ep->send_pkt_entry_vec[0])->msg_length;
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->read_msg_in_flight_after_second_hook =
+		efa_test_proto_read_msg_in_flight(ctx.ep);
+
+	efa_test_proto_release_send_pkes(ctx.ep);
+release_slot:
+	efa_rdm_txe_release_read_msg_slot(txe);
+out:
+	efa_test_proto_release_txe(txe, filled);
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+int efa_test_runtread_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *next_proto = NULL;
+	struct efa_rdm_ope *txe, *next_txe;
+	uint64_t pke_send_flags;
+	struct fi_msg msg;
+	struct iovec iov;
+	void *desc;
+	size_t i;
+	int filled, err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, EFA_TEST_PROTO_RUNT_SIZE,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	err = efa_test_proto_select_and_construct(&ctx, txe,
+						  &efa_rdm_proto_runtread,
+						  &out->selected, &filled,
+						  &out->first_ret);
+	if (err || !out->selected || out->first_ret)
+		goto out;
+
+	out->total_len = txe->total_len;
+	out->first_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->first_pke_cnt > EFA_TEST_PROTO_MAX_PKES) {
+		efa_test_proto_release_send_pkes(ctx.ep);
+		err = -FI_ETOOSMALL;
+		goto out;
+	}
+	for (i = 0; i < out->first_pke_cnt; ++i)
+		out->first_seg_offsets[i] =
+			efa_rdm_pke_get_runtread_rtm_base_hdr(
+				ctx.ep->send_pkt_entry_vec[i])->seg_offset;
+	efa_test_proto_release_send_pkes(ctx.ep);
+	out->first_req_pkt_type = txe->req_pkt_type;
+	out->first_bytes_runt = txe->bytes_runt;
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->bytes_sent_after_first_hook = txe->bytes_sent;
+	out->read_msg_counted_after_first_hook =
+		!!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	out->read_msg_in_flight_after_first_hook =
+		efa_test_proto_read_msg_in_flight(ctx.ep);
+
+	out->second_ret = txe->proto->construct_tx_pkes(ctx.ep, txe,
+							&pke_send_flags);
+	if (out->second_ret)
+		goto release_slot;
+
+	out->second_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->second_req_pkt_type = txe->req_pkt_type;
+	out->second_bytes_runt = txe->bytes_runt;
+	for (i = 0; i < out->second_pke_cnt && i < EFA_TEST_PROTO_MAX_PKES; ++i)
+		out->second_seg_offsets[i] =
+			efa_rdm_pke_get_runtread_rtm_base_hdr(
+				ctx.ep->send_pkt_entry_vec[i])->seg_offset;
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->bytes_sent_after_second_hook = txe->bytes_sent;
+	out->read_msg_in_flight_after_second_hook =
+		efa_test_proto_read_msg_in_flight(ctx.ep);
+
+	next_txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (next_txe) {
+		efa_test_proto_build_msg(&ctx, 1, &msg, &iov, &desc);
+		err = efa_rdm_proto_select_send_protocol(ctx.ep, ctx.peer, &msg,
+							 ofi_op_msg, 0, next_txe,
+							 &next_proto);
+		efa_test_proto_copy_name(out->next_proto_name,
+					 sizeof(out->next_proto_name),
+					 next_proto);
+		ofi_buf_free(next_txe);
+	} else {
+		err = -FI_ENOMEM;
+	}
+
+	efa_test_proto_release_send_pkes(ctx.ep);
+release_slot:
+	efa_rdm_txe_release_read_msg_slot(txe);
+out:
+	efa_test_proto_release_txe(txe, filled);
 	efa_test_proto_teardown_buf(&ctx);
 	return err;
 }
