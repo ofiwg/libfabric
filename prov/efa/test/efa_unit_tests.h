@@ -21,6 +21,7 @@
 #include "efa_unit_test_mocks.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_longread_write.h"
 #include "protocols/efa_rdm_proto_longcts_write.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
@@ -420,7 +421,6 @@ void test_efa_rdm_pke_handle_tx_error_emulated_rxe_read_not_peer_aborted(void **
 void test_efa_rdm_txe_handle_error_emulated_canceled_not_peer_aborted(void **state);
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state);
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state);
-void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **state);
 void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state);
 void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip(void **state);
 void test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip(void **state);
@@ -931,7 +931,5 @@ void test_proto_atomic_fetch_compare_responder_rejects_invalid_op_datatype(
 	void **state);
 void test_proto_atomic_read_responder_accepts_read_only_mr(void **state);
 void test_proto_select_runtread_for_large_msg(void **state);
-void test_proto_select_declines_runtread_for_delivery_complete(void **state);
 void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
-void test_proto_runtread_construct_pkes_is_idempotent(void **state);
 #endif

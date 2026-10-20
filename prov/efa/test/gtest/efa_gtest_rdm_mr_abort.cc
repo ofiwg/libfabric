@@ -276,4 +276,64 @@ TEST_F(EfaRdmMrAbortTest, ctsdata_completion_on_aborting_txe_writes_nothing)
 	expect_cq_empty();
 }
 
+TEST_F(EfaRdmMrAbortTest, longread_abort_after_post_releases_read_slot)
+{
+	struct efa_test_mr_abort_state before = {}, st = {};
+	uintptr_t wr_id = 0;
+
+	ASSERT_NO_FATAL_FAILURE(
+		setup_txe(EFA_TEST_MR_ABORT_PKT_LONGREAD_TAGRTM, true));
+	efa_test_mr_abort_count_read_msg();
+	efa_test_mr_abort_snapshot(&before);
+	ASSERT_TRUE(before.read_msg_counted);
+	ASSERT_EQ(before.read_msg_in_flight, 1);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<5>(&wr_id), Return(0)));
+
+	efa_test_mr_abort_txe_handle_error();
+	efa_test_mr_abort_snapshot(&st);
+	ASSERT_TRUE(st.alive);
+	EXPECT_TRUE(st.peer_abort_pending);
+	EXPECT_EQ(st.ep_outstanding, before.ep_outstanding + 1);
+	EXPECT_EQ(st.read_msg_in_flight, 0);
+	EXPECT_FALSE(st.read_msg_counted);
+	EXPECT_TRUE(st.peer_error_prov_errno_is_pkt_post);
+	ASSERT_NE(wr_id, 0u);
+	EXPECT_EQ(efa_test_wire_pkt_type_from_wr_id(wr_id),
+		  efa_test_mr_abort_wire_type(EFA_TEST_MR_ABORT_PKT_PEER_ERROR));
+
+	efa_test_mr_abort_complete_send(wr_id);
+	expect_peer_aborted_completion();
+}
+
+TEST_F(EfaRdmMrAbortTest, longread_abort_before_post_keeps_read_count)
+{
+	struct efa_test_mr_abort_state before = {}, st = {};
+	uintptr_t wr_id = 0;
+
+	ASSERT_NO_FATAL_FAILURE(
+		setup_txe(EFA_TEST_MR_ABORT_PKT_LONGREAD_TAGRTM, true));
+	efa_test_mr_abort_set_read_msg_in_flight(1);
+	efa_test_mr_abort_snapshot(&before);
+	ASSERT_FALSE(before.read_msg_counted);
+	ASSERT_EQ(before.read_msg_in_flight, 1);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<5>(&wr_id), Return(0)));
+
+	efa_test_mr_abort_txe_handle_error();
+	efa_test_mr_abort_snapshot(&st);
+	ASSERT_TRUE(st.alive);
+	EXPECT_TRUE(st.peer_abort_pending);
+	EXPECT_EQ(st.ep_outstanding, before.ep_outstanding + 1);
+	EXPECT_EQ(st.read_msg_in_flight, 1);
+	ASSERT_NE(wr_id, 0u);
+	EXPECT_EQ(efa_test_wire_pkt_type_from_wr_id(wr_id),
+		  efa_test_mr_abort_wire_type(EFA_TEST_MR_ABORT_PKT_PEER_ERROR));
+
+	efa_test_mr_abort_complete_send(wr_id);
+	expect_peer_aborted_completion();
+}
+
 } // namespace

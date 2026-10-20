@@ -5,6 +5,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_cq.h"
+#include "rdm/efa_rdm_domain.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_ope.h"
@@ -33,6 +34,8 @@ static int efa_test_mr_abort_pkt_type(int pkt)
 		return EFA_RDM_PEER_ERROR_PKT;
 	case EFA_TEST_MR_ABORT_PKT_HANDSHAKE:
 		return EFA_RDM_HANDSHAKE_PKT;
+	case EFA_TEST_MR_ABORT_PKT_LONGREAD_TAGRTM:
+		return EFA_RDM_LONGREAD_TAGRTM_PKT;
 	}
 	return -1;
 }
@@ -180,6 +183,21 @@ int efa_test_mr_abort_complete_ctsdata(void)
 	return 0;
 }
 
+void efa_test_mr_abort_set_read_msg_in_flight(int64_t count)
+{
+	ofi_atomic_set64(
+		&efa_rdm_ep_rdm_domain(g_mr_abort.ep)->num_read_msg_in_flight,
+		count);
+}
+
+void efa_test_mr_abort_count_read_msg(void)
+{
+	g_mr_abort.txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
+	ofi_atomic_set64(
+		&efa_rdm_ep_rdm_domain(g_mr_abort.ep)->num_read_msg_in_flight,
+		1);
+}
+
 /* A send WR of the given type that the device accepted, as after sendv. */
 void *efa_test_mr_abort_forge_tx_pke(int pkt)
 {
@@ -234,6 +252,8 @@ void efa_test_mr_abort_snapshot(struct efa_test_mr_abort_state *out)
 	out->peer_handshake_queued = peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED;
 	out->handshake_queued_peers =
 		efa_test_mr_abort_list_len(&ep->handshake_queued_peer_list);
+	out->read_msg_in_flight = ofi_atomic_get64(
+		&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight);
 
 	out->alive = efa_test_mr_abort_txe_alive();
 	if (!out->alive)
@@ -249,6 +269,10 @@ void efa_test_mr_abort_snapshot(struct efa_test_mr_abort_state *out)
 					  &txe->queued_entry);
 	out->queued_pkts = efa_test_mr_abort_list_len(&txe->queued_pkts);
 	out->txe_outstanding = txe->efa_outstanding_tx_ops;
+	out->read_msg_counted =
+		txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED;
+	out->peer_error_prov_errno_is_pkt_post =
+		txe->peer_error_prov_errno == FI_EFA_ERR_PKT_POST;
 }
 
 void efa_test_mr_abort_complete_send(uintptr_t wr_id)

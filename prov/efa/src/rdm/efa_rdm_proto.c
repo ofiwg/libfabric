@@ -59,6 +59,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
 };
 
 /*
@@ -198,13 +199,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			((struct efa_mr *) msg->desc[0])->iface :
 			FI_HMEM_SYSTEM;
 
-	/* Synapse AI only supports long read */
-	if (iface == FI_HMEM_SYNAPSEAI) {
-		*proto = NULL;
-		txe->proto = NULL;
-		return 0;
-	}
-
 	/*
 	 * The read based protocols can only be used when the device can access
 	 * the source buffer directly, so resolve p2p availability once here
@@ -216,6 +210,18 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		return err;
 	use_p2p = err;
 	mr_access_flags = FI_SEND | (use_p2p ? FI_REMOTE_READ : 0);
+
+	/* Synapse AI only supports long read */
+	if (iface == FI_HMEM_SYNAPSEAI) {
+		if (efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
+			efa_rdm_ope_try_fill_desc(txe, 0, mr_access_flags);
+
+		*proto = &efa_rdm_proto_longread;
+		txe->proto = &efa_rdm_proto_longread;
+		txe->req_pkt_type = efa_rdm_proto_req_pkt_type(
+			&efa_rdm_proto_longread, op, effective_flags, peer);
+		return FI_SUCCESS;
+	}
 
 	header_flags = efa_rdm_proto_req_header_flags(peer, effective_flags);
 
