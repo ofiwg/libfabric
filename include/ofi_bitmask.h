@@ -90,9 +90,46 @@ static inline void ofi_bitmask_set_all(struct ofi_bitmask *mask)
 		mask->bytes[bytesize - 1] >>= 8 - tail_bits;
 }
 
-#if !defined(__GNUC__) && !defined(__clang__)
-#error "This file requires GCC/Clang builtins (__builtin_ctzll, __builtin_ctz)!"
+/*
+ * Count trailing zeros of a 64-bit value; callers should not pass 0, but a
+ * zero input returns 64 rather than invoking undefined behavior or looping.
+ * __builtin_ctzll() is available on GCC and Clang; MSVC provides
+ * _BitScanForward() instead, which (unlike the 64-bit variant) exists on every
+ * target architecture.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ofi_bitmask_ctzll(x) ((unsigned int) __builtin_ctzll(x))
+#elif defined(_MSC_VER)
+#include <intrin.h>
+static inline unsigned int ofi_bitmask_ctzll(uint64_t x)
+{
+	unsigned long idx;
+
+	if (_BitScanForward(&idx, (unsigned long) x))
+		return (unsigned int) idx;
+
+	if (_BitScanForward(&idx, (unsigned long) (x >> 32)))
+		return (unsigned int) idx + 32;
+
+	return 64;
+}
+#else
+static inline unsigned int ofi_bitmask_ctzll(uint64_t x)
+{
+	unsigned int n = 0;
+
+	/* ctz(0) is undefined; return the word width rather than looping forever */
+	if (x == 0)
+		return 64;
+
+	while (!(x & 1)) {
+		x >>= 1;
+		n++;
+	}
+	return n;
+}
 #endif
+
 static inline size_t ofi_bitmask_get_lsbset(const struct ofi_bitmask *mask)
 {
 	size_t ret = 0;
@@ -117,7 +154,7 @@ static inline size_t ofi_bitmask_get_lsbset(const struct ofi_bitmask *mask)
 			 */
 			word = __builtin_bswap64(word);
 #endif
-			return ret + __builtin_ctzll(word);
+			return ret + ofi_bitmask_ctzll(word);
 		}
 	} // while
 	/*
@@ -150,7 +187,7 @@ static inline size_t ofi_bitmask_get_lsbset(const struct ofi_bitmask *mask)
 		 * sentinel, returning 'tail_bits' and effectively ignoring any
 		 * trailing garbage in the rest of the word.
 		 */
-		ret += __builtin_ctzll(word | (1ULL << tail_bits));
+		ret += ofi_bitmask_ctzll(word | (1ULL << tail_bits));
 	}
 	assert(ret <= (mask->size));
 	return ret;
