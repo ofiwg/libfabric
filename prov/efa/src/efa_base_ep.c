@@ -262,8 +262,6 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	 * with other threads progressing the cq. */
 	efa_base_ep_close_util_ep(base_ep);
 
-	fi_freeinfo(base_ep->info);
-
 	err = efa_base_ep_destruct_qp(base_ep);
 
 	if (base_ep->efa_recv_wr_vec)
@@ -839,13 +837,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 		return err;
 
 	base_ep->util_ep_initialized = true;
-	base_ep->info = fi_dupinfo(info);
-	if (!base_ep->info) {
-		EFA_WARN(FI_LOG_EP_CTRL, "fi_dupinfo() failed for base_ep->info!\n");
-		ofi_endpoint_close(&base_ep->util_ep);
-		base_ep->util_ep_initialized = false;
-		return -FI_ENOMEM;
-	}
+	base_ep->info = info;
 
 	base_ep->context_mode = (base_ep->info->mode & FI_CONTEXT2) ?
 		USE_CONTEXT2 : NO_CONTEXT;
@@ -856,7 +848,6 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->efa_recv_wr_vec = calloc(sizeof(struct efa_recv_wr), efa_base_ep_get_rx_pool_size(base_ep));
 	if (!base_ep->efa_recv_wr_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->efa_recv_wr_vec!\n");
-		fi_freeinfo(base_ep->info);
 		base_ep->info = NULL;
 		ofi_endpoint_close(&base_ep->util_ep);
 		base_ep->util_ep_initialized = false;

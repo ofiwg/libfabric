@@ -337,3 +337,25 @@ TEST_F(EfaEpQueueDepthTest, getopt_reports_configured_depth_dgram)
 	EXPECT_LE(getopt_size(FI_OPT_RX_SIZE), resource.info->rx_attr->size);
 	expect_getopt_matches_qp_cap();
 }
+
+class EfaEpOpenTest : public EfaEpQueueDepthTest
+{
+};
+
+TEST_F(EfaEpOpenTest, endpoint_init_failure_returns_enodata)
+{
+	ASSERT_NO_FATAL_FAILURE(getinfo(efa_test_alloc_default_hints(
+		FI_EP_RDM, EFA_DIRECT_FABRIC_NAME)));
+	ASSERT_EQ(fi_fabric(resource.info->fabric_attr, &resource.fabric, NULL),
+		  0);
+	ASSERT_EQ(fi_domain(resource.fabric, resource.info, &resource.domain,
+			    NULL),
+		  0);
+
+	resource.info->rx_attr->size = efa_test_device_max_rx_size() + 1;
+
+	EXPECT_EQ(fi_endpoint(resource.domain, resource.info, &resource.ep,
+			      NULL),
+		  -FI_ENODATA);
+	EXPECT_EQ(resource.ep, nullptr);
+}
