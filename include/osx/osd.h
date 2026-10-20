@@ -50,7 +50,8 @@
 
 #include <limits.h>
 
-#include <AvailabilityMacros.h>
+/* The code below uses underscore-prefixed macros, so Availability.h is correct. */
+#include <Availability.h>
 
 #include "unix/osd.h"
 #include "rdma/fi_errno.h"
