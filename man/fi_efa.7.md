@@ -1254,6 +1254,25 @@ still reference an MR when it is closed. When enabled, the provider will print
 a warning message if an MR is closed while TX or RX operations still reference it.
 This is useful for debugging memory registration issues. (Default: false).
 
+*FI_EFA_STRICT_MODE*
+
+: Enable strict mode: detect application usage the libfabric spec leaves
+undefined and return an error instead of invoking the undefined behavior,
+which can otherwise corrupt provider state or crash the process. Currently
+covers:
+
+  - Inserting a duplicate copy of an address already in the AV. Returns
+    *-FI_EINVAL* from `fi_av_insert()` instead of returning the existing
+    fi_addr.
+  - A data transfer (`fi_send()`/`fi_read()`/`fi_write()`/`fi_atomic()` and
+    the WR API) to an fi_addr with no live AV entry, for example an fi_addr
+    removed by `fi_av_remove()`. Returns *-FI_EINVAL* instead of
+    dereferencing the missing entry.
+
+  Enabling this variable also forces *FI_EFA_TRACK_MR* on, so memory
+  registration misuse (an MR closed while operations still reference it) is
+  detected as well. (Default: false).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
