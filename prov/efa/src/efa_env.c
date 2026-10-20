@@ -42,6 +42,7 @@ struct efa_env efa_env = {
 	.use_data_path_direct = true,
 	.implicit_av_size = 0,
 	.track_mr = 0,
+	.strict_mode = 0,
 	.use_hw_cntr = 1,
 	.use_sq_req_id_64_bit = 1,
 };
@@ -163,6 +164,7 @@ void efa_env_param_get(void)
 	}
 	fi_param_get_bool(&efa_prov, "use_data_path_direct", &efa_env.use_data_path_direct);
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
+	fi_param_get_bool(&efa_prov, "strict_mode", &efa_env.strict_mode);
 
 	efa_fork_support_request_initialize();
 	efa_env_unregistered_param_get();
@@ -264,6 +266,13 @@ void efa_env_define()
 			"any outstanding operations still reference an MR when "
 			"it is closed. This is useful for debugging memory "
 			"registration issues. (Default: false)");
+	fi_param_define(
+		&efa_prov, "strict_mode", FI_PARAM_BOOL,
+		"Enable strict mode: detect application "
+		"usage the libfabric spec leaves undefined and return an error "
+		"instead of invoking the undefined behavior, which can "
+		"otherwise corrupt provider state or crash the process. "
+		"(Default: false)");
 }
 
 
