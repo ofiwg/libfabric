@@ -798,6 +798,185 @@ void test_efa_rdm_ep_atomic_without_caps(void **state)
 	assert_int_equal(err, -FI_EOPNOTSUPP);
 }
 
+struct efa_rdm_atomic_test_limits {
+	size_t write;
+	size_t fetch;
+	size_t compare;
+};
+
+static struct efa_rdm_ep *
+efa_rdm_atomic_test_construct_ep(struct efa_resource *resource)
+{
+	struct efa_rdm_ep *ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	assert_non_null(ep->shm_ep);
+	return ep;
+}
+
+static fi_addr_t
+efa_rdm_atomic_test_insert_local_peer(struct efa_resource *resource,
+				      struct efa_rdm_ep *ep)
+{
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	int ret;
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+	assert_int_not_equal(efa_rdm_ep_get_explicit_shm_fi_addr(ep, peer_addr),
+			     FI_ADDR_NOTAVAIL);
+	return peer_addr;
+}
+
+static void
+efa_rdm_atomic_test_get_limits(struct efa_resource *resource,
+			       struct efa_rdm_ep *ep,
+			       struct efa_rdm_atomic_test_limits *limits)
+{
+	struct fi_atomic_attr attr;
+	int ret;
+
+	ret = fi_query_atomic(resource->domain, FI_UINT8, FI_ATOMIC_WRITE,
+			      &attr, 0);
+	assert_int_equal(ret, 0);
+	ret = fi_atomicvalid(ep->shm_ep, FI_UINT8, FI_ATOMIC_WRITE,
+			     &limits->write);
+	assert_int_equal(ret, 0);
+	assert_true(limits->write < attr.count);
+
+	ret = fi_query_atomic(resource->domain, FI_UINT8, FI_SUM, &attr,
+			      FI_FETCH_ATOMIC);
+	assert_int_equal(ret, 0);
+	ret = fi_fetch_atomicvalid(ep->shm_ep, FI_UINT8, FI_SUM,
+				   &limits->fetch);
+	assert_int_equal(ret, 0);
+	assert_true(limits->fetch < attr.count);
+
+	ret = fi_query_atomic(resource->domain, FI_UINT8, FI_CSWAP, &attr,
+			      FI_COMPARE_ATOMIC);
+	assert_int_equal(ret, 0);
+	ret = fi_compare_atomicvalid(ep->shm_ep, FI_UINT8, FI_CSWAP,
+				     &limits->compare);
+	assert_int_equal(ret, 0);
+	assert_true(limits->compare < attr.count);
+}
+
+void test_efa_rdm_ep_atomic_valid_honors_shm_limit(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_atomic_test_limits limits;
+	struct efa_rdm_ep *ep;
+	size_t count;
+	int ret;
+
+	ep = efa_rdm_atomic_test_construct_ep(resource);
+	efa_rdm_atomic_test_get_limits(resource, ep, &limits);
+
+	ret = fi_atomicvalid(resource->ep, FI_UINT8, FI_ATOMIC_WRITE, &count);
+	assert_int_equal(ret, 0);
+	assert_int_equal(count, limits.write);
+
+	ret = fi_fetch_atomicvalid(resource->ep, FI_UINT8, FI_SUM, &count);
+	assert_int_equal(ret, 0);
+	assert_int_equal(count, limits.fetch);
+
+	ret = fi_compare_atomicvalid(resource->ep, FI_UINT8, FI_CSWAP, &count);
+	assert_int_equal(ret, 0);
+	assert_int_equal(count, limits.compare);
+}
+
+void test_efa_rdm_ep_local_atomic_honors_shm_limit(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_unit_test_buff compare_buff;
+	struct efa_unit_test_buff result_buff;
+	struct efa_rdm_atomic_test_limits limits;
+	struct efa_rdm_ep *ep;
+	struct fi_msg_atomic msg = {0};
+	struct fi_ioc result_ioc;
+	struct fi_rma_ioc rma_ioc;
+	size_t max_count;
+	size_t count;
+	size_t i;
+	void *send_desc;
+	void *compare_desc;
+	void *result_desc;
+	fi_addr_t peer_addr;
+	ssize_t expected;
+
+	ep = efa_rdm_atomic_test_construct_ep(resource);
+	peer_addr = efa_rdm_atomic_test_insert_local_peer(resource, ep);
+	efa_rdm_atomic_test_get_limits(resource, ep, &limits);
+
+	max_count = MAX(limits.write, limits.fetch);
+	max_count = MAX(max_count, limits.compare);
+	efa_unit_test_buff_construct(&send_buff, resource, max_count + 1);
+	efa_unit_test_buff_construct(&compare_buff, resource, max_count + 1);
+	efa_unit_test_buff_construct(&result_buff, resource, max_count + 1);
+	send_desc = fi_mr_desc(send_buff.mr);
+	compare_desc = fi_mr_desc(compare_buff.mr);
+	result_desc = fi_mr_desc(result_buff.mr);
+
+	/*
+	 * The fake peer is unverified by SHM, so accepted posts return EAGAIN.
+	 * Oversized posts must be rejected by SHM before peer verification.
+	 */
+	for (i = 0; i < 2; i++) {
+		expected = i ? -FI_EMSGSIZE : -FI_EAGAIN;
+
+		count = limits.write + i;
+		assert_int_equal(fi_atomic(resource->ep, send_buff.buff, count,
+					   send_desc, peer_addr, 0, 0, FI_UINT8,
+					   FI_ATOMIC_WRITE, NULL), expected);
+		assert_int_equal(fi_inject_atomic(resource->ep, send_buff.buff,
+						  count, peer_addr, 0, 0,
+						  FI_UINT8, FI_ATOMIC_WRITE), expected);
+
+		count = limits.fetch + i;
+		assert_int_equal(fi_fetch_atomic(resource->ep, send_buff.buff,
+						 count, send_desc, result_buff.buff, result_desc,
+						 peer_addr, 0, 0, FI_UINT8, FI_SUM, NULL),
+				 expected);
+
+		count = limits.compare + i;
+		assert_int_equal(
+			fi_compare_atomic(resource->ep, send_buff.buff, count,
+					  send_desc, compare_buff.buff,
+					  compare_desc, result_buff.buff,
+					  result_desc, peer_addr, 0, 0,
+					  FI_UINT8, FI_CSWAP, NULL),
+			expected);
+	}
+
+	/* FI_ATOMIC_READ has no source iov; validate its target count. */
+	rma_ioc.addr = 0;
+	rma_ioc.count = limits.fetch + 1;
+	rma_ioc.key = 0;
+	msg.addr = peer_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT8;
+	msg.op = FI_ATOMIC_READ;
+	result_ioc.addr = result_buff.buff;
+	result_ioc.count = limits.fetch + 1;
+	assert_int_equal(fi_fetch_atomicmsg(resource->ep, &msg, &result_ioc,
+					    &result_desc, 1, 0),
+			 -FI_EMSGSIZE);
+
+	efa_unit_test_buff_destruct(&result_buff);
+	efa_unit_test_buff_destruct(&compare_buff);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
 /*
  * Check fi_getopt return with different input opt_len
  */

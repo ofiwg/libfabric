@@ -48,6 +48,44 @@ static void smr_generic_atomic_format(struct smr_cmd *cmd, uint8_t datatype,
 	cmd->hdr.atomic_op = atomic_op;
 }
 
+static inline int smr_atomic_check_supported(enum fi_datatype datatype,
+					      enum fi_op op, uint64_t flags)
+{
+	if (datatype == FI_INT128 || datatype == FI_UINT128) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "128-bit datatypes not supported\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return ofi_atomic_valid(&smr_prov, datatype, op, flags);
+}
+
+static inline int smr_atomic_get_target_len(const struct fi_rma_ioc *rma_ioc,
+			  size_t rma_count, size_t datatype_size, uint32_t op, size_t *target_len)
+{
+	size_t max_count;
+	size_t max_size;
+	size_t total_count;
+	size_t i;
+
+	max_size = op == ofi_op_atomic_compare ? SMR_COMP_INJECT_SIZE : SMR_INJECT_SIZE;
+	max_count = max_size / datatype_size;
+	if (OFI_LIKELY(rma_count == 1)) {
+		total_count = rma_ioc[0].count;
+		if (OFI_UNLIKELY(total_count > max_count))
+			return -FI_EMSGSIZE;
+	} else {
+		total_count = 0;
+		for (i = 0; i < rma_count; i++) {
+			if (OFI_UNLIKELY(rma_ioc[i].count > max_count - total_count))
+				return -FI_EMSGSIZE;
+			total_count += rma_ioc[i].count;
+		}
+	}
+
+	*target_len = total_count * datatype_size;
+	return FI_SUCCESS;
+}
+
 static void smr_format_inline_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 				     const struct iovec *iov, size_t count)
 {
@@ -75,7 +113,8 @@ static void smr_format_inject_atomic(
 			const struct iovec *iov, size_t count,
 			const struct iovec *resultv, size_t result_count,
 			struct ofi_mr **comp_desc, const struct iovec *compv,
-			size_t comp_count, struct smr_inject_buf *tx_buf)
+			size_t comp_count, size_t target_len,
+			struct smr_inject_buf *tx_buf)
 {
 	size_t comp_size;
 
@@ -88,8 +127,7 @@ static void smr_format_inject_atomic(
 		break;
 	case ofi_op_atomic_fetch:
 		if (cmd->hdr.atomic_op == FI_ATOMIC_READ)
-			cmd->hdr.size = ofi_total_iov_len(resultv,
-							  result_count);
+			cmd->hdr.size = target_len;
 		else
 			cmd->hdr.size = ofi_copy_from_mr_iov(
 						tx_buf->data, SMR_INJECT_SIZE,
@@ -145,7 +183,7 @@ static int smr_do_atomic_inject(
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inject_atomic(cmd, desc, iov, iov_count, resultv,
 				 result_count, comp_desc, compv, comp_count,
-				 tx_buf);
+				 total_len, tx_buf);
 
 	if (smr_flags & SMR_RETURN_CMD) {
 		pend = ofi_buf_alloc(ep->pend_pool);
@@ -195,6 +233,7 @@ static ssize_t smr_generic_atomic(
 	int proto;
 	ssize_t ret;
 	size_t total_len;
+	size_t datatype_size;
 	uint64_t atomic_flags;
 	uint8_t smr_flags;
 
@@ -203,10 +242,6 @@ static ssize_t smr_generic_atomic(
 	assert(compare_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
 
-	tx_id = smr_verify_peer(ep, addr);
-	if (tx_id < 0)
-		return -FI_EAGAIN;
-
 	if (op == ofi_op_atomic_fetch)
 		atomic_flags = FI_FETCH_ATOMIC;
 	else if (op == ofi_op_atomic_compare)
@@ -214,13 +249,22 @@ static ssize_t smr_generic_atomic(
 	else
 		atomic_flags = 0;
 
-	ret = ofi_atomic_valid(&smr_prov, datatype, atomic_op, atomic_flags);
+	ret = smr_atomic_check_supported(datatype, atomic_op, atomic_flags);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"atomic operation not supported for datatype %d and "
 			"op %d\n", datatype, atomic_op);
 		return ret;
 	}
+
+	datatype_size = ofi_datatype_size(datatype);
+	ret = smr_atomic_get_target_len(rma_ioc, rma_count, datatype_size, op, &total_len);
+	if (ret)
+		return ret;
+
+	tx_id = smr_verify_peer(ep, addr);
+	if (tx_id < 0)
+		return -FI_EAGAIN;
 
 	rx_id = smr_peer_data(ep->region)[tx_id].id;
 	peer_smr = smr_peer_region(ep, tx_id);
@@ -237,25 +281,22 @@ static ssize_t smr_generic_atomic(
 		goto unlock;
 	}
 
-	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
-
 	switch (op) {
 	case ofi_op_atomic_compare:
 		assert(compare_ioc);
 		ofi_ioc_to_iov(compare_ioc, compare_iov, compare_count,
-			       ofi_datatype_size(datatype));
+			       datatype_size);
 		total_len *= 2;
 		/* fall through */
 	case ofi_op_atomic_fetch:
 		assert(result_ioc);
 		ofi_ioc_to_iov(result_ioc, result_iov, result_count,
-			       ofi_datatype_size(datatype));
+			       datatype_size);
 		/* fall through */
 	case ofi_op_atomic:
 		if (atomic_op != FI_ATOMIC_READ) {
 			assert(ioc);
-			ofi_ioc_to_iov(ioc, iov, count,
-				       ofi_datatype_size(datatype));
+			ofi_ioc_to_iov(ioc, iov, count, datatype_size);
 		} else {
 			count = 0;
 		}
@@ -392,21 +433,29 @@ static ssize_t smr_atomic_inject(
 	struct fi_rma_ioc rma_ioc;
 	int64_t id, peer_id, pos;
 	ssize_t ret;
+	size_t max_count;
 	size_t total_len;
+	size_t datatype_size;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	id = smr_verify_peer(ep, dest_addr);
-	if (id < 0)
-		return -FI_EAGAIN;
-
-	ret = ofi_atomic_valid(&smr_prov, datatype, op, 0);
+	ret = smr_atomic_check_supported(datatype, op, 0);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"atomic operation not supported for datatype %d and "
 			"op %d\n", datatype, op);
 		return ret;
 	}
+
+	datatype_size = ofi_datatype_size(datatype);
+	max_count = SMR_INJECT_SIZE / datatype_size;
+	if (OFI_UNLIKELY(count > max_count))
+		return -FI_EMSGSIZE;
+	total_len = count * datatype_size;
+
+	id = smr_verify_peer(ep, dest_addr);
+	if (id < 0)
+		return -FI_EAGAIN;
 
 	peer_id = smr_peer_data(ep->region)[id].id;
 	peer_smr = smr_peer_region(ep, id);
@@ -422,9 +471,6 @@ static ssize_t smr_atomic_inject(
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
-
-	total_len = count * ofi_datatype_size(datatype);
-	assert(total_len <= SMR_INJECT_SIZE);
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = total_len;
@@ -487,7 +533,8 @@ static ssize_t smr_atomic_readwritev(
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	rma_iov.addr = addr;
-	rma_iov.count = ofi_total_ioc_cnt(iov, count);
+	rma_iov.count = op == FI_ATOMIC_READ ?
+				ofi_total_ioc_cnt(resultv, result_count) : ofi_total_ioc_cnt(iov, count);
 	rma_iov.key = key;
 
 	return smr_generic_atomic(ep, iov, desc, count, NULL, NULL, 0, resultv,
@@ -613,13 +660,7 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if ((datatype == FI_INT128) || (datatype == FI_UINT128)) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"128-bit datatypes not supported\n");
-		return -FI_EOPNOTSUPP;
-	}
-
-	ret = ofi_atomic_valid(&smr_prov, datatype, op, flags);
+	ret = smr_atomic_check_supported(datatype, op, flags);
 	if (ret || !attr)
 		return ret;
 

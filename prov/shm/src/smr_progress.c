@@ -622,8 +622,7 @@ static void smr_do_atomic(struct smr_cmd *cmd, void *src, struct ofi_mr *dst_mr,
 		   ofi_atomic_isreadwrite_op(op)) {
 		ofi_atomic_readwrite_handler(op, datatype, cpy_dst, src,
 					     tmp_result, cnt);
-		memcpy(src, op == FI_ATOMIC_READ ? cpy_dst : tmp_result,
-		       cnt * ofi_datatype_size(datatype));
+		memcpy(src, tmp_result, cnt * ofi_datatype_size(datatype));
 	} else if (ofi_atomic_iswrite_op(op)) {
 		ofi_atomic_write_handler(op, datatype, cpy_dst, src, cnt);
 	} else {
