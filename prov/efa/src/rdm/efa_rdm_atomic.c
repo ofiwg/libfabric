@@ -655,6 +655,7 @@ static int efa_rdm_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype
 	struct util_ep *ep;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fi_atomic_attr attr;
+	size_t shm_count;
 	int ret;
 
 	ep = container_of(ep_fid, struct util_ep, ep_fid);
@@ -666,10 +667,24 @@ static int efa_rdm_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype
 
 	ret = efa_rdm_atomic_query(&ep->domain->domain_fid,
 				   datatype, op, &attr, flags);
-	if (!ret)
-		*count = attr.count;
+	if (ret)
+		return ret;
 
-	return ret;
+	if (efa_rdm_ep->shm_ep) {
+		if (flags & FI_COMPARE_ATOMIC)
+			ret = fi_compare_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		else if (flags & FI_FETCH_ATOMIC)
+			ret = fi_fetch_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		else
+			ret = fi_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		if (ret)
+			return ret;
+
+		attr.count = MIN(attr.count, shm_count);
+	}
+
+	*count = attr.count;
+	return FI_SUCCESS;
 }
 
 static int efa_rdm_atomic_write_valid(struct fid_ep *ep, enum fi_datatype datatype,

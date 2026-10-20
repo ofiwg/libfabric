@@ -189,6 +189,8 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(void **state);
 void test_efa_rdm_ep_send_with_shm_no_copy(void **state);
 void test_efa_rdm_ep_rma_without_caps(void **state);
 void test_efa_rdm_ep_atomic_without_caps(void **state);
+void test_efa_rdm_ep_atomic_valid_honors_shm_limit(void **state);
+void test_efa_rdm_ep_local_atomic_honors_shm_limit(void **state);
 void test_efa_rdm_ep_setopt_shared_memory_permitted(void **state);
 void test_efa_rdm_ep_setopt_homogeneous_peers(void **state);
 void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(void **state);
