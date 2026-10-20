@@ -512,6 +512,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct efa_domain *efa_domain = NULL;
 	struct efa_rdm_domain *rdm_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
+	struct fi_info *ep_info = NULL;
 	int ret, retv;
 	enum fi_hmem_iface iface;
 
@@ -528,7 +529,15 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 				  util_domain.domain_fid);
 	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
-	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, info,
+	ep_info = fi_dupinfo(info);
+	if (!ep_info) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "fi_dupinfo() failed for base_ep->info!\n");
+		ret = -FI_ENOMEM;
+		goto err_free_ep;
+	}
+
+	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, ep_info,
 				    efa_rdm_ep_progress_no_op, context);
 	if (ret)
 		goto err_free_ep;
@@ -716,6 +725,7 @@ err_destroy_base_ep:
 err_free_ep:
 	if (efa_rdm_ep)
 		free(efa_rdm_ep);
+	fi_freeinfo(ep_info);
 	return ret;
 }
 
@@ -1235,6 +1245,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	}
 
 	ofi_genlock_destroy(&efa_rdm_ep->srx_lock);
+	fi_freeinfo(efa_rdm_ep->base_ep.info);
 	free(efa_rdm_ep);
 	return retv;
 }

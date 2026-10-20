@@ -287,6 +287,7 @@ static int efa_ep_close(fid_t fid)
 	}
 	if (efa_env.track_mr)
 		efa_direct_ope_pool_destroy(ep);
+	fi_freeinfo(ep->info);
 	free(ep);
 
 	return 0;
@@ -556,13 +557,23 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
 	struct efa_base_ep *ep;
+	struct fi_info *ep_info;
 	int ret;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = efa_base_ep_construct(ep, domain_fid, user_info, efa_ep_progress_no_op, context);
+	ep_info = fi_dupinfo(user_info);
+	if (!ep_info) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "fi_dupinfo() failed for base_ep->info!\n");
+		free(ep);
+		return -FI_ENOMEM;
+	}
+
+	ret = efa_base_ep_construct(ep, domain_fid, ep_info,
+				    efa_ep_progress_no_op, context);
 	if (ret)
 		goto err_ep_destroy;
 
@@ -583,5 +594,6 @@ err_ep_destroy:
 	efa_base_ep_destruct(ep);
 	if (ep)
 		free(ep);
+	fi_freeinfo(ep_info);
 	return ret;
 }
