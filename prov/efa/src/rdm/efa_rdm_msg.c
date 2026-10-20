@@ -179,6 +179,13 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	efa_perfset_start(ep, perf_efa_tx);
 	peer = efa_rdm_ep_get_peer_explicit(ep, msg->addr);
 	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
+	if (OFI_UNLIKELY(!peer)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "fi_send to fi_addr %lu which has no peer. Was it "
+			 "removed by fi_av_remove?\n", msg->addr);
+		err = -FI_EINVAL;
+		goto out;
+	}
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
 		goto out;
