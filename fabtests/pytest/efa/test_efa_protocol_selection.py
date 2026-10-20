@@ -43,6 +43,13 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     if cntrl_env_var == "FI_EFA_INTER_MIN_READ_WRITE_SIZE" and has_rdma(cmdline_args, "write"):
         pytest.skip("FI_EFA_INTER_MIN_READ_WRITE_SIZE is only applied to emulated write protocols")
 
+    # Sync out-of-band (-b) so ft_finalize_ep uses a socket instead of a
+    # libfabric send. The forced read protocol would otherwise route that
+    # handshake over RDMA read too, adding its bytes to rdma_read_bytes and
+    # breaking the exact bytes_read == message_size check below.
+    cmdline_args_copy.additional_server_arguments = "-b"
+    cmdline_args_copy.additional_client_arguments = "-b"
+
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     if server_read_wrs_before_test is None:
