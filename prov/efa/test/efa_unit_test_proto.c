@@ -1271,7 +1271,8 @@ void test_proto_atomic_write_responder_rejects_invalid_request(void **state)
 	/* Keep one case for WRITE_RTA's distinct RMA verification path. */
 	target[0] = 1;
 	source[0] = 2;
-	ctx.rma_ioc.key = fi_mr_key(ctx.send_buff.mr) + 1;
+	/* EFA never assigns FI_KEY_NOTAVAIL to a registered MR. */
+	ctx.rma_ioc.key = FI_KEY_NOTAVAIL;
 	next_msg_id = ctx.peer->next_msg_id;
 	assert_int_equal(test_proto_atomic_post(&ctx, 1, FI_COMPLETION), 0);
 	req_pke = test_proto_atomic_posted_pke(&ctx);
