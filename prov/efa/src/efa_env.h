@@ -81,6 +81,7 @@ struct efa_env {
 	 * operations still reference an MR when it is closed.
 	 */
 	int track_mr;
+	int strict_mode;
 	int use_hw_cntr;
 	int use_sq_req_id_64_bit;
 	/**
