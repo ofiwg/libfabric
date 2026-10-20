@@ -122,6 +122,8 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 /* begin efa_unit_test_av.c */
 void test_av_insert_duplicate_raw_addr(void **state);
 void test_av_insert_duplicate_gid(void **state);
+void test_av_insert_duplicate_raw_addr_strict_mode(void **state);
+void test_av_insert_duplicate_raw_addr_efa_direct_strict_mode(void **state);
 void test_efa_ah_cnt_one_av_efa(void **state);
 void test_efa_ah_cnt_one_av_efa_direct(void **state);
 void test_efa_ah_cnt_multi_av_efa(void **state);
