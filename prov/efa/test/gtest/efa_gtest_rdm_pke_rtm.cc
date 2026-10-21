@@ -265,7 +265,7 @@ TEST_F(EfaRtmTxSentTest, longcts_sent_and_completion_boundary)
 				EFA_TEST_RTM_LONGCTS_MSG, EFA_TEST_RTM_OP_SENT,
 				/*payload_size=*/kChunk,
 				/*bytes_already=*/kChunk, &res);
-	EXPECT_EQ(res.bytes_sent, 2 * kChunk);
+	EXPECT_EQ(res.bytes_sent, kChunk);
 
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_LONGCTS_MSG,

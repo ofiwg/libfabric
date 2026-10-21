@@ -60,6 +60,8 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
 	&efa_rdm_proto_longread,
+	/* Long CTS takes any send the others above decline, so it is last. */
+	&efa_rdm_proto_longcts,
 };
 
 /*
@@ -437,107 +439,4 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 	 */
 	*proto = NULL;
 	txe->proto = NULL;
-}
-
-/* CTSDATA, shared by the long CTS protocols */
-
-/**
- * @brief Handle the send completion of a CTSDATA packet.
- *
- * A delivery complete txe is released once its sends have all completed and
- * the peer's RECEIPT has arrived; otherwise the ope completes once all its data
- * has been acked.
- */
-ssize_t efa_rdm_proto_ctsdata_handle_send_completion(
-	struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *ope = pkt_entry->ope;
-
-	assert(ope);
-
-	if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
-		efa_rdm_txe_progress_peer_abort_if_drained(ope);
-	} else if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(ope))
-			efa_rdm_txe_release(ope);
-	} else {
-		ope->bytes_acked +=
-			efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
-		if (ope->total_len == ope->bytes_acked)
-			efa_rdm_ope_handle_send_completed(ope);
-	}
-
-	efa_rdm_pke_release_tx(pkt_entry);
-	return 0;
-}
-
-/**
- * @brief Send the next window of an ope's data as CTSDATA packets.
- *
- * The window is split into full packets starting at bytes_sent, limited by the
- * TX packets available, and posted in one batch.
- */
-ssize_t efa_rdm_proto_post_ctsdata(struct efa_rdm_ope *ope)
-{
-	struct efa_rdm_ep *ep = ope->ep;
-	struct efa_rdm_pke *pkt_entry;
-	size_t i, pkt_entry_cnt, pkt_entry_cnt_allocated = 0;
-	size_t data_size, remaining;
-	uint64_t segment_offset;
-	ssize_t err;
-
-	assert(ope->window > 0);
-
-	pkt_entry_cnt = efa_rdm_ep_get_available_tx_pkts(ep);
-	if (pkt_entry_cnt == 0)
-		return -FI_EAGAIN;
-
-	pkt_entry_cnt = MIN(pkt_entry_cnt,
-			    (ope->window - 1) / ep->max_data_payload_size + 1);
-	assert(pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
-
-	segment_offset = ope->bytes_sent;
-	remaining = ope->window;
-	for (i = 0; i < pkt_entry_cnt; ++i) {
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
-		if (OFI_UNLIKELY(!pkt_entry)) {
-			err = -FI_EAGAIN;
-			goto release;
-		}
-		ep->send_pkt_entry_vec[i] = pkt_entry;
-		pkt_entry_cnt_allocated++;
-
-		data_size = MIN(remaining, ep->max_data_payload_size);
-		err = efa_rdm_pke_init_ctsdata(pkt_entry, ope, segment_offset,
-					       data_size);
-		if (OFI_UNLIKELY(err))
-			goto release;
-
-		pkt_entry->handle_pke =
-			&efa_rdm_proto_ctsdata_handle_send_completion;
-		segment_offset += data_size;
-		remaining -= data_size;
-	}
-	ep->send_pkt_entry_vec_size = pkt_entry_cnt;
-
-	/* The window only shrinks once the packets are posted, so never batch. */
-	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, pkt_entry_cnt, 0);
-	if (OFI_UNLIKELY(err))
-		goto release;
-
-	for (i = 0; i < pkt_entry_cnt; ++i) {
-		data_size = efa_rdm_pke_get_ctsdata_hdr(
-				    ep->send_pkt_entry_vec[i])->seg_length;
-		ope->bytes_sent += data_size;
-		ope->window -= data_size;
-	}
-	assert(ope->window >= 0);
-
-	return 0;
-
-release:
-	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
-		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
-	return err;
 }

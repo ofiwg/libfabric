@@ -1028,3 +1028,202 @@ out:
 	efa_test_proto_teardown_buf(&ctx);
 	return err;
 }
+
+int efa_test_longcts_construct_builds_one_pke(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_longcts_construct_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	int filled, err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 0, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	err = efa_test_proto_select_and_construct(&ctx, txe,
+						  &efa_rdm_proto_longcts,
+						  &out->selected, &filled,
+						  &out->ret);
+	if (err || !out->selected || out->ret)
+		goto out;
+
+	out->pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->req_pkt_type = txe->req_pkt_type;
+	out->expected_req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	out->total_len = txe->total_len;
+	out->tx_id = txe->tx_id;
+	out->expected_credit_request = efa_env.tx_min_credits;
+
+	pke = ctx.ep->send_pkt_entry_vec[0];
+	out->handler_set = pke->handle_pke ==
+			   &efa_rdm_proto_longcts_handle_req_send_completion;
+	out->ope_set = pke->ope == txe;
+	out->payload_size = pke->payload_size;
+
+	rtm_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(pke);
+	out->msg_length = rtm_hdr->msg_length;
+	out->send_id = rtm_hdr->send_id;
+	out->credit_request = rtm_hdr->credit_request;
+
+	efa_test_proto_release_send_pkes(ctx.ep);
+out:
+	efa_test_proto_release_txe(txe, filled);
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+int efa_test_longcts_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_ope *txe;
+	uint64_t pke_send_flags;
+	int filled, err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 0, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	err = efa_test_proto_select_and_construct(&ctx, txe,
+						  &efa_rdm_proto_longcts,
+						  &out->selected, &filled,
+						  &out->first_ret);
+	if (err || !out->selected || out->first_ret)
+		goto out;
+
+	out->total_len = txe->total_len;
+	out->first_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->first_req_pkt_type = txe->req_pkt_type;
+	out->first_payload_size = ctx.ep->send_pkt_entry_vec[0]->payload_size;
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->bytes_sent_after_first_hook = txe->bytes_sent;
+	efa_test_proto_release_send_pkes(ctx.ep);
+
+	out->second_ret = txe->proto->construct_tx_pkes(ctx.ep, txe,
+							&pke_send_flags);
+	if (out->second_ret)
+		goto out;
+
+	out->second_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	out->second_req_pkt_type = txe->req_pkt_type;
+	out->second_payload_size = ctx.ep->send_pkt_entry_vec[0]->payload_size;
+	out->second_msg_length = efa_rdm_pke_get_longcts_rtm_base_hdr(
+					 ctx.ep->send_pkt_entry_vec[0])->msg_length;
+
+	txe->proto->handle_tx_pkes_posted(ctx.ep, txe);
+	out->bytes_sent_after_second_hook = txe->bytes_sent;
+
+	efa_test_proto_release_send_pkes(ctx.ep);
+out:
+	efa_test_proto_release_txe(txe, filled);
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+int efa_test_longcts_peer_abort_completes_txe_once(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain,
+	struct efa_test_proto_longcts_peer_abort_result *out)
+{
+	static struct efa_rdm_mr stale_source_mr;
+	struct efa_test_proto_ctx ctx = {0};
+	struct fi_cq_err_entry err_entry;
+	struct efa_rdm_pke *req_pke;
+	struct efa_rdm_ope *txe;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 0, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	ctx.peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	err = fi_send(ep, ctx.buf, ctx.len, fi_mr_desc(ctx.mr), ctx.peer_addr,
+		      NULL);
+	if (err)
+		goto out;
+
+	out->pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->pke_cnt != 1) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+	req_pke = ctx.ep->send_pkt_entry_vec[0];
+	out->handler_set = req_pke->handle_pke != NULL;
+
+	txe = req_pke->ope;
+	if (!txe || !req_pke->handle_pke) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+	out->req_pkt_type = txe->req_pkt_type;
+	out->expected_req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	out->payload_size = req_pke->payload_size;
+	out->total_len = txe->total_len;
+
+	stale_source_mr.gen = 1;
+	txe->iov_count = 1;
+	txe->desc[0] = &stale_source_mr;
+	txe->desc_gen[0] = 2;
+
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+	out->abort_pending_after_error =
+		!!(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	out->emitted_after_error =
+		!!(txe->internal_flags &
+		   EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	memset(&err_entry, 0, sizeof(err_entry));
+	out->readerr_after_error = fi_cq_readerr(cq, &err_entry, 0);
+
+	efa_rdm_ep_record_tx_op_completed(ctx.ep, req_pke);
+	req_pke->handle_pke(req_pke);
+
+	out->emitted_after_req =
+		!!(txe->internal_flags &
+		   EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	out->ope_list_after_req = efa_test_proto_ope_list_count(ctx.ep);
+	memset(&err_entry, 0, sizeof(err_entry));
+	out->readerr_after_req = fi_cq_readerr(cq, &err_entry, 0);
+
+	efa_rdm_pke_handle_send_completion(ctx.ep->send_pkt_entry_vec[0]);
+
+	memset(&err_entry, 0, sizeof(err_entry));
+	out->readerr_final = fi_cq_readerr(cq, &err_entry, 0);
+	if (out->readerr_final == 1) {
+		out->final_err = err_entry.err;
+		out->final_prov_errno = err_entry.prov_errno;
+	}
+	memset(&err_entry, 0, sizeof(err_entry));
+	out->readerr_after_final = fi_cq_readerr(cq, &err_entry, 0);
+	out->ope_list_final = efa_test_proto_ope_list_count(ctx.ep);
+
+out:
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}

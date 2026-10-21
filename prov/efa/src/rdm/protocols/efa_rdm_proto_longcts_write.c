@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #include "efa_rdm_proto_longcts_write.h"
+#include "efa_rdm_proto_longcts.h"
 #include "ofi_iov.h"
 #include "ofi_proto.h"
 #include "efa_errno.h"

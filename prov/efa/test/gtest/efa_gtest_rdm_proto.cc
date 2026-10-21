@@ -396,6 +396,8 @@ INSTANTIATE_TEST_SUITE_P(
 				    "runtread"},
 	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
 				    "longread"},
+	       EfaRdmProtoForceCase{"longcts_picks_longcts", "longcts", 64,
+				    "longcts"},
 	       /* A write protocol's name is not a send protocol's name. */
 	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
 				    nullptr},
@@ -546,4 +548,117 @@ TEST_F(EfaRdmProtoReadTest, runtread_construct_is_repeatable)
 		  res.bytes_sent_after_first_hook);
 	EXPECT_EQ(res.read_msg_in_flight_after_second_hook, 1);
 	EXPECT_STREQ(res.next_proto_name, "longread");
+}
+
+class EfaRdmProtoLongctsTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+
+		if (!efa_test_proto_large_len_beyond_medium(resource.ep))
+			GTEST_SKIP() << "device's medium band includes "
+				     << EFA_TEST_PROTO_LARGE_LEN;
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmProtoLongctsTest, longcts_selected_for_large_msg)
+{
+	struct efa_test_proto_select_result res = {};
+
+	ASSERT_EQ(efa_test_proto_select(resource.ep, resource.av,
+					resource.domain, 0, 0, 1, 0, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	EXPECT_STREQ(res.proto_name, "longcts");
+}
+
+TEST_F(EfaRdmProtoLongctsTest, longcts_construct_builds_one_pke)
+{
+	struct efa_test_proto_longcts_construct_result res = {};
+
+	ASSERT_EQ(efa_test_longcts_construct_builds_one_pke(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_TRUE(res.selected);
+	ASSERT_EQ(res.ret, 0);
+
+	EXPECT_EQ(res.pke_cnt, 1u);
+	EXPECT_EQ(res.req_pkt_type, res.expected_req_pkt_type);
+	EXPECT_TRUE(res.handler_set);
+	EXPECT_TRUE(res.ope_set);
+	EXPECT_GT(res.payload_size, 0u);
+	EXPECT_LT(res.payload_size, res.total_len);
+	EXPECT_EQ(res.msg_length, res.total_len);
+	EXPECT_EQ(res.send_id, res.tx_id);
+	EXPECT_EQ(res.credit_request, res.expected_credit_request);
+}
+
+TEST_F(EfaRdmProtoLongctsTest, longcts_construct_is_repeatable)
+{
+	struct efa_test_proto_repeat_result res = {};
+
+	ASSERT_EQ(efa_test_longcts_construct_is_repeatable(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_TRUE(res.selected);
+	ASSERT_EQ(res.first_ret, 0);
+	ASSERT_EQ(res.second_ret, 0);
+
+	EXPECT_EQ(res.first_pke_cnt, 1u);
+	EXPECT_EQ(res.bytes_sent_after_first_hook, res.first_payload_size);
+
+	EXPECT_EQ(res.second_pke_cnt, 1u);
+	EXPECT_EQ(res.second_req_pkt_type, res.first_req_pkt_type);
+	EXPECT_EQ(res.second_payload_size, res.first_payload_size);
+	EXPECT_EQ(res.second_msg_length, res.total_len);
+	EXPECT_EQ(res.bytes_sent_after_second_hook, res.first_payload_size);
+}
+
+TEST_F(EfaRdmProtoLongctsTest, longcts_peer_abort_completes_txe_once)
+{
+	struct efa_test_proto_longcts_peer_abort_result res = {};
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.Times(2)
+		.WillRepeatedly(Return(0));
+
+	ASSERT_EQ(efa_test_longcts_peer_abort_completes_txe_once(
+			  resource.ep, resource.av, resource.cq,
+			  resource.domain, &res),
+		  0);
+	ASSERT_EQ(res.pke_cnt, 1u);
+	EXPECT_TRUE(res.handler_set);
+	EXPECT_EQ(res.req_pkt_type, res.expected_req_pkt_type);
+	EXPECT_LT(res.payload_size, res.total_len);
+
+	EXPECT_TRUE(res.abort_pending_after_error);
+	EXPECT_FALSE(res.emitted_after_error);
+	EXPECT_EQ(res.readerr_after_error, -FI_EAGAIN);
+
+	EXPECT_TRUE(res.emitted_after_req);
+	EXPECT_EQ(res.ope_list_after_req, 1u);
+	EXPECT_EQ(res.readerr_after_req, -FI_EAGAIN);
+
+	ASSERT_EQ(res.readerr_final, 1);
+	EXPECT_EQ(res.final_err, FI_ECANCELED);
+	EXPECT_EQ(res.final_prov_errno, efa_test_proto_peer_abort_prov_errno());
+	EXPECT_EQ(res.readerr_after_final, -FI_EAGAIN);
+	EXPECT_EQ(res.ope_list_final, 0u);
 }

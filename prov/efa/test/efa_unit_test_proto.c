@@ -2281,4 +2281,3 @@ void test_proto_runtread_construct_pkes_carries_read_iov(void **state)
 	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
 }
-

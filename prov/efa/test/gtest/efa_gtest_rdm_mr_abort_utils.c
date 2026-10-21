@@ -15,6 +15,7 @@
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
 
 static struct {
 	struct efa_rdm_ep *ep;

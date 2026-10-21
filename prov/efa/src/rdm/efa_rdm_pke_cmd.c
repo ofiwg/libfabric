@@ -99,20 +99,12 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
 		break;
@@ -155,20 +147,12 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS tagged RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
@@ -242,6 +226,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+		assert(pkt_entry->ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
