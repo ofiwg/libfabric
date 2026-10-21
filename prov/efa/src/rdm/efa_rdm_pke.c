@@ -150,6 +150,23 @@ void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 	ofi_buf_free(pkt_entry);
 }
 
+void efa_rdm_pke_reset_rnr_backoff(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_peer *peer = pkt_entry->peer;
+
+	assert(peer);
+	peer->rnr_backoff_wait_time = 0;
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
+		dlist_remove(&peer->rnr_backoff_entry);
+		peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
+	}
+	EFA_DBG(FI_LOG_EP_DATA,
+		"reset backoff timer for peer fi_addr: %" PRIu64
+		" implicit fi_addr: %" PRIu64 "\n",
+		efa_rdm_peer_fi_addr(peer),
+		efa_rdm_peer_implicit_fi_addr(peer));
+}
+
 /**
  * @brief release a packet entry used by an TX operation
  *
@@ -170,31 +187,16 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 	/*
 	 * Remove packet from double linked lists if it was inserted
 	 */
-	if (pkt_entry->flags & (EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS | EFA_RDM_PKE_IN_OPE_QUEUED_PKTS)) {
+	if (pkt_entry->flags & (EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS | EFA_RDM_PKE_IN_OPE_QUEUED_PKTS))
 		dlist_remove(&pkt_entry->entry);
-		pkt_entry->flags &= ~(EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS | EFA_RDM_PKE_IN_OPE_QUEUED_PKTS);
-	}
 
-	/*
-	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
-	 * we get a send completion for a retransmitted packet.
-	 */
-	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
+	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) &&
+	    (pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS)) {
 		assert(ep->efa_rnr_queued_pkt_cnt);
 		ep->efa_rnr_queued_pkt_cnt--;
 		peer = pkt_entry->peer;
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
-		peer->rnr_backoff_wait_time = 0;
-		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
-			dlist_remove(&peer->rnr_backoff_entry);
-			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
-		}
-		EFA_DBG(FI_LOG_EP_DATA,
-			"reset backoff timer for peer fi_addr: %" PRIu64
-			" implicit fi_addr: %" PRIu64 "\n",
-			efa_rdm_peer_fi_addr(pkt_entry->peer),
-			efa_rdm_peer_implicit_fi_addr(pkt_entry->peer));
 	}
 
 	efa_rdm_pke_release(pkt_entry);

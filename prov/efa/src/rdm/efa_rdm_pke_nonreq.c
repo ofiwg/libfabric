@@ -676,6 +676,10 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		return;
 	}
 
+	if (OFI_UNLIKELY(context_pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) &&
+	    context_pkt_entry->peer)
+		efa_rdm_pke_reset_rnr_backoff(context_pkt_entry);
+
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 
 	switch (rma_context_pkt->context_type) {
