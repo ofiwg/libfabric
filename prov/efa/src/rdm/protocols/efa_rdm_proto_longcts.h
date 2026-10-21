@@ -21,7 +21,4 @@ void efa_rdm_proto_longcts_handle_tx_pkes_posted(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_proto_longcts_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_proto_longcts_handle_ctsdata_send_completion(
-	struct efa_rdm_pke *pkt_entry);
-
 #endif /* _EFA_RDM_PROTO_LONGCTS_H */

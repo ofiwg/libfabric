@@ -297,27 +297,6 @@ ssize_t efa_rdm_proto_longcts_handle_rtm_send_completion(
 }
 
 /**
- * @brief Handle send completion for a long CTS CTSDATA packet.
- *
- * Shares the accounting with the REQ: both carry part of the same message on the
- * same txe, so whichever completes last completes the operation.
- */
-ssize_t efa_rdm_proto_longcts_handle_ctsdata_send_completion(
-	struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe = pkt_entry->ope;
-
-	assert(txe);
-	assert(txe->type == EFA_RDM_TXE);
-	assert(pkt_entry->payload_size > 0);
-
-	efa_rdm_proto_longcts_account_send_completion(pkt_entry, txe);
-
-	efa_rdm_pke_release_tx(pkt_entry);
-	return 0;
-}
-
-/**
  * @brief Build the single REQ packet the sender may send unsolicited.
  *
  * It carries as much of the head of the message as fits, plus the credit request
