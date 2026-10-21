@@ -570,6 +570,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 	pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	assert(peer);
+	peer->rnr_queued_pkt_cnt++;
 	if (!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 		dlist_insert_tail(&ope->queued_entry, &ep->ope_queued_list);
@@ -580,7 +581,6 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 		 * we are NOT going to put the peer in backoff mode just yet.
 		 */
 		pkt_entry->flags |= EFA_RDM_PKE_RNR_RETRANSMIT;
-		peer->rnr_queued_pkt_cnt++;
 		return;
 	}
 
@@ -825,9 +825,15 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		/* If send succeeded, pkt_entry->entry will be added
 		 * to peer->outstanding_tx_pkts. Therefore, it must
 		 * be removed from the list before send.
+		 *
+		 * The packet is leaving the RNR-queued list here, so drop its
+		 * contribution to the queued-packet counters now.
 		 */
 		dlist_remove(&pkt_entry->entry);
 		pkt_entry->flags &= ~EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+		ep->efa_rnr_queued_pkt_cnt--;
+		assert(pkt_entry->peer);
+		pkt_entry->peer->rnr_queued_pkt_cnt--;
 
 		switch (efa_rdm_pkt_type_of(pkt_entry)) {
 		case EFA_RDM_RMA_CONTEXT_PKT:
@@ -841,20 +847,20 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
-				/* add the pkt back to pkts, so it can be resent again */
+				/* add the pkt back to pkts, so it can be resent again.
+				 * Restore the queued-packet counters since the packet
+				 * is back in the RNR-queued list.
+				 */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
 				pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+				ep->efa_rnr_queued_pkt_cnt++;
+				pkt_entry->peer->rnr_queued_pkt_cnt++;
 			} else {
 				efa_rdm_pke_release_tx(pkt_entry);
 			}
 
 			return ret;
 		}
-
-		pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
-		ep->efa_rnr_queued_pkt_cnt--;
-		assert(pkt_entry->peer);
-		pkt_entry->peer->rnr_queued_pkt_cnt--;
 	}
 
 	return 0;

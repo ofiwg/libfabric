@@ -167,6 +167,8 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
+	bool was_rnr_queued = !!(pkt_entry->flags & EFA_RDM_PKE_IN_OPE_QUEUED_PKTS);
+
 	/*
 	 * Remove packet from double linked lists if it was inserted
 	 */
@@ -176,15 +178,20 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 	}
 
 	/*
-	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
-	 * we get a send completion for a retransmitted packet.
+	 * For a packet that had previously encountered RNR, clear the
+	 * retransmit marker and reset the peer's backoff state. If the packet
+	 * was still queued when released, also drop its contribution to the
+	 * RNR queued-packet counters
 	 */
 	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
-		assert(ep->efa_rnr_queued_pkt_cnt);
-		ep->efa_rnr_queued_pkt_cnt--;
+		pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
 		peer = pkt_entry->peer;
 		assert(peer);
-		peer->rnr_queued_pkt_cnt--;
+		if (was_rnr_queued) {
+			assert(ep->efa_rnr_queued_pkt_cnt);
+			ep->efa_rnr_queued_pkt_cnt--;
+			peer->rnr_queued_pkt_cnt--;
+		}
 		peer->rnr_backoff_wait_time = 0;
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 			dlist_remove(&peer->rnr_backoff_entry);

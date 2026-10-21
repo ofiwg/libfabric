@@ -66,10 +66,34 @@ void test_efa_rnr_queue_and_resend_impl(void **state, uint32_t op)
 	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
 	assert_true(efa_rdm_ep->needs_progress);
 	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
+	/* First RNR must NOT put the peer in backoff. */
+	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->flags & EFA_RDM_PEER_IN_BACKOFF, 0);
 
 	ret = efa_rdm_ep_post_queued_pkts(efa_rdm_ep, &txe->queued_pkts);
 	assert_int_equal(ret, 0);
-	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, 0);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
+	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
+	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 0);
+
+	/*
+	 * Simulate the reposted packet receiving RNR a second time. Because the
+	 * EFA_RDM_PKE_RNR_RETRANSMIT flag survived the repost, this second RNR
+	 * must now put the peer into backoff mode (exponential backoff). This
+	 * is the behavior documented in efa_rdm_ep_queue_rnr_pkt() ("The second
+	 * time RNR is encountered, the endpoint will put the peer in backoff
+	 * mode") and the regression this test guards against.
+	 */
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
+	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
+	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
+	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->flags & EFA_RDM_PEER_IN_BACKOFF,
+			 EFA_RDM_PEER_IN_BACKOFF);
+
+	/* Repost again and drive a successful send completion to clean up. */
+	ret = efa_rdm_ep_post_queued_pkts(efa_rdm_ep, &txe->queued_pkts);
+	assert_int_equal(ret, 0);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
 	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 0);
 
