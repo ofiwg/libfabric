@@ -916,7 +916,10 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		}
 	}
 
-	/* free every peer this endpoint created, then release the maps and pools */
+	/* free every peer this endpoint created, then release the maps and pools.
+	 * This must stay after the rx_pkt_list and ope_list sweeps above: they
+	 * empty every peer->rxe_list, so efa_rdm_peer_destruct cannot release
+	 * an unexpected packet that the sweep already released. */
 	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map, efa_rdm_ep,
 		       efa_rdm_ep_destroy_peer);
 	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
