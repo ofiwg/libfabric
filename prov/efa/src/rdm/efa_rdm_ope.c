@@ -2485,9 +2485,6 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 	if (!efa_rdm_pkt_type_is_req(pkt_type))
 		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
 
-	/* TODO: after the long CTS protocol is moved, verify that the long CTS
-	 * RTM packets that come from efa_rdm_ope_post_send_fallback are handled
-	 * correctly  */
 	if (ope->proto) {
 		assert(ope->type == EFA_RDM_TXE);
 		/* The proto post functions read txe->req_pkt_type, not pkt_type. */

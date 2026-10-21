@@ -268,6 +268,66 @@ int efa_test_runtread_construct_is_repeatable(
 	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
 	struct efa_test_proto_repeat_result *out);
 
+struct efa_test_proto_longcts_construct_result {
+	ssize_t ret;
+	int selected;
+	size_t pke_cnt;
+	int req_pkt_type;
+	int expected_req_pkt_type;
+	int handler_set;
+	int ope_set;
+	size_t payload_size;
+	uint64_t msg_length;
+	uint64_t total_len;
+	uint32_t send_id;
+	uint32_t tx_id;
+	uint32_t credit_request;
+	uint32_t expected_credit_request;
+};
+
+/** @brief Select long CTS, fill the txe and construct its REQ. */
+int efa_test_longcts_construct_builds_one_pke(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_longcts_construct_result *out);
+
+/**
+ * @brief Construct the long CTS REQ twice on one txe, running the post-send
+ * hook after each attempt.
+ */
+int efa_test_longcts_construct_is_repeatable(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_repeat_result *out);
+
+struct efa_test_proto_longcts_peer_abort_result {
+	size_t pke_cnt;
+	int handler_set;
+	int req_pkt_type;
+	int expected_req_pkt_type;
+	size_t payload_size;
+	uint64_t total_len;
+	int abort_pending_after_error;
+	int emitted_after_error;
+	ssize_t readerr_after_error;
+	int emitted_after_req;
+	size_t ope_list_after_req;
+	ssize_t readerr_after_req;
+	ssize_t readerr_final;
+	int final_err;
+	int final_prov_errno;
+	ssize_t readerr_after_final;
+	size_t ope_list_final;
+};
+
+/**
+ * @brief fi_send a long CTS message, cancel its source MR, complete the REQ
+ * successfully and then the PEER_ERROR_PKT. The caller must arm
+ * efa_qp_post_send.
+ */
+int efa_test_longcts_peer_abort_completes_txe_once(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain,
+	struct efa_test_proto_longcts_peer_abort_result *out);
+
 #ifdef __cplusplus
 }
 #endif

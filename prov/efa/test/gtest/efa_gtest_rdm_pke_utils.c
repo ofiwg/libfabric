@@ -687,6 +687,40 @@ static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
 		segment_offset, data_size);
 }
 
+static ssize_t efa_test_rtm_init_longcts(struct efa_rdm_pke *pkt_entry,
+					 struct efa_rdm_ope *txe,
+					 enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
+	size_t hdr_size, memory_alignment, rtm_payload_size;
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->credit_request = efa_env.tx_min_credits;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	memory_alignment = efa_rdm_ep_get_memory_alignment(txe->ep, FI_HMEM_SYSTEM);
+	rtm_payload_size =
+		(txe->ep->mtu_size - hdr_size) & ~(memory_alignment - 1);
+
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0,
+						 rtm_payload_size);
+}
+
 static ssize_t efa_test_rtm_init_longread(struct efa_rdm_pke *pkt_entry,
 					  struct efa_rdm_ope *txe,
 					  enum efa_test_rtm_variant variant)
@@ -827,16 +861,10 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 						   EFA_TEST_RTM_MEDIUM_DATA);
 		break;
 	case EFA_TEST_RTM_LONGCTS_MSG:
-		out->ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_LONGCTS_TAG:
-		out->ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_LONGCTS_MSG:
-		out->ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_LONGCTS_TAG:
-		out->ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_longcts(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_LONGREAD_MSG:
 	case EFA_TEST_RTM_LONGREAD_TAG:
@@ -997,7 +1025,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 								   txe);
 			break;
 		case EFA_TEST_RTM_FAM_LONGCTS:
-			efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+			efa_rdm_ep->send_pkt_entry_vec[0] = pkt_entry;
+			efa_rdm_ep->send_pkt_entry_vec_size = 1;
+			efa_rdm_proto_longcts_handle_req_posted(
+				efa_rdm_ep, txe);
 			break;
 		case EFA_TEST_RTM_FAM_LONGREAD:
 			efa_rdm_proto_longread_handle_tx_pkes_posted(efa_rdm_ep,
@@ -1059,7 +1090,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGCTS:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_longcts_handle_req_send_completion;
+		pkt_entry_released = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_RUNTREAD:
 		/* Also refactored; see the eager case above. */

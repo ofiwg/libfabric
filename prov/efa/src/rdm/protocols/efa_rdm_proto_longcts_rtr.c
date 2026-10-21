@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #include "efa_rdm_proto_longcts_rtr.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa.h"
 #include "efa_env.h"
 #include "efa_rdm_ep.h"

@@ -6,6 +6,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
+#include "protocols/efa_rdm_proto_longcts.h"
 
 void efa_unit_test_construct_msg(struct fi_msg *msg, struct iovec *iov,
 				 size_t iov_count, fi_addr_t addr,
