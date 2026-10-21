@@ -257,6 +257,14 @@ TEST_F(EfaRtmTxSentTest, eager_completion_single_shot)
 	EXPECT_TRUE(res.cq_has_completion);
 }
 
+/**
+ * @brief longcts "sent" publishes the REQ's segment rather than a running total
+ *
+ * The refactored long CTS protocol assigns bytes_sent from the one REQ it posts,
+ * so that a txe queued before the handshake and reposted cannot double count;
+ * the CTSDATA stream advances bytes_sent from there. Whatever bytes_sent held
+ * before the hook is therefore irrelevant to it.
+ */
 TEST_F(EfaRtmTxSentTest, longcts_sent_and_completion_boundary)
 {
 	struct efa_test_rtm_sent_result res;
@@ -265,7 +273,7 @@ TEST_F(EfaRtmTxSentTest, longcts_sent_and_completion_boundary)
 				EFA_TEST_RTM_LONGCTS_MSG, EFA_TEST_RTM_OP_SENT,
 				/*payload_size=*/kChunk,
 				/*bytes_already=*/kChunk, &res);
-	EXPECT_EQ(res.bytes_sent, 2 * kChunk);
+	EXPECT_EQ(res.bytes_sent, kChunk);
 
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_LONGCTS_MSG,

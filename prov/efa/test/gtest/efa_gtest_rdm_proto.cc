@@ -396,6 +396,8 @@ INSTANTIATE_TEST_SUITE_P(
 				    "runtread"},
 	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
 				    "longread"},
+	       EfaRdmProtoForceCase{"longcts_picks_longcts", "longcts", 64,
+				    "longcts"},
 	       /* A write protocol's name is not a send protocol's name. */
 	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
 				    nullptr},
