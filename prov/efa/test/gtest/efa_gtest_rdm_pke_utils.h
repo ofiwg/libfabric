@@ -251,6 +251,26 @@ void efa_test_selects_copy_method(struct fid_ep *ep, struct fid_av *av,
 size_t efa_test_get_max_gdrcopy_from_hmem_size(void);
 void efa_test_set_max_gdrcopy_from_hmem_size(size_t size);
 
+struct efa_test_av_remove_unexp_result {
+	int was_unexpected;
+	int unspec_unexp_queue_empty;
+	size_t unexp_pool_outstanding_before;
+	size_t unexp_pool_outstanding_queued;
+	size_t unexp_pool_outstanding_after;
+	size_t rx_pkts_held_before;
+	size_t rx_pkts_held_queued;
+	size_t rx_pkts_held_after;
+	size_t rx_pkts_to_post_queued;
+	size_t rx_pkts_to_post_after;
+	size_t ope_count_before;
+	size_t ope_count_queued;
+	size_t ope_count_after;
+};
+
+int efa_test_av_remove_releases_unexp_pkt(
+	struct fid_ep *ep, struct fid_av *av, fi_addr_t peer_addr,
+	int copy_unexp, struct efa_test_av_remove_unexp_result *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -77,3 +77,38 @@ TEST_F(EfaRdmPeerTest, failed_reorder_msg_overflow_releases_rx_pkt_and_entry)
 	EXPECT_EQ(to_post_after, to_post_before + 1);
 	EXPECT_EQ(overflow_free_after, overflow_free_before);
 }
+
+TEST_F(EfaRdmPeerTest, av_remove_releases_copied_unexp_pkt)
+{
+	struct efa_test_av_remove_unexp_result res = {};
+
+	ASSERT_EQ(efa_test_av_remove_releases_unexp_pkt(
+			  resource.ep, resource.av, peer_addr, 1, &res),
+		  0);
+	ASSERT_TRUE(res.was_unexpected);
+	EXPECT_EQ(res.unexp_pool_outstanding_queued,
+		  res.unexp_pool_outstanding_before + 1);
+	EXPECT_EQ(res.ope_count_queued, res.ope_count_before + 1);
+
+	EXPECT_EQ(res.unexp_pool_outstanding_after,
+		  res.unexp_pool_outstanding_before);
+	EXPECT_EQ(res.ope_count_after, res.ope_count_before);
+	EXPECT_TRUE(res.unspec_unexp_queue_empty);
+}
+
+TEST_F(EfaRdmPeerTest, av_remove_releases_held_unexp_pkt)
+{
+	struct efa_test_av_remove_unexp_result res = {};
+
+	ASSERT_EQ(efa_test_av_remove_releases_unexp_pkt(
+			  resource.ep, resource.av, peer_addr, 0, &res),
+		  0);
+	ASSERT_TRUE(res.was_unexpected);
+	EXPECT_EQ(res.rx_pkts_held_queued, res.rx_pkts_held_before + 1);
+	EXPECT_EQ(res.ope_count_queued, res.ope_count_before + 1);
+
+	EXPECT_EQ(res.rx_pkts_held_after, res.rx_pkts_held_before);
+	EXPECT_EQ(res.rx_pkts_to_post_after, res.rx_pkts_to_post_queued + 1);
+	EXPECT_EQ(res.ope_count_after, res.ope_count_before);
+	EXPECT_TRUE(res.unspec_unexp_queue_empty);
+}

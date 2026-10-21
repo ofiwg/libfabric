@@ -130,6 +130,24 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	dlist_foreach_container_safe(&peer->rxe_list,
 				     struct efa_rdm_ope,
 				     rxe, peer_entry, tmp) {
+		/* An unexpected rxe still owns the packets it was queued with,
+		 * and nothing else releases them once the peer is gone.
+		 * efa_rdm_rxe_release() then unlinks its util_srx entry.
+		 *
+		 * This only does work for fi_av_remove. At endpoint close
+		 * every rxe is gone from peer->rxe_list before any peer is
+		 * destroyed, so the debug rx_pkt_list sweep and this loop
+		 * never release the same packet:
+		 * 1. efa_rdm_ep_close releases the non-UNEXP rxes, and
+		 *    util_srx_close discards the UNEXP ones through
+		 *    efa_rdm_srx_discard, which releases unexp_pkt.
+		 * 2. efa_rdm_ep_destroy_buffer_pools sweeps rx_pkt_list
+		 *    (debug only), then releases every rxe left on ope_list.
+		 * 3. Only then does it destroy the peers. */
+		if (rxe->state == EFA_RDM_RXE_UNEXP && rxe->unexp_pkt) {
+			efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
+			rxe->unexp_pkt = NULL;
+		}
 		efa_rdm_rxe_release(rxe);
 	}
 
