@@ -604,6 +604,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) &&
+	    pkt_entry->peer)
+		efa_rdm_pke_reset_rnr_backoff(pkt_entry);
+
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 

@@ -97,18 +97,19 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	 * pkt_entry->ope is also set to NULL because the txe will be
 	 * released below via peer->txe_list, and the completion handler
 	 * must not dereference a freed ope.
-	 * For packets pending RNR retransmit, clear the flag and
-	 * decrement the RNR queued counters before nulling the peer
-	 * to prevent later dereference of a NULL peer pointer.
+	 * For packets pending RNR retransmit, clear the flag before nulling
+	 * the peer so a later (ignored) completion does not try to reset
+	 * backoff on a freed peer. Do NOT touch the RNR queued-packet
+	 * counters here: a packet sitting in outstanding_tx_pkts has already
+	 * been reposted out of the RNR queue by efa_rdm_ep_post_queued_pkts(),
+	 * which decremented the counters, so decrementing again would double
+	 * count. Packets still in an ope's queued_pkts list are accounted for
+	 * when those opes are released below (efa_rdm_pke_release_tx()).
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
 				pkt_entry, entry) {
-		if (pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) {
-			pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
-			ep->efa_rnr_queued_pkt_cnt--;
-			peer->rnr_queued_pkt_cnt--;
-		}
+		pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
 		pkt_entry->peer = NULL;
 		pkt_entry->ope = NULL;
 	}
