@@ -22,6 +22,17 @@ int efa_test_srx_dispatches_receive_callback(
 	struct fid_ep *ep, struct fid_av *av, int unexpected,
 	struct efa_test_srx_dispatch_result *out);
 
+struct efa_test_srx_directed_match_result {
+	int dir_recv;
+	int queues_empty;
+	void *posted_context[2];
+	void *matched_context[2];
+};
+
+int efa_test_srx_directed_match_honors_post_order(
+	struct fid_ep *ep, struct fid_av *av, int tagged,
+	struct efa_test_srx_directed_match_result *out);
+
 #ifdef __cplusplus
 }
 #endif
