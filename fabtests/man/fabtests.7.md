@@ -47,6 +47,10 @@ features of libfabric.
 *fi_cq_data*
 : Tranfers messages with CQ data.
 
+*fi_directed_recv*
+: Posts a mix of receives directed to the peer and from FI_ADDR_UNSPEC,
+  then checks that messages match them in the order they were posted.
+
 *fi_dgram*
 : A basic datagram endpoint example.
 
