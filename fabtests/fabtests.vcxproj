@@ -214,6 +214,7 @@
     <ClCompile Include="functional\recv_cancel.c" />
     <ClCompile Include="functional\shared_ctx.c" />
     <ClCompile Include="functional\unexpected_msg.c" />
+    <ClCompile Include="functional\directed_recv.c" />
     <ClCompile Include="multinode\src\core.c" />
     <ClCompile Include="multinode\src\core_coll.c" />
     <ClCompile Include="multinode\src\harness.c" />

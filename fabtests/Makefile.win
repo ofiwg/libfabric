@@ -85,7 +85,7 @@ functional: $(outdir)\av_xfer.exe $(outdir)\flood.exe $(outdir)\cm_data.exe $(ou
 	$(outdir)\rdm_atomic.exe $(outdir)\rdm_multi_client.exe $(outdir)\rdm_rma_event.exe \
 	$(outdir)\rdm_rma_trigger.exe $(outdir)\rdm_shared_av.exe $(outdir)\rdm_tagged_peek.exe \
 	$(outdir)\recv_cancel.exe $(outdir)\scalable_ep.exe $(outdir)\shared_ctx.exe \
-	$(outdir)\unexpected_msg.exe
+	$(outdir)\unexpected_msg.exe $(outdir)\directed_recv.exe
 
 unit: $(outdir)\av_test.exe $(outdir)\cntr_test.exe $(outdir)\cq_test.exe $(outdir)\dom_test.exe \
 	$(outdir)\eq_test.exe $(outdir)\getinfo_test.exe $(outdir)\mr_test.exe
@@ -165,6 +165,8 @@ $(outdir)\scalable_ep.exe: {functional}scalable_ep.c $(basedeps)
 $(outdir)\shared_ctx.exe: {functional}shared_ctx.c $(basedeps)
 
 $(outdir)\unexpected_msg.exe: {functional}unexpected_msg.c $(basedeps)
+
+$(outdir)\directed_recv.exe: {functional}directed_recv.c $(basedeps)
 
 
 $(outdir)\av_test.exe: {unit}av_test.c $(basedeps) {unit}common.c
