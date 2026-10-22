@@ -183,3 +183,31 @@ size_t efa_test_rdm_cq_implicit_av_count(struct fid_av *av)
 	/* implicit_av_size is the configured capacity, not the entry count */
 	return HASH_CNT(hh, rdm_av->util_av_implicit.hash);
 }
+
+struct efa_rdm_pke *efa_test_rdm_cq_alloc_rx_pke(struct fid_ep *ep_fid,
+						 uint64_t *wr_id)
+{
+	struct efa_rdm_ep *ep = efa_test_rdm_cq_ep(ep_fid);
+	struct efa_rdm_pke *pke;
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (pke)
+		*wr_id = (uint64_t) pke | (uint64_t) pke->gen;
+	return pke;
+}
+
+void efa_test_rdm_cq_bump_pke_gen(struct efa_rdm_pke *pke)
+{
+	pke->gen = (pke->gen + 1) & EFA_RDM_GEN_MASK;
+}
+
+struct efa_rdm_pke *efa_test_rdm_cq_lookup_wr_id(uint64_t wr_id)
+{
+	return efa_rdm_cq_get_pke_from_wr_id_solicited(wr_id);
+}
+
+void efa_test_rdm_cq_release_rx_pke(struct efa_rdm_pke *pke)
+{
+	efa_rdm_pke_release_rx(pke);
+}

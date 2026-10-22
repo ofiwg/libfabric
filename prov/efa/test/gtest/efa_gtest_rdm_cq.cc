@@ -178,3 +178,39 @@ TEST_F(EfaRdmCqRaceTest, raw_addr_lookup_under_locks_finds_racing_insert)
 
 	ASSERT_NO_FATAL_FAILURE(expect_peer_resolved_from_explicit_av());
 }
+
+class EfaRdmCqWrIdDeathTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	struct efa_rdm_pke *pke = nullptr;
+	uint64_t wr_id = 0;
+
+	void SetUp() override
+	{
+		efa_test_resource_construct(
+			&resource,
+			efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+		pke = efa_test_rdm_cq_alloc_rx_pke(resource.ep, &wr_id);
+		ASSERT_NE(pke, nullptr);
+	}
+
+	void TearDown() override
+	{
+		if (pke)
+			efa_test_rdm_cq_release_rx_pke(pke);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmCqWrIdDeathTest, current_generation_returns_pke)
+{
+	EXPECT_EQ(efa_test_rdm_cq_lookup_wr_id(wr_id), pke);
+}
+
+TEST_F(EfaRdmCqWrIdDeathTest, stale_generation_aborts)
+{
+	efa_test_rdm_cq_bump_pke_gen(pke);
+	EXPECT_DEATH(efa_test_rdm_cq_lookup_wr_id(wr_id), "stale or duplicated");
+}

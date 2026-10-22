@@ -105,6 +105,12 @@ void efa_test_rdm_cq_peer_state(struct fid_ep *ep, fi_addr_t addr,
 
 size_t efa_test_rdm_cq_implicit_av_count(struct fid_av *av);
 
+struct efa_rdm_pke *efa_test_rdm_cq_alloc_rx_pke(struct fid_ep *ep,
+						 uint64_t *wr_id);
+void efa_test_rdm_cq_bump_pke_gen(struct efa_rdm_pke *pke);
+struct efa_rdm_pke *efa_test_rdm_cq_lookup_wr_id(uint64_t wr_id);
+void efa_test_rdm_cq_release_rx_pke(struct efa_rdm_pke *pke);
+
 #ifdef __cplusplus
 }
 #endif
