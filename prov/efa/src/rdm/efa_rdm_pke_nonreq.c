@@ -12,6 +12,7 @@
 
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_rma.h"
+#include "protocols/efa_rdm_proto_longcts.h"
 #include "protocols/efa_rdm_proto_longcts_write.h"
 
 /* This file define functons for the following packet type:
@@ -750,35 +751,19 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 		if (OFI_UNLIKELY(err))
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
-	} else if (txe->op == ofi_op_tagged) {
-		EFA_INFO(FI_LOG_EP_CTRL,
-			 "Sender fallback to long CTS tagged "
-			 "protocol because memory registration limit "
-			 "was reached on the receiver\n");
-		txe->req_pkt_type = delivery_complete_requested ?
-				EFA_RDM_DC_LONGCTS_TAGRTM_PKT :
-				EFA_RDM_LONGCTS_TAGRTM_PKT;
-		/* Long CTS message is not migrated yet, so clear the protocol
-		 * and let efa_rdm_ope_post_ctrl() build it on the legacy path.
-		 * TODO: set proto = longcts_rtm during longcts_rtm implementation
-		 */
-		txe->proto = NULL;
-		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
-			 "Sender fallback to long CTS untagged "
+			 "Sender fallback to long CTS %s "
 			 "protocol because memory registration limit "
-			 "was reached on the receiver\n");
-		txe->req_pkt_type = delivery_complete_requested ?
-				EFA_RDM_DC_LONGCTS_MSGRTM_PKT :
-				EFA_RDM_LONGCTS_MSGRTM_PKT;
-		/* Long CTS message is not migrated yet, so clear the protocol
-		 * and let efa_rdm_ope_post_ctrl() build it on the legacy path.
-		 * TODO: set proto = longcts_rtm during longcts_rtm implementation
-		 */
-		txe->proto = NULL;
+			 "was reached on the receiver\n",
+			 (txe->op == ofi_op_tagged) ? "tagged" : "untagged");
+		/* Continue the message with the long CTS protocol. */
+		txe->req_pkt_type =
+			(delivery_complete_requested ?
+				 efa_rdm_proto_longcts.req_pkt_type_dc :
+				 efa_rdm_proto_longcts.req_pkt_type) +
+			efa_rdm_proto_get_tagged(txe);
+		txe->proto = &efa_rdm_proto_longcts;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 		if (OFI_UNLIKELY(err))
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);

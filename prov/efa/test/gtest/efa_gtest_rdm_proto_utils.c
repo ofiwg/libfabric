@@ -11,6 +11,7 @@
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_domain.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
@@ -1223,6 +1224,193 @@ int efa_test_longcts_peer_abort_completes_txe_once(
 	out->readerr_after_final = fi_cq_readerr(cq, &err_entry, 0);
 	out->ope_list_final = efa_test_proto_ope_list_count(ctx.ep);
 
+out:
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+int efa_test_longcts_read_nack_continues_in_api_path(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain, struct efa_test_proto_read_nack_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct fi_cq_data_entry cq_entry;
+	struct efa_rdm_pke *runt_pkes[EFA_TEST_PROTO_MAX_PKES];
+	struct efa_rdm_longcts_rtm_base_hdr *longcts_hdr;
+	struct efa_rdm_read_nack_hdr *nack_hdr;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_pke *nack_pke, *req_pke;
+	struct efa_rdm_ope *txe;
+	size_t i, rx_pkts_to_post;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, EFA_TEST_PROTO_RUNT_SIZE,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	err = fi_send(ep, ctx.buf, ctx.len, fi_mr_desc(ctx.mr), ctx.peer_addr,
+		      NULL);
+	if (err)
+		goto out;
+
+	out->runt_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->runt_pke_cnt < 1 ||
+	    out->runt_pke_cnt > EFA_TEST_PROTO_MAX_PKES) {
+		err = -FI_ETOOSMALL;
+		goto out;
+	}
+	for (i = 0; i < out->runt_pke_cnt; ++i)
+		runt_pkes[i] = ctx.ep->send_pkt_entry_vec[i];
+
+	txe = runt_pkes[0]->ope;
+	if (!txe) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+	out->runt_req_pkt_type = txe->req_pkt_type;
+	out->expected_runt_req_pkt_type = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	out->read_msg_counted_before =
+		!!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	out->bytes_sent_before = txe->bytes_sent;
+	out->bytes_runt = txe->bytes_runt;
+	out->total_len = txe->total_len;
+
+	nack_pke = efa_rdm_pke_alloc(ctx.ep, ctx.ep->efa_rx_pkt_pool,
+				     EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (!nack_pke) {
+		err = -FI_ENOMEM;
+		goto out;
+	}
+	nack_pke->peer = ctx.peer;
+	nack_hdr = (struct efa_rdm_read_nack_hdr *) nack_pke->wiredata;
+	nack_hdr->type = EFA_RDM_READ_NACK_PKT;
+	nack_hdr->send_id = txe->tx_id;
+
+	rx_pkts_to_post = ctx.ep->efa_rx_pkts_to_post;
+	efa_rdm_pke_handle_read_nack_recv(nack_pke);
+	ctx.ep->efa_rx_pkts_to_post = rx_pkts_to_post;
+
+	out->read_nack_flag = !!(txe->internal_flags & EFA_RDM_OPE_READ_NACK);
+	out->proto_is_longcts = txe->proto == &efa_rdm_proto_longcts;
+	out->req_pkt_type = txe->req_pkt_type;
+	out->expected_req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	out->read_msg_counted_after =
+		!!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	out->read_msg_in_flight_after =
+		efa_test_proto_read_msg_in_flight(ctx.ep);
+
+	out->req_pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->req_pke_cnt != 1) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+	req_pke = ctx.ep->send_pkt_entry_vec[0];
+	out->req_handler_set = req_pke->handle_pke ==
+			       &efa_rdm_proto_longcts_handle_req_send_completion;
+	out->req_ope_set = req_pke->ope == txe;
+	out->req_payload_size = req_pke->payload_size;
+	out->bytes_sent_after = txe->bytes_sent;
+
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(req_pke);
+	out->hdr_type = rtm_hdr->type;
+	out->hdr_read_nack_flag = !!(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
+	out->hdr_msg_id = rtm_hdr->msg_id;
+	out->msg_id = txe->msg_id;
+
+	longcts_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(req_pke);
+	out->hdr_msg_length = longcts_hdr->msg_length;
+	out->hdr_send_id = longcts_hdr->send_id;
+	out->tx_id = txe->tx_id;
+
+	for (i = 0; i < out->runt_pke_cnt; ++i) {
+		efa_rdm_ep_record_tx_op_completed(ctx.ep, runt_pkes[i]);
+		runt_pkes[i]->handle_pke(runt_pkes[i]);
+	}
+	efa_rdm_ep_record_tx_op_completed(ctx.ep, req_pke);
+	req_pke->handle_pke(req_pke);
+
+	out->ope_list_after_completions = efa_test_proto_ope_list_count(ctx.ep);
+	out->cq_read_after_completions =
+		efa_test_cq_read_staged_data_entry(cq, &cq_entry);
+
+	efa_rdm_txe_release(txe);
+out:
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
+int efa_test_longcts_read_nack_completion_skips_released_txe(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain,
+	struct efa_test_proto_read_nack_completion_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct fi_cq_data_entry cq_entry;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *txe;
+	uint64_t pke_send_flags;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 0, 0, 16, &ctx);
+	if (err)
+		return err;
+
+	iov.iov_base = ctx.buf;
+	iov.iov_len = ctx.len;
+	msg.addr = ctx.peer_addr;
+	msg.iov_count = 1;
+	msg.msg_iov = &iov;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+	efa_rdm_txe_construct(txe, ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, 0);
+	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->proto = &efa_rdm_proto_longcts;
+
+	out->ret = efa_rdm_proto_longcts_construct_req_pke(ctx.ep, txe,
+							   &pke_send_flags);
+	if (out->ret) {
+		efa_rdm_txe_release(txe);
+		goto out;
+	}
+
+	out->pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->pke_cnt != 1) {
+		efa_test_proto_release_send_pkes(ctx.ep);
+		efa_rdm_txe_release(txe);
+		err = -FI_EINVAL;
+		goto out;
+	}
+	pke = ctx.ep->send_pkt_entry_vec[0];
+	out->handler_set = pke->handle_pke ==
+			   &efa_rdm_proto_longcts_handle_req_send_completion;
+	out->payload_size = pke->payload_size;
+
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pke);
+	out->hdr_type = rtm_hdr->type;
+	out->expected_hdr_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	out->hdr_read_nack_flag = !!(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
+
+	txe->bytes_acked = txe->total_len;
+	txe->bytes_sent = txe->total_len;
+	efa_rdm_txe_release(txe);
+
+	pke->handle_pke(pke);
+
+	out->cq_read_after_completion =
+		efa_test_cq_read_staged_data_entry(cq, &cq_entry);
 out:
 	efa_test_proto_teardown_buf(&ctx);
 	return err;

@@ -328,6 +328,64 @@ int efa_test_longcts_peer_abort_completes_txe_once(
 	struct fid_domain *domain,
 	struct efa_test_proto_longcts_peer_abort_result *out);
 
+struct efa_test_proto_read_nack_result {
+	size_t runt_pke_cnt;
+	int runt_req_pkt_type;
+	int expected_runt_req_pkt_type;
+	int read_msg_counted_before;
+	uint64_t bytes_sent_before;
+	uint64_t bytes_runt;
+	uint64_t total_len;
+	int read_nack_flag;
+	int proto_is_longcts;
+	int req_pkt_type;
+	int expected_req_pkt_type;
+	int read_msg_counted_after;
+	int64_t read_msg_in_flight_after;
+	size_t req_pke_cnt;
+	int req_handler_set;
+	int req_ope_set;
+	size_t req_payload_size;
+	uint64_t bytes_sent_after;
+	int hdr_type;
+	int hdr_read_nack_flag;
+	uint32_t hdr_msg_id;
+	uint32_t msg_id;
+	uint64_t hdr_msg_length;
+	uint32_t hdr_send_id;
+	uint32_t tx_id;
+	size_t ope_list_after_completions;
+	ssize_t cq_read_after_completions;
+};
+
+/**
+ * @brief fi_send a runt read message, deliver a READ_NACK for it, and drain
+ * every send completion. The caller must arm efa_qp_post_send.
+ */
+int efa_test_longcts_read_nack_continues_in_api_path(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain, struct efa_test_proto_read_nack_result *out);
+
+struct efa_test_proto_read_nack_completion_result {
+	ssize_t ret;
+	size_t pke_cnt;
+	int handler_set;
+	size_t payload_size;
+	int hdr_type;
+	int expected_hdr_type;
+	int hdr_read_nack_flag;
+	ssize_t cq_read_after_completion;
+};
+
+/**
+ * @brief Construct a read NACK long CTS REQ, release its txe, then run the
+ * REQ's send completion callback.
+ */
+int efa_test_longcts_read_nack_completion_skips_released_txe(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain,
+	struct efa_test_proto_read_nack_completion_result *out);
+
 #ifdef __cplusplus
 }
 #endif

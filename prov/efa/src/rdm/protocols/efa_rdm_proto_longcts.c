@@ -148,7 +148,12 @@ void efa_rdm_proto_longcts_handle_req_posted(
 {
 	assert(ep->send_pkt_entry_vec_size == 1);
 
-	txe->bytes_sent = ep->send_pkt_entry_vec[0]->payload_size;
+	/* A read NACK REQ carries no data, so bytes_sent stays as it is. */
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
+		assert(ep->send_pkt_entry_vec[0]->payload_size == 0);
+	else
+		txe->bytes_sent = ep->send_pkt_entry_vec[0]->payload_size;
+
 	assert(txe->bytes_sent < txe->total_len);
 
 	/* Retry registering the source buffer so CTSDATA can send from it. */
@@ -187,6 +192,22 @@ ssize_t efa_rdm_proto_longcts_handle_req_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
+	int pkt_type;
+
+	/*
+	 * A read NACK REQ carries no data. Without delivery complete, it has
+	 * nothing to account, so release the packet without touching the txe.
+	 */
+	if (pkt_entry->payload_size == 0) {
+		assert(efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags &
+		       EFA_RDM_REQ_READ_NACK);
+		pkt_type = efa_rdm_pkt_type_of(pkt_entry);
+		if (pkt_type != efa_rdm_proto_longcts.req_pkt_type_dc &&
+		    pkt_type != efa_rdm_proto_longcts.req_pkt_type_tagged_dc) {
+			efa_rdm_pke_release_tx(pkt_entry);
+			return 0;
+		}
+	}
 
 	txe = pkt_entry->ope;
 	assert(txe);
@@ -201,6 +222,7 @@ ssize_t efa_rdm_proto_longcts_handle_req_send_completion(
  * @brief Build the long CTS REQ, filled with the start of the message.
  *
  * The rest of the message goes out as CTSDATA packets after the receiver's CTS.
+ * A read NACK REQ carries no data.
  */
 int efa_rdm_proto_longcts_construct_req_pke(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *txe,
@@ -235,15 +257,22 @@ int efa_rdm_proto_longcts_construct_req_pke(struct efa_rdm_ep *ep,
 	rtm_hdr->send_id = txe->tx_id;
 	rtm_hdr->credit_request = efa_env.tx_min_credits;
 
-	/* Fill the rest of the packet with as much aligned payload as fits. */
 	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
-	iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
-			       FI_HMEM_SYSTEM;
-	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
-	rtm_payload_size = (ep->mtu_size - hdr_size) & ~(memory_alignment - 1);
-	assert(rtm_payload_size > 0);
-	/* The REQ holds only part of the message. */
-	assert(rtm_payload_size < txe->total_len);
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK) {
+		/* A read NACK REQ continues a transfer and carries no data. */
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_READ_NACK;
+		rtm_payload_size = 0;
+	} else {
+		/* Fill the packet with as much aligned payload as fits. */
+		iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
+				       FI_HMEM_SYSTEM;
+		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
+		rtm_payload_size = (ep->mtu_size - hdr_size) &
+				   ~(memory_alignment - 1);
+		assert(rtm_payload_size > 0);
+		/* The REQ holds only part of the message. */
+		assert(rtm_payload_size < txe->total_len);
+	}
 
 	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0,
 						rtm_payload_size);
