@@ -76,7 +76,7 @@ It is passed to \f[CR]fi_xpu_ctx()\f[R] during context creation.
                  uint64_t alignment, uint64_t flags,
                  void **addr, int *fd, uint64_t *offset);
     int (*import)(uint64_t device, void *host_addr,
-                  uint64_t size, uint64_t flags,
+                  uint64_t size, int fd, uint64_t flags,
                   void **dev_addr);
     int (*unimport)(uint64_t device, void *host_addr);
     void (*free)(uint64_t device, void *addr);
@@ -125,9 +125,14 @@ to the memory.
 Map a host virtual address into the XPU address space.
 The provider calls this when it has a host\-side address (BAR MMIO or
 host RAM) that the XPU kernel needs to access.
-Flags indicate the memory type: \f[CR]FI_XPU_IMPORT_IOMEMORY\f[R] for
-PCIe BAR MMIO regions, \f[CR]FI_XPU_IMPORT_DEVICEMAP\f[R] for addresses
-that must be accessible from XPU kernels.
+If the \f[CR]FI_XPU_IMPORT_DMABUF\f[R] flag is set, the provider must
+also pass a DMA\-BUF file descriptor that the consumer can use to set up
+the mapping.
+This is used for consumers that can only import certain address types
+(e.g.\ MMIO) as a DMA\-BUF object.
+Other flags indicate the memory type: \f[CR]FI_XPU_IMPORT_IOMEMORY\f[R]
+for PCIe BAR MMIO regions, \f[CR]FI_XPU_IMPORT_DEVICEMAP\f[R] for
+addresses that must be accessible from XPU kernels.
 .TP
 \f[I]unimport\f[R]
 Release a mapping made by import.
@@ -150,6 +155,11 @@ Indicates the host address points to PCIe BAR MMIO (device I/O memory).
 \f[I]FI_XPU_IMPORT_DEVICEMAP\f[R]
 Passed to the import callback.
 Indicates the resulting pointer must be accessible from XPU kernel code.
+.TP
+\f[I]FI_XPU_IMPORT_DMABUF\f[R]
+Passed to the import callback.
+Indicates the host address has been exported as a DMA\-BUF fd passed via
+the \f[I]fd\f[R] parameter.
 .SH fi_xpu_ctx_attr
 The \f[CR]fi_xpu_ctx_attr\f[R] structure is returned by
 \f[CR]fi_xpu_ctx_query()\f[R].
