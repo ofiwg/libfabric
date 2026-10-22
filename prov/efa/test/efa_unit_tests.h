@@ -578,7 +578,6 @@ void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read(void **state);
 void test_efa_rdm_pke_copy_payload_neuron_rdma_read_error(void **state);
 void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state);
 void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state);
-void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state);
 void test_efa_rdm_pke_release_rx_list(void **state);
 void test_efa_rdm_pke_alloc_rta_rxe(void **state);
 void test_efa_rdm_pke_alloc_rtw_rxe(void **state);

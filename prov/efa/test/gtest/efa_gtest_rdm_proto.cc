@@ -10,6 +10,8 @@
 #include <rdma/fi_errno.h>
 #include <string>
 
+using testing::DoAll;
+using testing::InvokeWithoutArgs;
 using testing::Return;
 using testing::StrictMock;
 using testing::Test;
@@ -661,4 +663,103 @@ TEST_F(EfaRdmProtoLongctsTest, longcts_peer_abort_completes_txe_once)
 	EXPECT_EQ(res.final_prov_errno, efa_test_proto_peer_abort_prov_errno());
 	EXPECT_EQ(res.readerr_after_final, -FI_EAGAIN);
 	EXPECT_EQ(res.ope_list_final, 0u);
+}
+
+class EfaRdmProtoReadNackReqTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+	}
+
+	void TearDown() override
+	{
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmProtoReadNackReqTest, longcts_read_nack_completion_skips_released_txe)
+{
+	struct efa_test_proto_read_nack_completion_result res = {};
+
+	ASSERT_EQ(efa_test_longcts_read_nack_completion_skips_released_txe(
+			  resource.ep, resource.av, resource.cq,
+			  resource.domain, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	ASSERT_EQ(res.pke_cnt, 1u);
+	EXPECT_TRUE(res.handler_set);
+	EXPECT_EQ(res.payload_size, 0u);
+	EXPECT_EQ(res.hdr_type, res.expected_hdr_type);
+	EXPECT_TRUE(res.hdr_read_nack_flag);
+	EXPECT_EQ(res.cq_read_after_completion, -FI_EAGAIN);
+}
+
+class EfaRdmProtoReadNackTest : public EfaRdmProtoReadTest
+{
+	protected:
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		EfaRdmProtoReadTest::SetUp();
+		if (IsSkipped() || HasFatalFailure())
+			return;
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		EfaRdmProtoReadTest::TearDown();
+	}
+};
+
+TEST_F(EfaRdmProtoReadNackTest, longcts_read_nack_continues_in_api_path)
+{
+	struct efa_test_proto_read_nack_result res = {};
+	size_t posts = 0;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillRepeatedly(DoAll(InvokeWithoutArgs([&posts]() { ++posts; }),
+				      Return(0)));
+
+	ASSERT_EQ(efa_test_longcts_read_nack_continues_in_api_path(
+			  resource.ep, resource.av, resource.cq,
+			  resource.domain, &res),
+		  0);
+	ASSERT_GT(res.runt_pke_cnt, 1u);
+	EXPECT_EQ(res.runt_req_pkt_type, res.expected_runt_req_pkt_type);
+	EXPECT_TRUE(res.read_msg_counted_before);
+	EXPECT_EQ(res.bytes_sent_before, res.bytes_runt);
+	EXPECT_LT(res.bytes_sent_before, res.total_len);
+
+	EXPECT_TRUE(res.read_nack_flag);
+	EXPECT_TRUE(res.proto_is_longcts);
+	EXPECT_EQ(res.req_pkt_type, res.expected_req_pkt_type);
+	EXPECT_FALSE(res.read_msg_counted_after);
+	EXPECT_EQ(res.read_msg_in_flight_after, 0);
+
+	ASSERT_EQ(res.req_pke_cnt, 1u);
+	EXPECT_TRUE(res.req_handler_set);
+	EXPECT_TRUE(res.req_ope_set);
+	EXPECT_EQ(res.req_payload_size, 0u);
+	EXPECT_EQ(res.bytes_sent_after, res.bytes_sent_before);
+
+	EXPECT_EQ(res.hdr_type, res.expected_req_pkt_type);
+	EXPECT_TRUE(res.hdr_read_nack_flag);
+	EXPECT_EQ(res.hdr_msg_id, res.msg_id);
+	EXPECT_EQ(res.hdr_msg_length, res.total_len);
+	EXPECT_EQ(res.hdr_send_id, res.tx_id);
+
+	EXPECT_EQ(res.ope_list_after_completions, 1u);
+	EXPECT_EQ(res.cq_read_after_completions, -FI_EAGAIN);
+	EXPECT_EQ(posts, res.runt_pke_cnt + 1);
 }

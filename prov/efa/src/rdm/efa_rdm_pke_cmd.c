@@ -99,14 +99,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -147,14 +141,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -226,8 +214,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		assert(pkt_entry->ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -647,7 +634,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -680,24 +667,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* For DC packets, use efa_outstanding_tx_ops to track TX completions
-		 * instead of bytes_acked to avoid issues with unset payload_size.
-		 * Note: efa_rdm_ep_record_tx_op_completed() above decrements efa_outstanding_tx_ops,
-		 * so this check must come after that call.
-		 * Only release TXE when both TX ops complete and receipt is received.
-		 */
-		efa_rdm_pke_assert_ope_valid(pkt_entry);
-		/*
-		 * A DC transfer aborting on source-MR cancel never receives its
-		 * RECEIPT, so the ready-for-release check stays false. Take the
-		 * deferred PEER_ERROR_PKT decision instead. Guarded by PENDING,
-		 * which is only ever set on a peer-aborting txe, so healthy DC
-		 * ops are untouched.
-		 */
-		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
-			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
-		else if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_READ_NACK_PKT:
 		/* no action needed for NACK packet */
