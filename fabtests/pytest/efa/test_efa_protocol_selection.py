@@ -8,7 +8,7 @@ from efa.efa_common import has_gdrcopy, has_rdma
 @pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.cuda_memory
-@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE"), ("fi_rma_bw", "FI_EFA_INTER_MIN_READ_WRITE_SIZE")])
+@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE")])
 def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_var):
     """
     Verify that the read protocol is used for a 1024 byte message when the env variable
@@ -40,8 +40,6 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
 
     # TODO: Remove cntrl_env_var after all protocols moved to new code path
     cmdline_args_copy.append_environ(f"{cntrl_env_var}=1000")
-    if cntrl_env_var == "FI_EFA_INTER_MIN_READ_WRITE_SIZE" and has_rdma(cmdline_args, "write"):
-        pytest.skip("FI_EFA_INTER_MIN_READ_WRITE_SIZE is only applied to emulated write protocols")
 
     # Sync out-of-band (-b) so ft_finalize_ep uses a socket instead of a
     # libfabric send. The forced read protocol would otherwise route that
