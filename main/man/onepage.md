@@ -4807,32 +4807,31 @@ order in which the calls to fi_av_insert were made. The only guarantee
 is that all error completions for a given call to fi_av_insert will
 precede the single associated non-error completion.
 
--   
+- 
 
-    *FI_READ*
-    :   Opens an AV for read-only access. An AV opened for read-only
-        access must be named (name attribute specified), and the AV must
-        exist.
+  *FI_READ*
+  :   Opens an AV for read-only access. An AV opened for read-only
+      access must be named (name attribute specified), and the AV must
+      exist.
 
--   
+- 
 
-    *FI_SYMMETRIC*
-    :   Indicates that each node will be associated with the same number
-        of endpoints, the same transport addresses will be allocated on
-        each node, and the transport addresses will be sequential. This
-        feature targets distributed applications on large fabrics and
-        allows for highly-optimized storage of remote endpoint
-        addressing.
+  *FI_SYMMETRIC*
+  :   Indicates that each node will be associated with the same number
+      of endpoints, the same transport addresses will be allocated on
+      each node, and the transport addresses will be sequential. This
+      feature targets distributed applications on large fabrics and
+      allows for highly-optimized storage of remote endpoint addressing.
 
--   
+- 
 
-    *FI_AV_USER_ID*
-    :   Indicates that the user will be associating user-defined IDs
-        with a address vector via fi_av_set_user_id. If the domain has
-        been configured with FI_AV_AUTH_KEY or the user requires
-        FI_AV_USER_ID support, using the FI_AV_USER_ID flag per
-        fi_av_insert / fi_av_insertsvc / fi_av_remove is not supported.
-        fi_av_set_user_id must be used.
+  *FI_AV_USER_ID*
+  :   Indicates that the user will be associating user-defined IDs with
+      a address vector via fi_av_set_user_id. If the domain has been
+      configured with FI_AV_AUTH_KEY or the user requires FI_AV_USER_ID
+      support, using the FI_AV_USER_ID flag per fi_av_insert /
+      fi_av_insertsvc / fi_av_remove is not supported. fi_av_set_user_id
+      must be used.
 
 ## fi_close
 
@@ -4952,26 +4951,26 @@ with FI_AV_AUTH_KEY.
 With libfabric 1.20, users are encouraged to specify the FI_AV_USER_ID
 when opening an AV and use fi_av_set_user_id.
 
--   
+- 
 
-    *FI_AUTH_KEY*
-    :   Denotes that the address being inserted should be associated
-        with the passed in authorization key fi_addr_t.
+  *FI_AUTH_KEY*
+  :   Denotes that the address being inserted should be associated with
+      the passed in authorization key fi_addr_t.
 
-    See the user ID section below.
+  See the user ID section below.
 
--   
+- 
 
-    *FI_FIREWALL_ADDR*
-    :   This flag indicates that the address is behind a firewall and
-        outgoing connections are not allowed. If there is not an
-        existing connection and the provider is unable to circumvent the
-        firewall, an FI_EFIREWALLADDR error should be expected. If
-        multiple addresses are being inserted simultaneously, the flag
-        applies to all of them. Additionally, it is possible that a
-        connection is available at insertion time, but is later torn
-        down. Future reconnects triggered by operations on the ep
-        (fi_send, for example) may also fail with the same error.
+  *FI_FIREWALL_ADDR*
+  :   This flag indicates that the address is behind a firewall and
+      outgoing connections are not allowed. If there is not an existing
+      connection and the provider is unable to circumvent the firewall,
+      an FI_EFIREWALLADDR error should be expected. If multiple
+      addresses are being inserted simultaneously, the flag applies to
+      all of them. Additionally, it is possible that a connection is
+      available at insertion time, but is later torn down. Future
+      reconnects triggered by operations on the ep (fi_send, for
+      example) may also fail with the same error.
 
 ## fi_av_insertsvc
 
@@ -5060,7 +5059,7 @@ raw address usable by the XPU when posting work requests. The size of
 the returned data is av_addr_size from fi_xpu_ctx_query. When called
 without FI_XPU (flags = 0, ctx = NULL), the call behaves identically to
 fi_av_lookup. The caller allocates buf and sets *len to the buffer size
-on input; on output *len is set to the number of bytes written.
+on input; on output* len is set to the number of bytes written.
 
 The AV is not bound to an XPU context --- it remains a host-only,
 domain-level resource. The same AV can be queried with different XPU
@@ -6954,11 +6953,11 @@ struct fi_cq_entry {
 };
 ```
 
--   
+- 
 
-    *FI_CQ_FORMAT_MSG*
-    :   Provides minimal data for processing completions, with expanded
-        support for reporting information about received messages.
+  *FI_CQ_FORMAT_MSG*
+  :   Provides minimal data for processing completions, with expanded
+      support for reporting information about received messages.
 
 ``` c
 struct fi_cq_msg_entry {
@@ -6968,12 +6967,12 @@ struct fi_cq_msg_entry {
 };
 ```
 
--   
+- 
 
-    *FI_CQ_FORMAT_DATA*
-    :   Provides data associated with a completion. Includes support for
-        received message length, remote CQ data, and multi-receive
-        buffers.
+  *FI_CQ_FORMAT_DATA*
+  :   Provides data associated with a completion. Includes support for
+      received message length, remote CQ data, and multi-receive
+      buffers.
 
 ``` c
 struct fi_cq_data_entry {
@@ -6985,11 +6984,11 @@ struct fi_cq_data_entry {
 };
 ```
 
--   
+- 
 
-    *FI_CQ_FORMAT_TAGGED*
-    :   Expands completion data to include support for the tagged
-        message interfaces.
+  *FI_CQ_FORMAT_TAGGED*
+  :   Expands completion data to include support for the tagged message
+      interfaces.
 
 ``` c
 struct fi_cq_tagged_entry {
@@ -7628,11 +7627,11 @@ Often, target processes do not explicitly state a desired completion
 semantic and instead rely on the default semantic. The default behavior
 is based on several factors, including:
 
--   whether a completion even is generated at the target
--   the type of transfer involved (e.g. msg vs RMA)
--   endpoint data and message ordering guarantees
--   properties of the targeted memory buffer
--   the initiator's specified completion semantic
+- whether a completion even is generated at the target
+- the type of transfer involved (e.g. msg vs RMA)
+- endpoint data and message ordering guarantees
+- properties of the targeted memory buffer
+- the initiator's specified completion semantic
 
 Broadly, target completion semantics are grouped based on whether or not
 the transfer generates a completion event at the target. This includes
@@ -7671,31 +7670,30 @@ inclusive of all options, but defines common uses. In the descriptions
 below, the first transfer does not result in a completion event at the
 target, but is eventually followed by a transfer which does.
 
--   If the endpoint guarantees message ordering between two transfers,
-    the target completion of a second transfer will indicate that the
-    data from the first transfer is available. For example, if the
-    endpoint supports send after write ordering (FI_ORDER_SAW), then a
-    receive completion corresponding to the send will indicate that the
-    write data is available. This holds independent of the initiator's
-    completion semantic for either the write or send. When ordering is
-    guaranteed, the second transfer can be queued with the provider
-    immediately after queuing the first.
+- If the endpoint guarantees message ordering between two transfers, the
+  target completion of a second transfer will indicate that the data
+  from the first transfer is available. For example, if the endpoint
+  supports send after write ordering (FI_ORDER_SAW), then a receive
+  completion corresponding to the send will indicate that the write data
+  is available. This holds independent of the initiator's completion
+  semantic for either the write or send. When ordering is guaranteed,
+  the second transfer can be queued with the provider immediately after
+  queuing the first.
 
--   If the endpoint does not guarantee message ordering, the initiator
-    must take additional steps to ensure visibility. If initiator
-    requests FI_DELIVERY_COMPLETE semantics for the first operation, the
-    initiator can wait for the operation to complete locally. Once the
-    completion has been read, the target completion of a second transfer
-    will indicate that the first transfer's data is visible.
+- If the endpoint does not guarantee message ordering, the initiator
+  must take additional steps to ensure visibility. If initiator requests
+  FI_DELIVERY_COMPLETE semantics for the first operation, the initiator
+  can wait for the operation to complete locally. Once the completion
+  has been read, the target completion of a second transfer will
+  indicate that the first transfer's data is visible.
 
--   Alternatively, if message ordering is not guaranteed by the
-    endpoint, the initiator can use the FI_FENCE and
-    FI_DELIVERY_COMPLETE flags on the second data transfer to force the
-    first transfers to meet the FI_DELIVERY_COMPLETE semantics. If the
-    second transfer generates a completion at the target, that will
-    indicate that the data is visible. Otherwise, a target completion
-    for any transfer after the fenced operation will indicate that the
-    data is visible.
+- Alternatively, if message ordering is not guaranteed by the endpoint,
+  the initiator can use the FI_FENCE and FI_DELIVERY_COMPLETE flags on
+  the second data transfer to force the first transfers to meet the
+  FI_DELIVERY_COMPLETE semantics. If the second transfer generates a
+  completion at the target, that will indicate that the data is visible.
+  Otherwise, a target completion for any transfer after the fenced
+  operation will indicate that the data is visible.
 
 The above semantics apply for transfers targeting traditional host
 memory buffers. However, the behavior may differ when device memory
@@ -9329,186 +9327,178 @@ The following option levels and option names and parameters are defined.
 
 *FI_OPT_ENDPOINT*
 
--   
+- 
 
-    *FI_OPT_CM_DATA_SIZE - size_t*
-    :   Defines the size of available space in CM messages for
-        user-defined data. This value limits the amount of data that
-        applications can exchange between peer endpoints using the
-        fi_connect, fi_accept, and fi_reject operations. The size
-        returned is dependent upon the properties of the endpoint,
-        except in the case of passive endpoints, in which the size
-        reflects the maximum size of the data that may be present as
-        part of a connection request event. This option is read only.
+  *FI_OPT_CM_DATA_SIZE - size_t*
+  :   Defines the size of available space in CM messages for
+      user-defined data. This value limits the amount of data that
+      applications can exchange between peer endpoints using the
+      fi_connect, fi_accept, and fi_reject operations. The size returned
+      is dependent upon the properties of the endpoint, except in the
+      case of passive endpoints, in which the size reflects the maximum
+      size of the data that may be present as part of a connection
+      request event. This option is read only.
 
--   
+- 
 
-    *FI_OPT_MIN_MULTI_RECV - size_t*
-    :   Defines the minimum receive buffer space available below which
-        the receive buffer is released by the provider (see
-        FI_MULTI_RECV). Modifying this value is only guaranteed to set
-        the minimum buffer space needed on receives posted after the
-        value has been changed. It is recommended that applications that
-        want to override the default MIN_MULTI_RECV value set this
-        option before enabling the corresponding endpoint.
+  *FI_OPT_MIN_MULTI_RECV - size_t*
+  :   Defines the minimum receive buffer space available below which the
+      receive buffer is released by the provider (see FI_MULTI_RECV).
+      Modifying this value is only guaranteed to set the minimum buffer
+      space needed on receives posted after the value has been changed.
+      It is recommended that applications that want to override the
+      default MIN_MULTI_RECV value set this option before enabling the
+      corresponding endpoint.
 
--   
+- 
 
-    *FI_OPT_FI_HMEM_P2P - int*
-    :   Defines how the provider should handle peer to peer FI_HMEM
-        transfers for this endpoint. By default, the provider will chose
-        whether to use peer to peer support based on the type of
-        transfer (FI_HMEM_P2P_ENABLED). Valid values defined in
-        fi_endpoint.h are:
-        -   FI_HMEM_P2P_ENABLED: Peer to peer support may be used by the
-            provider to handle FI_HMEM transfers, and which transfers
-            are initiated using peer to peer is subject to the provider
-            implementation.
-        -   FI_HMEM_P2P_REQUIRED: Peer to peer support must be used for
-            transfers, transfers that cannot be performed using p2p will
-            be reported as failing.
-        -   FI_HMEM_P2P_PREFERRED: Peer to peer support should be used
-            by the provider for all transfers if available, but the
-            provider may choose to copy the data to initiate the
-            transfer if peer to peer support is unavailable.
-        -   FI_HMEM_P2P_DISABLED: Peer to peer support should not be
-            used.
+  *FI_OPT_FI_HMEM_P2P - int*
+  :   Defines how the provider should handle peer to peer FI_HMEM
+      transfers for this endpoint. By default, the provider will chose
+      whether to use peer to peer support based on the type of transfer
+      (FI_HMEM_P2P_ENABLED). Valid values defined in fi_endpoint.h are:
+      - FI_HMEM_P2P_ENABLED: Peer to peer support may be used by the
+        provider to handle FI_HMEM transfers, and which transfers are
+        initiated using peer to peer is subject to the provider
+        implementation.
+      - FI_HMEM_P2P_REQUIRED: Peer to peer support must be used for
+        transfers, transfers that cannot be performed using p2p will be
+        reported as failing.
+      - FI_HMEM_P2P_PREFERRED: Peer to peer support should be used by
+        the provider for all transfers if available, but the provider
+        may choose to copy the data to initiate the transfer if peer to
+        peer support is unavailable.
+      - FI_HMEM_P2P_DISABLED: Peer to peer support should not be used.
 
-    fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot
-    be supported by the provider. The FI_HMEM_DISABLE_P2P environment
-    variable discussed in [`fi_mr`(3)](fi_mr.3.html) takes precedence
-    over this setopt option.
+  fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be
+  supported by the provider. The FI_HMEM_DISABLE_P2P environment
+  variable discussed in [`fi_mr`(3)](fi_mr.3.html) takes precedence over
+  this setopt option.
 
--   
+- 
 
-    *FI_OPT_CUDA_API_PERMITTED - bool*
-    :   This option only applies to the fi_setopt call. It is used to
-        control endpoint's behavior in making calls to CUDA API. By
-        default, an endpoint is permitted to call CUDA API. If user wish
-        to prohibit an endpoint from making such calls, user can achieve
-        that by set this option to false. If an endpoint's support of
-        CUDA memory relies on making calls to CUDA API, it will return
-        -FI_EOPNOTSUPP for the call to fi_setopt. If either CUDA library
-        or CUDA device is not available, endpoint will return
-        -FI_EINVAL. All providers that support FI_HMEM capability
-        implement this option.
+  *FI_OPT_CUDA_API_PERMITTED - bool*
+  :   This option only applies to the fi_setopt call. It is used to
+      control endpoint's behavior in making calls to CUDA API. By
+      default, an endpoint is permitted to call CUDA API. If user wish
+      to prohibit an endpoint from making such calls, user can achieve
+      that by set this option to false. If an endpoint's support of CUDA
+      memory relies on making calls to CUDA API, it will return
+      -FI_EOPNOTSUPP for the call to fi_setopt. If either CUDA library
+      or CUDA device is not available, endpoint will return -FI_EINVAL.
+      All providers that support FI_HMEM capability implement this
+      option.
 
--   
+- 
 
-    *FI_OPT_SHARED_MEMORY_PERMITTED - bool*
-    :   This option only applies to the fi_setopt call. This option
-        controls the use of shared memory for intra-node communication.
-        Setting it to true will allow the use of shared memory. When set
-        to false, shared memory will not be used and the implementation
-        of intra-node communication is provider dependent.
+  *FI_OPT_SHARED_MEMORY_PERMITTED - bool*
+  :   This option only applies to the fi_setopt call. This option
+      controls the use of shared memory for intra-node communication.
+      Setting it to true will allow the use of shared memory. When set
+      to false, shared memory will not be used and the implementation of
+      intra-node communication is provider dependent.
 
--   
+- 
 
-    *FI_OPT_MAX_MSG_SIZE - size_t*
-    :   Define the maximum message size that can be transferred by the
-        endpoint in a single untagged message. The size is limited by
-        the endpoint's configuration and the provider's capabilities,
-        and must be less than or equal to `ep_attr->max_msg_size`.
-        Providers that don't support this option will return
-        -FI_ENOPROTOOPT. In that case, `ep_attr->max_msg_size` should be
-        used.
+  *FI_OPT_MAX_MSG_SIZE - size_t*
+  :   Define the maximum message size that can be transferred by the
+      endpoint in a single untagged message. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `ep_attr->max_msg_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `ep_attr->max_msg_size` should be used.
 
--   
+- 
 
-    *FI_OPT_MAX_TAGGED_SIZE - size_t*
-    :   Define the maximum message size that can be transferred by the
-        endpoint in a single tagged message. The size is limited by the
-        endpoint's configuration and the provider's capabilities, and
-        must be less than or equal to `ep_attr->max_msg_size`. Providers
-        that don't support this option will return -FI_ENOPROTOOPT. In
-        that case, `ep_attr->max_msg_size` should be used.
+  *FI_OPT_MAX_TAGGED_SIZE - size_t*
+  :   Define the maximum message size that can be transferred by the
+      endpoint in a single tagged message. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `ep_attr->max_msg_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `ep_attr->max_msg_size` should be used.
 
--   
+- 
 
-    *FI_OPT_MAX_RMA_SIZE - size_t*
-    :   Define the maximum message size that can be transferred by the
-        endpoint via a single RMA operation. The size is limited by the
-        endpoint's configuration and the provider's capabilities, and
-        must be less than or equal to `ep_attr->max_msg_size`. Providers
-        that don't support this option will return -FI_ENOPROTOOPT. In
-        that case, `ep_attr->max_msg_size` should be used.
+  *FI_OPT_MAX_RMA_SIZE - size_t*
+  :   Define the maximum message size that can be transferred by the
+      endpoint via a single RMA operation. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `ep_attr->max_msg_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `ep_attr->max_msg_size` should be used.
 
--   
+- 
 
-    *FI_OPT_MAX_ATOMIC_SIZE - size_t*
-    :   Define the maximum data size that can be transferred by the
-        endpoint via a single atomic operation. The size is limited by
-        the endpoint's configuration and the provider's capabilities,
-        and must be less than or equal to `ep_attr->max_msg_size`.
-        Providers that don't support this option will return
-        -FI_ENOPROTOOPT. In that case, `ep_attr->max_msg_size` should be
-        used.
+  *FI_OPT_MAX_ATOMIC_SIZE - size_t*
+  :   Define the maximum data size that can be transferred by the
+      endpoint via a single atomic operation. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `ep_attr->max_msg_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `ep_attr->max_msg_size` should be used.
 
--   
+- 
 
-    *FI_OPT_INJECT_MSG_SIZE - size_t*
-    :   Define the maximum message size that can be injected by the
-        endpoint in a single untagged message. The size is limited by
-        the endpoint's configuration and the provider's capabilities,
-        and must be less than or equal to `tx_attr->inject_size`.
-        Providers that don't support this option will return
-        -FI_ENOPROTOOPT. In that case, `tx_attr->inject_size` should be
-        used.
+  *FI_OPT_INJECT_MSG_SIZE - size_t*
+  :   Define the maximum message size that can be injected by the
+      endpoint in a single untagged message. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `tx_attr->inject_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `tx_attr->inject_size` should be used.
 
--   
+- 
 
-    *FI_OPT_INJECT_TAGGED_SIZE - size_t*
-    :   Define the maximum message size that can be injected by the
-        endpoint in a single tagged message. The size is limited by the
-        endpoint's configuration and the provider's capabilities, and
-        must be less than or equal to `tx_attr->inject_size`. Providers
-        that don't support this option will return -FI_ENOPROTOOPT. In
-        that case, `tx_attr->inject_size` should be used.
+  *FI_OPT_INJECT_TAGGED_SIZE - size_t*
+  :   Define the maximum message size that can be injected by the
+      endpoint in a single tagged message. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `tx_attr->inject_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `tx_attr->inject_size` should be used.
 
--   
+- 
 
-    *FI_OPT_INJECT_RMA_SIZE - size_t*
-    :   Define the maximum data size that can be injected by the
-        endpoint in a single RMA operation. The size is limited by the
-        endpoint's configuration and the provider's capabilities, and
-        must be less than or equal to `tx_attr->inject_size`. Providers
-        that don't support this option will return -FI_ENOPROTOOPT. In
-        that case, `tx_attr->inject_size` should be used.
+  *FI_OPT_INJECT_RMA_SIZE - size_t*
+  :   Define the maximum data size that can be injected by the endpoint
+      in a single RMA operation. The size is limited by the endpoint's
+      configuration and the provider's capabilities, and must be less
+      than or equal to `tx_attr->inject_size`. Providers that don't
+      support this option will return -FI_ENOPROTOOPT. In that case,
+      `tx_attr->inject_size` should be used.
 
--   
+- 
 
-    *FI_OPT_INJECT_ATOMIC_SIZE - size_t*
-    :   Define the maximum data size that can be injected by the
-        endpoint in a single atomic operation. The size is limited by
-        the endpoint's configuration and the provider's capabilities,
-        and must be less than or equal to `tx_attr->inject_size`.
-        Providers that don't support this option will return
-        -FI_ENOPROTOOPT. In that case, `tx_attr->inject_size` should be
-        used.
+  *FI_OPT_INJECT_ATOMIC_SIZE - size_t*
+  :   Define the maximum data size that can be injected by the endpoint
+      in a single atomic operation. The size is limited by the
+      endpoint's configuration and the provider's capabilities, and must
+      be less than or equal to `tx_attr->inject_size`. Providers that
+      don't support this option will return -FI_ENOPROTOOPT. In that
+      case, `tx_attr->inject_size` should be used.
 
--   
+- 
 
-    *FI_OPT_TX_SIZE - size_t*
-    :   Return the size of the endpoint's transmit context. See the
-        `size` field of `tx_attr` (`fi_tx_attr`) for the full
-        description. The value is limited by the endpoint's
-        configuration and the provider's capabilities, and is less than
-        or equal to `tx_attr->size`. This option only applies to the
-        fi_getopt call. Providers that don't support this option will
-        return -FI_ENOPROTOOPT. In that case, `tx_attr->size` should be
-        used.
+  *FI_OPT_TX_SIZE - size_t*
+  :   Return the size of the endpoint's transmit context. See the `size`
+      field of `tx_attr` (`fi_tx_attr`) for the full description. The
+      value is limited by the endpoint's configuration and the
+      provider's capabilities, and is less than or equal to
+      `tx_attr->size`. This option only applies to the fi_getopt call.
+      Providers that don't support this option will return
+      -FI_ENOPROTOOPT. In that case, `tx_attr->size` should be used.
 
--   
+- 
 
-    *FI_OPT_RX_SIZE - size_t*
-    :   Return the size of the endpoint's receive context. See the
-        `size` field of `rx_attr` (`fi_rx_attr`) for the full
-        description. The value is limited by the endpoint's
-        configuration and the provider's capabilities, and is less than
-        or equal to `rx_attr->size`. This option only applies to the
-        fi_getopt call. Providers that don't support this option will
-        return -FI_ENOPROTOOPT. In that case, `rx_attr->size` should be
-        used.
+  *FI_OPT_RX_SIZE - size_t*
+  :   Return the size of the endpoint's receive context. See the `size`
+      field of `rx_attr` (`fi_rx_attr`) for the full description. The
+      value is limited by the endpoint's configuration and the
+      provider's capabilities, and is less than or equal to
+      `rx_attr->size`. This option only applies to the fi_getopt call.
+      Providers that don't support this option will return
+      -FI_ENOPROTOOPT. In that case, `rx_attr->size` should be used.
 
 ## fi_tc_dscp_set
 
@@ -9556,7 +9546,7 @@ protocol; uint32_t protocol_version; size_t max_msg_size; size_t
 msg_prefix_size; size_t max_order_raw_size; size_t max_order_war_size;
 size_t max_order_waw_size; uint64_t mem_tag_format; size_t tx_ctx_cnt;
 size_t rx_ctx_cnt; size_t auth_key_size; uint8_t *auth_key; struct
-fid_xpu_ctx *xpu_ctx; size_t max_tx_wr_size; size_t max_rx_wr_size; };
+fid_xpu_ctx* xpu_ctx; size_t max_tx_wr_size; size_t max_rx_wr_size; };
 {% endhighlight %}
 
 ## type - Endpoint Type
@@ -12297,9 +12287,8 @@ mapped into an address which is native to the fabric. See
     the string is address and/or provider specific, but in general
     follows a URI model:
 
-```{=html}
 <!-- -->
-```
+
     address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
 
 Examples: - fi_sockaddr://10.31.6.12:7471 -
@@ -13375,7 +13364,7 @@ registration must have completed successfully before invoking this call.
 The fi_mr_get_xpu_desc call retrieves a provider-specific raw descriptor
 (e.g., the hardware lkey) for the MR into a caller-supplied buffer. The
 caller allocates buf and sets *len to the buffer size on input; on
-output *len is set to the number of bytes written. If the buffer is too
+output* len is set to the number of bytes written. If the buffer is too
 small, -FI_ETOOSMALL is returned and \*len is set to the required size.
 
 When called with FI_XPU flag and a valid fid_xpu_ctx, the returned
@@ -14295,16 +14284,16 @@ create a separate fid_peer\_\* for each peer provider it intends to
 import into. The owner will pass this unique fid_peer\_\* into each peer
 through the context parameter of the init call for the resource
 (i.e. fi_cq_open, fi_srx_context, fi_cntr_open, etc). The
-fi_peer\_**context will indicate the owner-allocated fid_peer** for the
-peer to use but is temporary for the init call and may not be accessed
-by the peer after initialization. The peer will set just the peer_ops of
-the owner-allocated fid and save a reference to the imported
-fid_peer\_\* for use in the peer API flow. The peer will allocate its
-own fid for internal uses and return that fid to the owner through the
-regular fid parameter of the init call (as if it were just another
-opened resource). The owner is responsible for saving the returned peer
-fid from the open call in order to close it later (or to drive progress
-in the case of the cq_fid).
+fi_peer\_context will indicate the owner-allocated fid_peer for the peer
+to use but is temporary for the init call and may not be accessed by the
+peer after initialization. The peer will set just the peer_ops of the
+owner-allocated fid and save a reference to the imported fid_peer\_\*
+for use in the peer API flow. The peer will allocate its own fid for
+internal uses and return that fid to the owner through the regular fid
+parameter of the init call (as if it were just another opened resource).
+The owner is responsible for saving the returned peer fid from the open
+call in order to close it later (or to drive progress in the case of the
+cq_fid).
 
 There are two peer provider models. In the example listed above, both
 peers are full providers in their own right and usable in a stand-alone
@@ -16366,8 +16355,8 @@ ignored.
 # RETURN VALUE
 
 The tagged send and receive calls return 0 on success. On error, a
-negative value corresponding to fabric *errno * is returned. Fabric
-errno values are defined in `fi_errno.h`.
+negative value corresponding to fabric *errno* is returned. Fabric errno
+values are defined in `fi_errno.h`.
 
 # ERRORS
 
@@ -16769,15 +16758,15 @@ The *FI_CONTEXT2* requirement for the DGRAM endpoint and the
 `efa-direct` fabric of an RDM endpoint depends on the libfabric API
 version passed to `fi_getinfo`:
 
--   For API versions before 2.7, *FI_CONTEXT2* is required. When
-    non-NULL hints do not advertise the mode, `fi_getinfo` does not
-    return these endpoints.
--   For API version 2.7 and later, *FI_CONTEXT2* is optional. With
-    non-NULL hints, omitting the mode selects operation without an
-    application context buffer. In this mode inject,
-    *FI_SELECTIVE_COMPLETION*, and *FI_EFA_TRACK_MR* are unavailable.
-    When hints are NULL or advertise *FI_CONTEXT2*, the returned
-    `fi_info` includes the mode.
+- For API versions before 2.7, *FI_CONTEXT2* is required. When non-NULL
+  hints do not advertise the mode, `fi_getinfo` does not return these
+  endpoints.
+- For API version 2.7 and later, *FI_CONTEXT2* is optional. With
+  non-NULL hints, omitting the mode selects operation without an
+  application context buffer. In this mode inject,
+  *FI_SELECTIVE_COMPLETION*, and *FI_EFA_TRACK_MR* are unavailable. When
+  hints are NULL or advertise *FI_CONTEXT2*, the returned `fi_info`
+  includes the mode.
 
 The `efa` fabric of an RDM endpoint does not use *FI_CONTEXT2*.
 
@@ -17068,30 +17057,28 @@ own, leaving what this flag means untouched.
 
 Constraints:
 
--   The endpoint must have action support enabled; otherwise
-    *FI_EFA_EXTENDED_MSG* and the action fields are rejected with
-    *-FI_EINVAL*.
--   An action's *value* bit may only be set when its *ID* bit is also
-    set; a value names no action on its own and is rejected with
-    *-FI_EINVAL*.
--   Only *fi_writemsg()* interprets *FI_EFA_EXTENDED_MSG*.
-    *fi_sendmsg()* and the other data transfer variants never read the
-    EFA metadata fields, so the flag has no effect there and no action
-    is attached.
--   The validation above does not depend on how libfabric was built.
-    Where the device or the build lacks completion action support,
-    *fi_setopt()* fails and the endpoint is never action enabled, so the
-    flag is rejected with *-FI_EINVAL* by the rule above.
--   Local and remote actions are independent: attach either or both.
--   *feature_bits* beyond the four bits defined above are rejected with
-    *-FI_EOPNOTSUPP*. This is how the descriptor stays compatible across
-    versions, and it is why the gated members are append-only: a new bit
-    only ever gates a member newly appended to *struct fi_efa_msg_rma*,
-    and no bit or member is reused, renumbered, or reordered. An
-    application built against a newer header than the provider is told
-    so explicitly, and one built against an older header only sets bits
-    whose members it carries, so the provider never reads past the
-    struct it was given.
+- The endpoint must have action support enabled; otherwise
+  *FI_EFA_EXTENDED_MSG* and the action fields are rejected with
+  *-FI_EINVAL*.
+- An action's *value* bit may only be set when its *ID* bit is also set;
+  a value names no action on its own and is rejected with *-FI_EINVAL*.
+- Only *fi_writemsg()* interprets *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()*
+  and the other data transfer variants never read the EFA metadata
+  fields, so the flag has no effect there and no action is attached.
+- The validation above does not depend on how libfabric was built. Where
+  the device or the build lacks completion action support, *fi_setopt()*
+  fails and the endpoint is never action enabled, so the flag is
+  rejected with *-FI_EINVAL* by the rule above.
+- Local and remote actions are independent: attach either or both.
+- *feature_bits* beyond the four bits defined above are rejected with
+  *-FI_EOPNOTSUPP*. This is how the descriptor stays compatible across
+  versions, and it is why the gated members are append-only: a new bit
+  only ever gates a member newly appended to *struct fi_efa_msg_rma*,
+  and no bit or member is reused, renumbered, or reordered. An
+  application built against a newer header than the provider is told so
+  explicitly, and one built against an older header only sets bits whose
+  members it carries, so the provider never reads past the struct it was
+  given.
 
 ## Example
 
@@ -17141,33 +17128,32 @@ fi_writemsg(ep, (struct fi_msg_rma *)&emsg, FI_EFA_EXTENDED_MSG);
 
 ## Completion events
 
--   DGRAM endpoints do not support synchronous CQ reads (*fi_cq_sread*)
-    or wait objects.
--   *FI_WAIT_FD* is not supported for RDM endpoints with SHM transfers
-    enabled. Valid wait objects are *FI_WAIT_NONE* or *FI_WAIT_UNSPEC*.
-    Blocking read via *fi_cq_sread()* is supported and will wait on SHM
-    completions. When SHM transfers are disabled, *FI_WAIT_FD* wait
-    objects are supported.
+- DGRAM endpoints do not support synchronous CQ reads (*fi_cq_sread*) or
+  wait objects.
+- *FI_WAIT_FD* is not supported for RDM endpoints with SHM transfers
+  enabled. Valid wait objects are *FI_WAIT_NONE* or *FI_WAIT_UNSPEC*.
+  Blocking read via *fi_cq_sread()* is supported and will wait on SHM
+  completions. When SHM transfers are disabled, *FI_WAIT_FD* wait
+  objects are supported.
 
 ## RMA operations
 
--   Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
--   For the `efa-direct` fabric, the target side of RMA operation must
-    insert the initiator side's address into AV before the RMA operation
-    is kicked off, due to a current device limitation. The same
-    limitation applies to the `efa` fabric when the
-    `FI_OPT_EFA_HOMOGENEOUS_PEERS` option is set as `true`.
+- Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
+- For the `efa-direct` fabric, the target side of RMA operation must
+  insert the initiator side's address into AV before the RMA operation
+  is kicked off, due to a current device limitation. The same limitation
+  applies to the `efa` fabric when the `FI_OPT_EFA_HOMOGENEOUS_PEERS`
+  option is set as `true`.
 
 ## `fi_cancel` support
 
--   `fi_cancel` is only supported in the non-zero-copy-receive mode of
-    the `efa` fabric. It's not supported in `efa-direct`, DGRAM
-    endpoint, and the zero-copy receive mode of the `efa` fabric in RDM
-    endpoint.
+- `fi_cancel` is only supported in the non-zero-copy-receive mode of the
+  `efa` fabric. It's not supported in `efa-direct`, DGRAM endpoint, and
+  the zero-copy receive mode of the `efa` fabric in RDM endpoint.
 
 ## (Deprecated) [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
 
--   Support for the zero-copy mode was deprecated in Libfabric v2.6
+- Support for the zero-copy mode was deprecated in Libfabric v2.6
 
 When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the
 provider requires peer to peer transaction support between the EFA and
@@ -17746,10 +17732,10 @@ Unsupported flags in `attr_mask` will cause the call to return
 **modify_ep()** returns 0 on success, or a negative error code on
 failure:
 
--   `-FI_EINVAL`: NULL endpoint or ep_attr, fid is not an endpoint,
-    endpoint not enabled, or a queue key in the privileged range.
--   `-FI_EOPNOTSUPP`: Unsupported flags in `attr_mask`, or the endpoint
-    does not belong to an `efa-direct` domain.
+- `-FI_EINVAL`: NULL endpoint or ep_attr, fid is not an endpoint,
+  endpoint not enabled, or a queue key in the privileged range.
+- `-FI_EOPNOTSUPP`: Unsupported flags in `attr_mask`, or the endpoint
+  does not belong to an `efa-direct` domain.
 
 On failure, no attribute is modified.
 
@@ -17820,7 +17806,11 @@ ignored.
 
 *FI_EFA_RX_SIZE*
 :   Maximum number of receive operations before the provider returns
-    -FI_EAGAIN.
+    -FI_EAGAIN. For the `efa` fabric, the minimum is
+    FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + EFA_RDM_MAX_QUEUED_COPY, where
+    EFA_RDM_MAX_QUEUED_COPY (8) is the maximum number of receive buffers
+    held for batched device memory copies. Smaller values are raised to
+    it. The `efa-direct` fabric is unaffected.
 
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 
@@ -18251,11 +18241,11 @@ libfabric features are supported and performance is not guaranteed.
 mrail provider requires the underlying provider to support the following
 capabilities / modes:
 
--   Buffered receive (FI_BUFFERED_RECV)
+- Buffered receive (FI_BUFFERED_RECV)
 
--   FI_SOURCE
+- FI_SOURCE
 
--   FI_AV_TABLE
+- FI_AV_TABLE
 
 ## Requirements for applications
 
@@ -18286,17 +18276,17 @@ The following are the major libfabric features that are not supported.
 Any other feature not listed in "Supported features" can be assumed as
 unsupported.
 
--   FI_ATOMIC
+- FI_ATOMIC
 
--   Scalable endpoints
+- Scalable endpoints
 
--   Shared contexts
+- Shared contexts
 
--   FABRIC_DIRECT
+- FABRIC_DIRECT
 
--   Multicast
+- Multicast
 
--   Triggered operations
+- Triggered operations
 
 # FUNCTIONALITY OVERVIEW
 
@@ -18360,9 +18350,9 @@ Endpoint types
     provider only supports the *FI_EP_RDM* endpoint type.
 
 Capabilities
-:   Supported capabilities include *FI_MSG*, *FI_RMA, *FI_TAGGED*,
-    *FI_ATOMIC*, *FI_SOURCE*, *FI_SEND*, *FI_RECV*, *FI_MULTI_RECV*,
-    *FI_DIRECTED_RECV*, *FI_SOURCE\*.
+:   Supported capabilities include *FI_MSG*, *FI_RMA,* FI_TAGGED*,*
+    FI_ATOMIC*,* FI_SOURCE*,* FI_SEND*,* FI_RECV*,* FI_MULTI_RECV*,*
+    FI_DIRECTED_RECV*,* FI_SOURCE\*.
 
 Notes on *FI_DIRECTED_RECV* capability: The immediate data which is sent
 within the "senddata" call to support *FI_DIRECTED_RECV* for OPX must be
@@ -19116,11 +19106,11 @@ The *psm2* provider supports limited low level parameter setting through
 the fi_set_val() and fi_get_val() functions. Currently the following
 parameters can be set via the domain fid:
 
--   
+- 
 
-    FI_PSM2_DISCONNECT \*
-    :   Overwite the global runtime parameter *FI_PSM2_DISCONNECT* for
-        this domain. See the *RUNTIME PARAMETERS* section for details.
+  FI_PSM2_DISCONNECT \*
+  :   Overwite the global runtime parameter *FI_PSM2_DISCONNECT* for
+      this domain. See the *RUNTIME PARAMETERS* section for details.
 
 Valid parameter names are defined in the header file
 *rdma/fi_ext_psm2.h*.
@@ -19496,12 +19486,12 @@ apps don't support it.
 RxM provider requires the core provider to support the following
 features:
 
--   MSG endpoints (FI_EP_MSG)
+- MSG endpoints (FI_EP_MSG)
 
--   RMA read/write (FI_RMA) - Used for implementing rendezvous protocol
-    for large messages.
+- RMA read/write (FI_RMA) - Used for implementing rendezvous protocol
+  for large messages.
 
--   FI_OPT_CM_DATA_SIZE of at least 24 bytes.
+- FI_OPT_CM_DATA_SIZE of at least 24 bytes.
 
 ## Requirements for applications
 
@@ -19551,27 +19541,27 @@ provider man pages to find about those limitations.
 
 RxM provider does not support the following features:
 
--   op_flags: FI_FENCE.
+- op_flags: FI_FENCE.
 
--   Scalable endpoints
+- Scalable endpoints
 
--   Shared contexts
+- Shared contexts
 
--   FABRIC_DIRECT
+- FABRIC_DIRECT
 
--   FI_MR_SCALABLE
+- FI_MR_SCALABLE
 
--   Authorization keys
+- Authorization keys
 
--   Application error data buffers
+- Application error data buffers
 
--   Multicast
+- Multicast
 
--   FI_SYNC_ERR
+- FI_SYNC_ERR
 
--   Reporting unknown source addr data as part of completions
+- Reporting unknown source addr data as part of completions
 
--   Triggered operations
+- Triggered operations
 
 ## Progress limitations
 
@@ -19608,9 +19598,9 @@ completion instead.
 
 ## Miscellaneous limitations
 
--   RxM protocol peers should have same endian-ness otherwise
-    connections won't successfully complete. This enables better
-    performance at run-time as byte order translations are avoided.
+- RxM protocol peers should have same endian-ness otherwise connections
+  won't successfully complete. This enables better performance at
+  run-time as byte order translations are avoided.
 
 # RUNTIME PARAMETERS
 
@@ -20307,66 +20297,64 @@ other offload capabilities on Ethernet networks.
 
 # RELEASE NOTES
 
--   The *usnic* libfabric provider requires the use of the "libnl"
-    library.
-    -   There are two versions of libnl generally available: v1 and v3;
-        the usnic provider can use either version.
-    -   If you are building libfabric/the usnic provider from source,
-        you will need to have the libnl header files available (e.g., if
-        you are installing libnl from RPM or other packaging system,
-        install the "-devel" versions of the package).
-    -   If you have libnl (either v1 or v3) installed in a non-standard
-        location (e.g., not in /usr/lib or /usr/lib64), you may need to
-        tell libfabric's configure where to find libnl via the
-        `--with-libnl=DIR` command line option (where DIR is the
-        installation prefix of the libnl package).
--   The most common way to use the libfabric usnic provider is via an
-    MPI implementation that uses libfabric (and the usnic provider) as a
-    lower layer transport. MPI applications do not need to know anything
-    about libfabric or usnic in this use case -- the MPI implementation
-    hides all these details from the application.
--   If you are writing applications directly to the libfabric API:
-    -   *FI_EP_DGRAM* endpoints are the best supported method of
-        utilizing the usNIC interface. Specifically, the *FI_EP_DGRAM*
-        endpoint type has been extensively tested as the underlying
-        layer for Open MPI's *usnic* BTL.
-    -   *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
-        only lightly tested. It is likely that there are still some bugs
-        in these endpoint types. In particular, there are known bugs in
-        RDM support in the presence of congestion or packet loss (issue
-        1621). RMA is not yet supported.
-    -   [`fi_provider`(7)](fi_provider.7.html) lists requirements for
-        all providers. The following limitations exist in the *usnic*
-        provider:
-        -   multicast operations are not supported on *FI_EP_DGRAM* and
-            *FI_EP_RDM* endpoints.
-        -   *FI_EP_MSG* endpoints only support connect, accept, and
-            getname CM operations.
-        -   Passive endpoints only support listen, setname, and getname
-            CM operations.
-        -   *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and
-            `fi_recvmsg()`, but some flags are ignored. `fi_sendmsg()`
-            supports `FI_INJECT` and `FI_COMPLETION`. `fi_recvmsg()`
-            supports `FI_MORE`.
-        -   Address vectors only support `FI_AV_MAP`.
-        -   No counters are supported.
-        -   The tag matching interface is not supported.
-        -   *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage
-            is limited to releases 1.1 and beyond.
-        -   fi_control with FI_GETWAIT may only be used on CQs that have
-            been bound to an endpoint. If fi_control is used on an
-            unbound CQ, it will return -FI_EOPBADSTATE.
-        -   There is limited support for data returned as part of an
-            erroneous asynchronous operation. EQs will return error data
-            for CM operations, CQs do not support returning error data.
-        -   As of 1.5, usNIC supports fi_mr_regv, and fi_mr_regattr.
-            Support is limited to a single iov.
-        -   Atomic operations are not supported.
-    -   Resource management is not supported. The application is
-        responsible for resource protection.
-    -   The usnic libfabric provider supports extensions that provide
-        information and functionality beyond the standard libfabric
-        interface. See the "USNIC EXTENSIONS" section, below.
+- The *usnic* libfabric provider requires the use of the "libnl"
+  library.
+  - There are two versions of libnl generally available: v1 and v3; the
+    usnic provider can use either version.
+  - If you are building libfabric/the usnic provider from source, you
+    will need to have the libnl header files available (e.g., if you are
+    installing libnl from RPM or other packaging system, install the
+    "-devel" versions of the package).
+  - If you have libnl (either v1 or v3) installed in a non-standard
+    location (e.g., not in /usr/lib or /usr/lib64), you may need to tell
+    libfabric's configure where to find libnl via the `--with-libnl=DIR`
+    command line option (where DIR is the installation prefix of the
+    libnl package).
+- The most common way to use the libfabric usnic provider is via an MPI
+  implementation that uses libfabric (and the usnic provider) as a lower
+  layer transport. MPI applications do not need to know anything about
+  libfabric or usnic in this use case -- the MPI implementation hides
+  all these details from the application.
+- If you are writing applications directly to the libfabric API:
+  - *FI_EP_DGRAM* endpoints are the best supported method of utilizing
+    the usNIC interface. Specifically, the *FI_EP_DGRAM* endpoint type
+    has been extensively tested as the underlying layer for Open MPI's
+    *usnic* BTL.
+  - *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are only
+    lightly tested. It is likely that there are still some bugs in these
+    endpoint types. In particular, there are known bugs in RDM support
+    in the presence of congestion or packet loss (issue 1621). RMA is
+    not yet supported.
+  - [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
+    providers. The following limitations exist in the *usnic* provider:
+    - multicast operations are not supported on *FI_EP_DGRAM* and
+      *FI_EP_RDM* endpoints.
+    - *FI_EP_MSG* endpoints only support connect, accept, and getname CM
+      operations.
+    - Passive endpoints only support listen, setname, and getname CM
+      operations.
+    - *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and `fi_recvmsg()`,
+      but some flags are ignored. `fi_sendmsg()` supports `FI_INJECT`
+      and `FI_COMPLETION`. `fi_recvmsg()` supports `FI_MORE`.
+    - Address vectors only support `FI_AV_MAP`.
+    - No counters are supported.
+    - The tag matching interface is not supported.
+    - *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage is
+      limited to releases 1.1 and beyond.
+    - fi_control with FI_GETWAIT may only be used on CQs that have been
+      bound to an endpoint. If fi_control is used on an unbound CQ, it
+      will return -FI_EOPBADSTATE.
+    - There is limited support for data returned as part of an erroneous
+      asynchronous operation. EQs will return error data for CM
+      operations, CQs do not support returning error data.
+    - As of 1.5, usNIC supports fi_mr_regv, and fi_mr_regattr. Support
+      is limited to a single iov.
+    - Atomic operations are not supported.
+  - Resource management is not supported. The application is responsible
+    for resource protection.
+  - The usnic libfabric provider supports extensions that provide
+    information and functionality beyond the standard libfabric
+    interface. See the "USNIC EXTENSIONS" section, below.
 
 # USNIC EXTENSIONS
 
@@ -20435,7 +20423,7 @@ int getinfo(uint32_t version, struct fid_fabric *fabric,
 :   Upon successful return, this parameter will contain information
     about the fabric.
 
--   Version 2
+- Version 2
 
 ``` c
 struct fi_usnic_cap {
@@ -20483,7 +20471,7 @@ struct fi_usnic_info_v2 {
 } __attribute__((packed));
 ```
 
--   Version 1
+- Version 1
 
 ``` c
 struct fi_usnic_info_v1 {
@@ -20608,15 +20596,15 @@ fabric and domain. However the usNIC provider remains backward
 compatible with applications supporting the old scheme and decides which
 one to use based on the version passed to `fi_getinfo`:
 
--   When `FI_VERSION(1,4)` or higher is used:
-    -   fabric name is the network address with the CIDR notation (i.e.,
-        `a.b.c.d/e`)
-    -   domain name is the usNIC Linux interface name (i.e., `usnic_X`)
--   When a lower version number is used, like `FI_VERSION(1, 3)`, it
-    follows the same behavior the usNIC provider exhibited in libfabric
-    \<= v1.3:
-    -   fabric name is the usNIC Linux interface name (i.e., `usnic_X`)
-    -   domain name is `NULL`
+- When `FI_VERSION(1,4)` or higher is used:
+  - fabric name is the network address with the CIDR notation (i.e.,
+    `a.b.c.d/e`)
+  - domain name is the usNIC Linux interface name (i.e., `usnic_X`)
+- When a lower version number is used, like `FI_VERSION(1, 3)`, it
+  follows the same behavior the usNIC provider exhibited in libfabric
+  \<= v1.3:
+  - fabric name is the usNIC Linux interface name (i.e., `usnic_X`)
+  - domain name is `NULL`
 
 # SEE ALSO
 
@@ -20680,11 +20668,10 @@ Verbs provider requires applications to support the following modes:
 
 #### FI_EP_MSG endpoint type
 
--   FI_MR_LOCAL mr mode.
+- FI_MR_LOCAL mr mode.
 
--   FI_RX_CQ_DATA for applications that want to use RMA. Applications
-    must take responsibility of posting receives for any incoming CQ
-    data.
+- FI_RX_CQ_DATA for applications that want to use RMA. Applications must
+  take responsibility of posting receives for any incoming CQ data.
 
 ### Addressing Formats
 
@@ -20706,19 +20693,19 @@ FI_TRANSMIT_COMPLETE.
 
 Verbs provider support the following message ordering:
 
--   Read after Read
+- Read after Read
 
--   Read after Write
+- Read after Write
 
--   Read after Send
+- Read after Send
 
--   Write after Write
+- Write after Write
 
--   Write after Send
+- Write after Send
 
--   Send after Write
+- Send after Write
 
--   Send after Send
+- Send after Send
 
 ### Fork
 
@@ -20767,20 +20754,20 @@ Scalable endpoints, FABRIC_DIRECT
 
 #### Unsupported features specific to MSG endpoints
 
--   Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
-    fi_ep_alias, shared TX context, cq_readfrom operations.
--   Completion flags are not reported if a request posted to an endpoint
-    completes in error.
+- Counters, FI_SOURCE, FI_TAGGED, FI_PEEK, FI_CLAIM, fi_cancel,
+  fi_ep_alias, shared TX context, cq_readfrom operations.
+- Completion flags are not reported if a request posted to an endpoint
+  completes in error.
 
 ### Fork
 
 The support for fork in the provider has the following limitations:
 
--   Fabric resources like endpoint, CQ, EQ, etc. should not be used in
-    the forked process.
--   The memory registered using fi_mr_reg has to be page aligned since
-    ibv_reg_mr marks the entire page that a memory region belongs to as
-    not to be re-mapped when the process is forked (MADV_DONTFORK).
+- Fabric resources like endpoint, CQ, EQ, etc. should not be used in the
+  forked process.
+- The memory registered using fi_mr_reg has to be page aligned since
+  ibv_reg_mr marks the entire page that a memory region belongs to as
+  not to be re-mapped when the process is forked (MADV_DONTFORK).
 
 ### XRC Transport
 
@@ -20905,26 +20892,26 @@ variables: fi_info -p verbs -e
 
 ### fi_getinfo returns -FI_ENODATA
 
--   Set FI_LOG_LEVEL=info or FI_LOG_LEVEL=debug (if debug build of
-    libfabric is available) and check if there any errors because of
-    incorrect input parameters to fi_getinfo.
--   Check if "fi_info -p verbs" is successful. If that fails the
-    following checklist may help in ensuring that the RDMA verbs stack
-    is functional:
-    -   If libfabric was compiled, check if verbs provider was built.
-        Building verbs provider would be skipped if its dependencies
-        (listed in requirements) aren't available on the system.
-    -   Verify verbs device is functional:
-        -   Does ibv_rc_pingpong (available in libibverbs) test work?
-            -   Does ibv_devinfo (available in libibverbs) show the
-                device with PORT_ACTIVE status?
-                -   Check if Subnet Manager (SM) is running on the
-                    switch or on one of the nodes in the cluster.
-                -   Is the cable connected?
-    -   Verify librdmacm is functional:
-        -   Does ucmatose test (available in librdmacm) work?
-        -   Is the IPoIB interface (e.g. ib0) up and configured with a
-            valid IP address?
+- Set FI_LOG_LEVEL=info or FI_LOG_LEVEL=debug (if debug build of
+  libfabric is available) and check if there any errors because of
+  incorrect input parameters to fi_getinfo.
+- Check if "fi_info -p verbs" is successful. If that fails the following
+  checklist may help in ensuring that the RDMA verbs stack is
+  functional:
+  - If libfabric was compiled, check if verbs provider was built.
+    Building verbs provider would be skipped if its dependencies (listed
+    in requirements) aren't available on the system.
+  - Verify verbs device is functional:
+    - Does ibv_rc_pingpong (available in libibverbs) test work?
+      - Does ibv_devinfo (available in libibverbs) show the device with
+        PORT_ACTIVE status?
+        - Check if Subnet Manager (SM) is running on the switch or on
+          one of the nodes in the cluster.
+        - Is the cable connected?
+  - Verify librdmacm is functional:
+    - Does ucmatose test (available in librdmacm) work?
+    - Is the IPoIB interface (e.g. ib0) up and configured with a valid
+      IP address?
 
 ### Other issues
 
@@ -21334,10 +21321,10 @@ communicate, then the application will fail.
 
 Specifically, this will run a pingpong test with:
 
--   usNIC provider
--   1000 iterations
--   1024 bytes message size
--   server node as 192.168.0.123
+- usNIC provider
+- 1000 iterations
+- 1024 bytes message size
+- server node as 192.168.0.123
 
 ## A longer test
 
@@ -21366,18 +21353,16 @@ maximum message size boundary.
 Each test generates data messages which are accounted for. Specifically,
 the displayed statistics at the end are :
 
--   *bytes* : number of bytes per message sent
--   *#sent* : number of messages (ping) sent from the client to the
-    server
--   *#ack* : number of replies (pong) of the server received by the
-    client
--   *total* : amount of memory exchanged between the processes
--   *time* : duration of this single test
--   *MB/sec* : throughput computed from *total* and *time*
--   *usec/xfer* : average time for transferring a message outbound (ping
-    or pong) in microseconds
--   *Mxfers/sec* : average amount of transfers of message outbound per
-    second
+- *bytes* : number of bytes per message sent
+- *#sent* : number of messages (ping) sent from the client to the server
+- *#ack* : number of replies (pong) of the server received by the client
+- *total* : amount of memory exchanged between the processes
+- *time* : duration of this single test
+- *MB/sec* : throughput computed from *total* and *time*
+- *usec/xfer* : average time for transferring a message outbound (ping
+  or pong) in microseconds
+- *Mxfers/sec* : average amount of transfers of message outbound per
+  second
 
 # SEE ALSO
 
