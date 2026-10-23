@@ -159,6 +159,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 
 static struct ofi_hmem_ops g_hmem_ops_backup[OFI_HMEM_MAX];
 static struct fi_info *g_prov_info_backup;
+static char *g_instance_type_file_backup;
 
 /* Runs before every hmem test */
 static int efa_unit_test_hmem_setup(void **state)
@@ -181,6 +182,7 @@ static int efa_unit_test_hmem_setup(void **state)
 		return ret;
 
 	memcpy(g_hmem_ops_backup, hmem_ops, sizeof(g_hmem_ops_backup));
+	g_instance_type_file_backup = efa_env.instance_type_file;
 
 	/* Deep copy the entire prov_info list */
 	g_prov_info_backup = NULL;
@@ -207,6 +209,7 @@ static int efa_unit_test_hmem_teardown(void **state)
 {
 	memcpy(hmem_ops, g_hmem_ops_backup, sizeof(g_hmem_ops_backup));
 	ofi_hmem_disable_p2p = 0;
+	efa_env.instance_type_file = g_instance_type_file_backup;
 
 	/* Restore prov_info to pre-test state */
 	fi_freeinfo((struct fi_info *)efa_util_prov.info);
@@ -438,7 +441,10 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_p2p_disabled_neuron, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_p2p_disabled_synapse, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_disable_p2p_cuda, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_hmem_info_check_p2p_cuda_ctx_create_destroy_on_memalloc_fail, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_instance_type_gdr_unsupported, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_cuda_p2p_instance_type_unsupported, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_cuda_p2p_instance_type_supported, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_cuda_p2p_instance_type_missing, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_set_sync_memops_active_primary_context_worker_thread, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_min_multi_recv_size, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

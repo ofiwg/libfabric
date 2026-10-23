@@ -215,7 +215,7 @@ EFA_INI
 	 * efa_fork_support_enable_if_requested must be called before
 	 * efa_hmem_info_initialize.
 	 *
-	 * efa_hmem_info_initialize calls ibv_reg_mr to test for p2p support.
+	 * efa_hmem_info_initialize calls ibv_reg_mr to test for ROCr p2p support.
 	 *
 	 * On older kernels (without support for IBV_FORK_UNNEEDED),
 	 * efa_fork_support_enable_if_requested calls ibv_fork_init,
