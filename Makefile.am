@@ -511,6 +511,7 @@ include prov/hook/monitor/Makefile.include
 include prov/hook/hook_debug/Makefile.include
 include prov/hook/hook_hmem/Makefile.include
 include prov/hook/dmabuf_peer_mem/Makefile.include
+include cmake/Makefile.include
 
 man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
 

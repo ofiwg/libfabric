@@ -1,0 +1,63 @@
+name: CMake
+on: [push, pull_request, workflow_dispatch]
+concurrency:
+  group: cmake-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+      - run: python3 -m pip install -r cmake/requirements.txt
+      - run: python3 cmake/format.py --check
+  linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: shared
+            options: -DCMAKE_BUILD_TYPE=Release -DLIBFABRIC_BUILD_FABTESTS=ON
+          - name: static
+            options: -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
+          - name: plugins
+            options: -DCMAKE_BUILD_TYPE=Debug -DLIBFABRIC_TCP_DLOPEN=ON -DLIBFABRIC_RXM_DLOPEN=ON -DLIBFABRIC_TRACE_DLOPEN=ON -DLIBFABRIC_PROFILE_DLOPEN=ON -DLIBFABRIC_MONITOR_DLOPEN=ON -DLIBFABRIC_HOOK_DEBUG_DLOPEN=ON -DLIBFABRIC_HOOK_HMEM_DLOPEN=ON -DLIBFABRIC_DMABUF_PEER_MEM_DLOPEN=ON
+          - name: sanitizers
+            options: -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DLIBFABRIC_ENABLE_ASAN=ON -DLIBFABRIC_ENABLE_UBSAN=ON
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libibverbs-dev librdmacm-dev libnuma-dev uuid-dev libhwloc-dev libudev-dev libnl-3-dev libnl-route-3-dev liburing-dev libpsm2-dev libucx-dev
+      - name: Configure required providers
+        run: |
+          providers=()
+          for provider in tcp udp sockets rxm rxd mrail lnx sm2 shm psm2 psm3 opx ucx usnic efa verbs lpp; do
+            providers+=("-DLIBFABRIC_PROVIDER_${provider^^}=ON")
+          done
+          cmake -S . -B build -G Ninja "${providers[@]}" ${{ matrix.options }}
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - name: Build as a subproject
+        if: matrix.name == 'static'
+        run: |
+          cmake -S cmake/tests/parent -B parent-build -G Ninja -DLIBFABRIC_SOURCE="$PWD"
+          cmake --build parent-build --parallel 2
+          ctest --test-dir parent-build --output-on-failure
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            preset: ci-macos
+          - os: windows-2022
+            preset: ci-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+      - run: cmake --preset ${{ matrix.preset }}
+      - run: cmake --build --preset ${{ matrix.preset }} --parallel 2
+      - run: ctest --test-dir build/${{ matrix.preset }} -C Release --output-on-failure
