@@ -902,6 +902,7 @@ void test_proto_eager_send_completion_releases_txe(void **state);
 void test_proto_eager_assigns_msg_id(void **state);
 void test_proto_eager_queued_before_handshake_survives_mr_gen_check(void **state);
 void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(void **state);
+void test_efa_rdm_ope_internal_atomic_response_predicate(void **state);
 void test_proto_atomic_ordered_write_in_order(void **state);
 void test_proto_atomic_ordered_dc_write_receipt_success(void **state);
 void test_proto_atomic_ordered_fetch_immediate_lifecycle(void **state);
@@ -916,6 +917,12 @@ void test_proto_atomic_inject_delivery_complete(void **state);
 void test_proto_atomic_fetch_compare_request(void **state);
 void test_proto_atomic_fetch_compare_completion(void **state);
 void test_proto_atomic_responder_post_error(void **state);
+void test_proto_atomic_dc_write_receipt_direct_failure_cleanup(void **state);
+void test_proto_atomic_dc_write_receipt_queued_ctrl_failure_cleanup(
+	void **state);
+void test_proto_atomic_dc_write_receipt_async_failure_cleanup(void **state);
+void test_proto_atomic_dc_write_receipt_queued_rnr_failure_cleanup(
+	void **state);
 void test_proto_atomic_read_null_source(void **state);
 void test_proto_atomic_compare_responder_iov(void **state);
 void test_proto_atomic_fetch_compare_responder_rejects_invalid_op_datatype(
