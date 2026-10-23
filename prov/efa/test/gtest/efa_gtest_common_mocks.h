@@ -17,6 +17,7 @@
 #include <infiniband/efadv.h>
 #include <infiniband/verbs.h>
 #include <rdma/fabric.h>
+#include <rdma/fi_domain.h>
 
 struct efa_av;
 struct efa_av_array;
@@ -172,6 +173,18 @@ struct dlist_entry;
 	X(int, ibv_modify_qp,                                                  \
 	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
 	  (qp, attr, attr_mask))                                               \
+	X(ssize_t, ofi_copy_from_hmem_iov,                                     \
+	  (void *dest, size_t size, enum fi_hmem_iface hmem_iface,             \
+	   uint64_t device, const struct iovec *hmem_iov,                      \
+	   size_t hmem_iov_count, uint64_t hmem_iov_offset),                   \
+	  (dest, size, hmem_iface, device, hmem_iov, hmem_iov_count,           \
+	   hmem_iov_offset))                                                   \
+	X(ssize_t, ofi_dev_reg_copy_from_hmem_iov,                             \
+	  (void *dest, size_t size, enum fi_hmem_iface hmem_iface,             \
+	   uint64_t handle, const struct iovec *hmem_iov,                      \
+	   size_t hmem_iov_count, uint64_t hmem_iov_offset),                   \
+	  (dest, size, hmem_iface, handle, hmem_iov, hmem_iov_count,           \
+	   hmem_iov_offset))                                                   \
 	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)                                    \
 	EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)
 

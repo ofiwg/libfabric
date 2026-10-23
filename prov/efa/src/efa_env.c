@@ -30,7 +30,7 @@ struct efa_env efa_env = {
 	.rnr_backoff_initial_wait_time = 0, /* 0 is random wait time  */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
-	.efa_max_gdrcopy_msg_size = 32768,
+	.efa_max_gdrcopy_from_hmem_size = 32768,
 	.efa_read_segment_size = 1073741824,
 	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
@@ -159,8 +159,8 @@ void efa_env_param_get(void)
 			 &efa_env.shm_cq_read_size);
 	fi_param_get_size_t(&efa_prov, "inter_read_segment_size",
 			    &efa_env.efa_read_segment_size);
-	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
-			    &efa_env.efa_max_gdrcopy_msg_size);
+	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_from_hmem_size",
+			    &efa_env.efa_max_gdrcopy_from_hmem_size);
 	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
 	fi_param_get_bool(&efa_prov, "use_unsolicited_write_recv", &efa_env.use_unsolicited_write_recv);
 
@@ -247,8 +247,8 @@ void efa_env_define()
 			"The maximum message size for inter EFA medium message protocol (Default 65536).");
 	fi_param_define(&efa_prov, "inter_min_read_message_size", FI_PARAM_INT,
 			"The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol (Default 1048576).");
-	fi_param_define(&efa_prov, "inter_max_gdrcopy_message_size", FI_PARAM_INT,
-			"The maximum message size to use gdrcopy. If instance support gdrcopy, messages whose size is smaller than this value will be sent by eager/longcts protocol (Default 32768).");
+	fi_param_define(&efa_prov, "inter_max_gdrcopy_from_hmem_size", FI_PARAM_SIZE_T,
+			"The maximum message size for which data is copied out of device memory with gdrcopy when it is staged through bounce buffers. (Default 32768).");
 	fi_param_define(&efa_prov, "inter_min_read_write_size", FI_PARAM_INT,
 			"The minimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the efa device supports RDMA write, device RDMA write will always be used.");
 	fi_param_define(&efa_prov, "inter_read_segment_size", FI_PARAM_INT,

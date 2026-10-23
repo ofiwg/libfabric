@@ -1,13 +1,21 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include "efa_gtest_common_helpers.h"
+#include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_rdm_pke_utils.h"
 #include <gtest/gtest.h>
+#include <string>
 
-using testing::Test;
-using testing::WithParamInterface;
+using testing::_;
 using testing::Range;
+using testing::Return;
+using testing::StrictMock;
+using testing::Test;
+using testing::TestWithParam;
+using testing::ValuesIn;
+using testing::WithParamInterface;
 
 class EfaRdmPkeTest : public Test
 {
@@ -50,3 +58,93 @@ TEST_P(EfaRdmPkeChainTest, release_cloned_frees_whole_chain)
 }
 
 INSTANTIATE_TEST_SUITE_P(ChainLengths, EfaRdmPkeChainTest, Range<size_t>(0, 6));
+
+struct EfaCopyFromHmemCase {
+	const char *name;
+	size_t total_len;
+	enum efa_test_copy_src src;
+	bool cuda_api_permitted;
+	bool expect_gdrcopy;
+};
+
+static constexpr size_t kTestMaxGdrcopyFromHmemSize = 4096;
+
+class EfaRdmPkeCopyFromHmemTest : public TestWithParam<EfaCopyFromHmemCase>
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+	size_t saved_max_gdrcopy_from_hmem_size = 0;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(
+			&resource,
+			efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+
+		saved_max_gdrcopy_from_hmem_size = efa_test_get_max_gdrcopy_from_hmem_size();
+		efa_test_set_max_gdrcopy_from_hmem_size(kTestMaxGdrcopyFromHmemSize);
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_set_max_gdrcopy_from_hmem_size(saved_max_gdrcopy_from_hmem_size);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_P(EfaRdmPkeCopyFromHmemTest, selects_copy_method)
+{
+	const EfaCopyFromHmemCase &c = GetParam();
+	struct efa_test_copy_from_hmem_result res;
+
+	if (c.expect_gdrcopy) {
+		EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov, _,
+				EFA_TEST_COPY_HMEM_DATA_SIZE, FI_HMEM_CUDA,
+				EFA_TEST_COPY_HMEM_HANDLE, _, 1u, 0u)
+			.WillOnce(Return(EFA_TEST_COPY_HMEM_DATA_SIZE));
+		EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov).Times(0);
+	} else {
+		bool host = c.src == EFA_TEST_COPY_SRC_HOST;
+
+		EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+				EFA_TEST_COPY_HMEM_DATA_SIZE,
+				host ? FI_HMEM_SYSTEM : FI_HMEM_CUDA,
+				host ? 0u : EFA_TEST_COPY_HMEM_DEVICE, _, 1u, 0u)
+			.WillOnce(Return(EFA_TEST_COPY_HMEM_DATA_SIZE));
+		EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov)
+			.Times(0);
+	}
+
+	efa_test_selects_copy_method(resource.ep, resource.av, c.total_len,
+				     c.src, c.cuda_api_permitted,
+				     &res);
+
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.payload_size, EFA_TEST_COPY_HMEM_DATA_SIZE);
+	EXPECT_TRUE(res.payload_in_wiredata);
+}
+
+static const EfaCopyFromHmemCase kCopyFromHmemCases[] = {
+	{"gdrcopy_at_max_size", kTestMaxGdrcopyFromHmemSize,
+	 EFA_TEST_COPY_SRC_CUDA_GDRCOPY, true, true},
+	{"cudamemcpy_above_max_size", kTestMaxGdrcopyFromHmemSize + 1,
+	 EFA_TEST_COPY_SRC_CUDA_GDRCOPY, true, false},
+	{"gdrcopy_above_max_size_without_cuda_api",
+	 kTestMaxGdrcopyFromHmemSize + 1, EFA_TEST_COPY_SRC_CUDA_GDRCOPY, false,
+	 true},
+	{"cudamemcpy_without_gdrcopy_handle", kTestMaxGdrcopyFromHmemSize,
+	 EFA_TEST_COPY_SRC_CUDA, true, false},
+	{"host_memory_uses_memcpy", kTestMaxGdrcopyFromHmemSize,
+	 EFA_TEST_COPY_SRC_HOST, true, false},
+};
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmPkeCopyFromHmemTest, ValuesIn(kCopyFromHmemCases),
+	[](const testing::TestParamInfo<EfaCopyFromHmemCase> &info) {
+		return std::string(info.param.name);
+	});

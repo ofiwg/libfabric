@@ -1197,6 +1197,11 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_RUNT_SIZE*
 : The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).
 
+*FI_EFA_INTER_MAX_GDRCOPY_FROM_HMEM_SIZE*
+: The maximum message size in bytes for which the provider copies data out of
+CUDA memory with gdrcopy when the data is staged through internal bounce
+buffers. Larger message sizes use cudaMemcpy. (Default 32768).
+
 *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
 : The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
 
