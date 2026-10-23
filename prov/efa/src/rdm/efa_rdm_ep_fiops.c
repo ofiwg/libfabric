@@ -855,7 +855,17 @@ static int efa_rdm_ep_destroy_peer(struct efa_av_array *arr, void *entry,
 {
 	struct efa_rdm_ep *ep = context;
 	struct efa_rdm_peer *peer = entry;
+	struct efa_av *av = ep->base_ep.av;
 
+	/* the FI_AV_MAP peer cache must not outlive the peer, nor this ep */
+	if (av && efa_av_is_map(av) && efa_rdm_peer_is_explicit(peer)) {
+		struct efa_av_entry *av_entry = efa_av_addr_to_entry_impl(
+			av->addr_to_entry_map, efa_rdm_peer_fi_addr(peer));
+
+		if (av_entry)
+			efa_rdm_av_entry_uncache_peer(
+				container_of(av_entry, struct efa_rdm_av_entry, efa_av_entry), ep);
+	}
 	efa_rdm_peer_destruct(peer, ep);
 	ofi_buf_free(peer);
 	return 0;
