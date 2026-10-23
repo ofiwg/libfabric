@@ -141,6 +141,10 @@ void test_av_multiple_ep_efa(void **state);
 void test_av_multiple_ep_efa_direct(void **state);
 void test_av_insert_remove_lookup_efa_direct(void **state);
 void test_av_base_addr_to_entry_invalid(void **state);
+void test_av_map_insert_remove_lookup_efa(void **state);
+void test_av_map_insert_remove_lookup_efa_direct(void **state);
+void test_av_map_disabled(void **state);
+void test_av_map_rdm_peer_cache(void **state);
 /* end efa_unit_test_av.c */
 
 /* begin efa_unit_test_rdm_av.c */
