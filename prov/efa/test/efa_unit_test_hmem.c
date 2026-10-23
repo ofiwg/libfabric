@@ -129,58 +129,120 @@ void test_efa_hmem_info_disable_p2p_cuda(void **state)
 }
 #endif /* HAVE_CUDA */
 
+/**
+ * @brief Verify instance types are matched exactly against the blocklist
+ */
+void test_efa_instance_type_gdr_unsupported(void **state)
+{
+	/* Listed */
+	assert_true(efa_instance_type_gdr_unsupported("g5.48xlarge"));
+	assert_true(efa_instance_type_gdr_unsupported("p5.4xlarge"));
+	assert_true(efa_instance_type_gdr_unsupported("g7e.8xlarge"));
+
+	/* Unlisted sizes of families with listed sizes */
+	assert_false(efa_instance_type_gdr_unsupported("p5.48xlarge"));
+	assert_false(efa_instance_type_gdr_unsupported("g7e.12xlarge"));
+	assert_false(efa_instance_type_gdr_unsupported("p4d.24xlarge"));
+
+	/* Similar names */
+	assert_false(efa_instance_type_gdr_unsupported("p4de.24xlarge"));
+	assert_false(efa_instance_type_gdr_unsupported("g5g.16xlarge"));
+	assert_false(efa_instance_type_gdr_unsupported("g5"));
+	assert_false(efa_instance_type_gdr_unsupported("g5.48xlarge2"));
+
+	/* Unknown */
+	assert_false(efa_instance_type_gdr_unsupported(""));
+	assert_false(efa_instance_type_gdr_unsupported("HVM domU"));
+}
+
 #if HAVE_CUDA
 /**
- * @brief Verify that a CUDA context is created and destroyed during the p2p
- * probe even when ofi_cuMemAlloc fails. Makes always clean up the
- * context we explicitly created.
+ * @brief Initialize CUDA hmem info with a given instance type file content
  *
- * Mocking failure of the alloc is also nice, since it lets us not have to deal
- * with ibv registration.
+ * ofi_cudaMalloc, ofi_cuCtxCreate_v2 and ofi_cuMemAlloc are mocked to fail the
+ * test if called, since determining p2p support must not allocate CUDA memory
+ * or create a CUDA context.
  *
- * @param[in]	state		struct efa_resource that is managed by the
- * framework
+ * @param[in]	instance_type	Content of the instance type file, or NULL
+ *				to use a non-existent file
  */
-void test_efa_hmem_info_check_p2p_cuda_ctx_create_destroy_on_memalloc_fail(
-	void **state)
+static void test_efa_hmem_info_cuda_instance_type_impl(const char *instance_type)
 {
+	char instance_type_file[] = "/tmp/efa_instance_type_XXXXXX";
+	int fd = -1;
 	int ret;
 
+	if (instance_type) {
+		fd = mkstemp(instance_type_file);
+		assert_true(fd >= 0);
+		assert_int_equal(write(fd, instance_type, strlen(instance_type)),
+				 strlen(instance_type));
+	}
+	efa_env.instance_type_file = instance_type ? instance_type_file :
+						     "/nonexistent/product_name";
+
 	hmem_ops[FI_HMEM_CUDA].initialized = true;
-
-	/* Mock ofi_cuDeviceGet to succeed */
-	g_efa_unit_test_mocks.ofi_cuDeviceGet =
-		efa_mock_ofi_cuDeviceGet_return_mock;
-	will_return(efa_mock_ofi_cuDeviceGet_return_mock, 0); /* device */
-	will_return(efa_mock_ofi_cuDeviceGet_return_mock, CUDA_SUCCESS);
-
-	/* Mock ofi_cuCtxCreate_v2 to succeed */
+	/*
+	 * The instance-type path must not allocate device memory or create a
+	 * CUDA context. These mocks have no queued return, so any call aborts
+	 * the test.
+	 */
+	g_efa_unit_test_mocks.ofi_cudaMalloc =
+		efa_mock_ofi_cudaMalloc_return_mock;
 	g_efa_unit_test_mocks.ofi_cuCtxCreate_v2 =
 		efa_mock_ofi_cuCtxCreate_v2_return_mock;
-	will_return(efa_mock_ofi_cuCtxCreate_v2_return_mock, NULL); /* pctx */
-	will_return(efa_mock_ofi_cuCtxCreate_v2_return_mock, CUDA_SUCCESS);
-	expect_function_call(efa_mock_ofi_cuCtxCreate_v2_return_mock);
-
-	/* Mock ofi_cuMemAlloc to FAIL */
 	g_efa_unit_test_mocks.ofi_cuMemAlloc =
 		efa_mock_ofi_cuMemAlloc_return_mock;
-	will_return(efa_mock_ofi_cuMemAlloc_return_mock, 0); /* dptr */
-	will_return(efa_mock_ofi_cuMemAlloc_return_mock,
-		    CUDA_ERROR_OUT_OF_MEMORY);
-
-	/* Expect ofi_cuCtxDestroy to be called (cleanup on failure) */
-	g_efa_unit_test_mocks.ofi_cuCtxDestroy =
-		efa_mock_ofi_cuCtxDestroy_return_mock;
-	will_return(efa_mock_ofi_cuCtxDestroy_return_mock, CUDA_SUCCESS);
-	expect_function_call(efa_mock_ofi_cuCtxDestroy_return_mock);
 
 	ret = efa_hmem_info_initialize();
 
+	if (fd >= 0) {
+		close(fd);
+		unlink(instance_type_file);
+	}
+
 	assert_int_equal(ret, 0);
-	assert_false(g_efa_hmem_info[FI_HMEM_CUDA].initialized);
+	assert_true(g_efa_hmem_info[FI_HMEM_CUDA].initialized);
+}
+
+/**
+ * @brief Verify CUDA p2p is not supported on a blocklisted instance type
+ */
+void test_efa_hmem_info_cuda_p2p_instance_type_unsupported(void **state)
+{
+	test_efa_hmem_info_cuda_instance_type_impl("g5.48xlarge\n");
+	assert_false(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
+}
+
+/**
+ * @brief Verify CUDA p2p is supported on an instance type not in the blocklist
+ */
+void test_efa_hmem_info_cuda_p2p_instance_type_supported(void **state)
+{
+	test_efa_hmem_info_cuda_instance_type_impl("p5.48xlarge\n");
+	assert_true(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
+}
+
+/**
+ * @brief Verify CUDA p2p is assumed supported if the instance type is unknown
+ */
+void test_efa_hmem_info_cuda_p2p_instance_type_missing(void **state)
+{
+	test_efa_hmem_info_cuda_instance_type_impl(NULL);
+	assert_true(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
 }
 #else
-void test_efa_hmem_info_check_p2p_cuda_ctx_create_destroy_on_memalloc_fail(void **state)
+void test_efa_hmem_info_cuda_p2p_instance_type_unsupported(void **state)
+{
+	skip();
+}
+
+void test_efa_hmem_info_cuda_p2p_instance_type_supported(void **state)
+{
+	skip();
+}
+
+void test_efa_hmem_info_cuda_p2p_instance_type_missing(void **state)
 {
 	skip();
 }
