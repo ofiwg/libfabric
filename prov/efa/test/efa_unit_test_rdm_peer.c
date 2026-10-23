@@ -444,9 +444,14 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 	assert_int_equal(peer->rnr_queued_pkt_cnt, 1);
 
 	/* Now simulate the pkt being successfully retransmitted and on outstanding_tx_pkts.
-	 * Remove from queued_pkts and add to outstanding_tx_pkts. */
+	 * Remove from queued_pkts and add to outstanding_tx_pkts. Mirror
+	 * efa_rdm_ep_post_queued_pkts(), which drops the RNR queued-packet
+	 * counters when the packet leaves the queue (the RNR_RETRANSMIT flag
+	 * stays set until the attempt resolves). */
 	dlist_remove(&pkt_entry->entry);
 	pkt_entry->flags &= ~EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+	efa_rdm_ep->efa_rnr_queued_pkt_cnt--;
+	peer->rnr_queued_pkt_cnt--;
 	dlist_insert_tail(&pkt_entry->entry, &peer->outstanding_tx_pkts);
 	pkt_entry->flags |= EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
 
@@ -455,11 +460,11 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 	dlist_remove(&pkt_entry->ope->queued_entry);
 
 	/* Remove the peer via fi_av_remove, which calls peer_destruct.
-	 * This should clear the RNR flag and decrement counters. */
+	 * This should clear the RNR flag without touching the counters. */
 	ret = fi_av_remove(resource->av, &peer_addr, 1, 0);
 	assert_int_equal(ret, 0);
 
-	/* Verify the RNR flag was cleared and counters decremented */
+	/* Verify the RNR flag was cleared and counters were not double-decremented */
 	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, 0);
 	assert_null(pkt_entry->peer);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);

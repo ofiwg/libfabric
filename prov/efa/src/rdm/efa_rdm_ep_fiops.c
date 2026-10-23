@@ -997,6 +997,34 @@ bool efa_rdm_ep_close_should_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 			return true;
 	}
 
+	/*
+	 * A RECEIPT/EOR packet that encountered RNR is removed from
+	 * ope_posted_ack_list when its send completion is recorded and the
+	 * ope is moved to ope_queued_list until it can be reposted (possibly
+	 * after an RNR backoff period). progress_queues_closing_ep() reposts
+	 * such packets, so keep waiting while any are queued for a responsive
+	 * peer. Otherwise the packet is dropped on close and the peer never
+	 * gets its delivery-complete/read completion.
+	 */
+	dlist_foreach(&efa_rdm_ep->ope_queued_list, entry) {
+		ope = container_of(entry, struct efa_rdm_ope, queued_entry);
+		/* RECEIPT/EOR are only sent by rxe */
+		if (ope->type != EFA_RDM_RXE)
+			continue;
+		if ((ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR) &&
+		    dlist_empty(&ope->queued_pkts))
+			continue;
+		switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
+		case EFA_RDM_RECEIPT_PKT:
+		case EFA_RDM_EOR_PKT:
+			if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP))
+				return true;
+			break;
+		default:
+			break;
+		}
+	}
+
 	return false;
 }
 

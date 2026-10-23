@@ -304,6 +304,8 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 				      struct ofi_bufpool *pkt_pool,
 				      enum efa_rdm_pke_alloc_type alloc_type);
 
+void efa_rdm_pke_reset_rnr_backoff(struct efa_rdm_pke *pkt_entry);
+
 void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry);
