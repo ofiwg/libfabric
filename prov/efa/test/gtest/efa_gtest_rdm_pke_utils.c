@@ -7,6 +7,7 @@
 #include "efa_env.h"
 #include "ofi_mem.h"
 #include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
@@ -916,4 +917,80 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	} else if (!pkt_entry_released) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
+}
+
+void efa_test_selects_copy_method(struct fid_ep *ep, struct fid_av *av,
+				  size_t total_len, enum efa_test_copy_src src,
+				  bool cuda_api_permitted,
+				  struct efa_test_copy_from_hmem_result *out)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	static char buf[EFA_TEST_RTM_LONG_LEN];
+	struct efa_rdm_mr mr = {0};
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	int saved_p2p_opt;
+	bool saved_cuda_api_permitted;
+
+	memset(out, 0, sizeof(*out));
+
+	if (total_len > sizeof(buf) ||
+	    total_len < EFA_TEST_COPY_HMEM_DATA_SIZE) {
+		out->ret = -FI_EINVAL;
+		return;
+	}
+
+	mr.efa_mr.iface = FI_HMEM_CUDA;
+	mr.device = EFA_TEST_COPY_HMEM_DEVICE;
+	if (src == EFA_TEST_COPY_SRC_CUDA_GDRCOPY) {
+		mr.flags = OFI_HMEM_DATA_DEV_REG_HANDLE;
+		mr.hmem_data = (void *) (uintptr_t) EFA_TEST_COPY_HMEM_HANDLE;
+	}
+
+	txe = efa_test_rtm_alloc_txe(efa_rdm_ep, av, ofi_op_msg, total_len,
+				     buf);
+	if (!txe) {
+		out->ret = -FI_ENOMEM;
+		return;
+	}
+	txe->desc[0] = (src == EFA_TEST_COPY_SRC_HOST) ? NULL : &mr;
+
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (!pke) {
+		txe->desc[0] = NULL;
+		efa_rdm_txe_release(txe);
+		out->ret = -FI_ENOMEM;
+		return;
+	}
+
+	/* Force the bounce-buffer copy regardless of the host's P2P support */
+	saved_p2p_opt = efa_rdm_ep->hmem_p2p_opt;
+	saved_cuda_api_permitted = efa_rdm_ep->cuda_api_permitted;
+	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+	efa_rdm_ep->cuda_api_permitted = cuda_api_permitted;
+
+	out->ret = efa_rdm_pke_init_payload_from_ope(
+		pke, txe, 0, 0, EFA_TEST_COPY_HMEM_DATA_SIZE);
+
+	efa_rdm_ep->hmem_p2p_opt = saved_p2p_opt;
+	efa_rdm_ep->cuda_api_permitted = saved_cuda_api_permitted;
+
+	out->payload_size = pke->payload_size;
+	out->payload_in_wiredata = pke->payload == pke->wiredata;
+
+	txe->desc[0] = NULL;
+	efa_rdm_pke_release_tx(pke);
+	efa_rdm_txe_release(txe);
+}
+
+size_t efa_test_get_max_gdrcopy_from_hmem_size(void)
+{
+	return efa_env.efa_max_gdrcopy_from_hmem_size;
+}
+
+void efa_test_set_max_gdrcopy_from_hmem_size(size_t size)
+{
+	efa_env.efa_max_gdrcopy_from_hmem_size = size;
 }

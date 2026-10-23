@@ -8,6 +8,7 @@
 #ifndef EFA_GTEST_RDM_PKE_UTILS_H
 #define EFA_GTEST_RDM_PKE_UTILS_H
 
+#include <stdbool.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
@@ -203,6 +204,30 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_sent_op op, size_t payload_size,
 			     size_t bytes_already,
 			     struct efa_test_rtm_sent_result *out);
+
+#define EFA_TEST_COPY_HMEM_HANDLE	0xabc0u
+#define EFA_TEST_COPY_HMEM_DEVICE	0x77u
+#define EFA_TEST_COPY_HMEM_DATA_SIZE	64u
+
+enum efa_test_copy_src {
+	EFA_TEST_COPY_SRC_HOST,
+	EFA_TEST_COPY_SRC_CUDA,
+	EFA_TEST_COPY_SRC_CUDA_GDRCOPY,
+};
+
+struct efa_test_copy_from_hmem_result {
+	ssize_t ret;
+	size_t payload_size;
+	int payload_in_wiredata;
+};
+
+void efa_test_selects_copy_method(struct fid_ep *ep, struct fid_av *av,
+				  size_t total_len, enum efa_test_copy_src src,
+				  bool cuda_api_permitted,
+				  struct efa_test_copy_from_hmem_result *out);
+
+size_t efa_test_get_max_gdrcopy_from_hmem_size(void);
+void efa_test_set_max_gdrcopy_from_hmem_size(size_t size);
 
 #ifdef __cplusplus
 }
