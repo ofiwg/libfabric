@@ -96,6 +96,15 @@ struct efa_rdm_av_entry {
 	fi_addr_t		shm_fi_addr;
 	struct dlist_entry	implicit_av_lru_entry;
 	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
+	/*
+	 * FI_AV_MAP: the peer of the first endpoint that used this entry, so
+	 * that turning an application fi_addr into a peer is two loads with no
+	 * peer-map lookup. Published peer first, then cache_ep (efa_rdm_av_entry_
+	 * cache_peer); read cache_ep, then the peer. Other endpoints of the same AV
+	 * use their peer maps.
+	 */
+	struct efa_rdm_ep	*cache_ep;
+	struct efa_rdm_peer	*cache_peer;
 #if ENABLE_DEBUG
 	enum efa_rdm_av_entry_publish_state publish_state;
 #endif
@@ -117,6 +126,36 @@ struct efa_rdm_av_entry {
 #define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)	do {} while (0)
 #define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)	do {} while (0)
 #endif
+
+static inline void efa_rdm_av_entry_cache_init(struct efa_rdm_av_entry *av_entry)
+{
+	av_entry->cache_ep = NULL;
+	av_entry->cache_peer = NULL;
+}
+
+/* record ep's peer for this entry if no endpoint has claimed the cache yet;
+ * caller holds the endpoint's ctrl_lock */
+static inline void efa_rdm_av_entry_cache_peer(struct efa_rdm_av_entry *av_entry,
+					       struct efa_rdm_ep *ep,
+					       struct efa_rdm_peer *peer)
+{
+	if (av_entry->cache_ep)
+		return;
+	av_entry->cache_peer = peer;
+	ofi_wmb();
+	av_entry->cache_ep = ep;
+}
+
+/* forget ep's cached peer, before that peer is freed */
+static inline void efa_rdm_av_entry_uncache_peer(struct efa_rdm_av_entry *av_entry,
+						 struct efa_rdm_ep *ep)
+{
+	if (av_entry->cache_ep != ep)
+		return;
+	av_entry->cache_ep = NULL;
+	ofi_wmb();
+	av_entry->cache_peer = NULL;
+}
 
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");

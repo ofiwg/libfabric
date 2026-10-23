@@ -23,14 +23,13 @@ struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
 
 
 /**
- * @brief find the efa_av_entry using fi_addr in the explicit AV
+ * @brief whether a FI_AV_MAP request is honored
  *
- * @param[in]	av	efa address vector
- * @param[in]	fi_addr	fi_addr of the AV entry
+ * FI_EFA_USE_AV_MAP=0 turns every FI_AV_MAP request into FI_AV_TABLE.
  */
-struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+bool efa_av_map_enabled(void)
 {
-	return efa_av_addr_to_entry_impl(av->addr_to_entry_map, fi_addr);
+	return efa_env.use_av_map;
 }
 
 
@@ -50,7 +49,7 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	cur_entry = efa_av_array_at(av->cur_reverse_av,
 				    efa_av_reverse_av_key(ahn, qpn));
 
-	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->fi_addr : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? efa_av_entry_app_fi_addr(av, cur_entry) : FI_ADDR_NOTAVAIL;
 }
 
 
@@ -185,7 +184,7 @@ int efa_av_entry_base_construct(struct efa_av *av, struct efa_av_entry *entry,
 {
 	int err;
 
-	assert(av->type == FI_AV_TABLE);
+	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
 	entry->fi_addr = fi_addr;
 	entry->ah = ah;
 
@@ -339,7 +338,8 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 			 "Found existing AV entry pointing to this "
 			 "address! fi_addr: %" PRId64 "\n",
 			 efa_fiaddr);
-		*fi_addr = efa_fiaddr;
+		*fi_addr = efa_av_entry_app_fi_addr(
+			av, efa_av_addr_to_entry_impl(av->addr_to_entry_map, efa_fiaddr));
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return 0;
 	}
@@ -358,7 +358,7 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = new_fi_addr;
+	*fi_addr = efa_av_entry_app_fi_addr(av, entry);
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
@@ -433,7 +433,7 @@ int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_av_entry *entry = NULL;
 
-	if (av->type != FI_AV_TABLE)
+	if (av->type != FI_AV_TABLE && av->type != FI_AV_MAP)
 		return -FI_EINVAL;
 
 	if (fi_addr == FI_ADDR_NOTAVAIL)
@@ -491,7 +491,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	if (av->type != FI_AV_TABLE)
+	if (av->type != FI_AV_TABLE && av->type != FI_AV_MAP)
 		return -FI_EINVAL;
 
 	/* The order in which the util domain and av locks are acquired must be
@@ -707,10 +707,11 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 	else
 		attr->count = MAX(attr->count, EFA_MIN_AV_SIZE);
 
-	if (attr->type == FI_AV_MAP) {
-		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
-					"EFA provider will now switch to using FI_AV_TABLE.\n");
-	}
+	/* FI_AV_MAP is honored on top of the table: util_av is always set up as
+	 * a table, and the open path marks the efa_av as FI_AV_MAP afterwards */
+	if (attr->type == FI_AV_MAP && !efa_av_map_enabled())
+		EFA_INFO(FI_LOG_AV, "FI_EFA_USE_AV_MAP is 0: using FI_AV_TABLE "
+				    "instead of the requested FI_AV_MAP.\n");
 	attr->type = FI_AV_TABLE;
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
@@ -729,8 +730,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct efa_domain *efa_domain;
 	struct efa_av *av;
+	bool map;
 	int ret;
 
+	map = attr && attr->type == FI_AV_MAP && efa_av_map_enabled();
 	ret = efa_av_open_prepare_attr(domain_fid, attr, &efa_domain);
 	if (ret)
 		return ret;
@@ -744,7 +747,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_free;
 
-	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n", attr->flags);
+	if (map) {
+		av->type = FI_AV_MAP;
+		attr->type = FI_AV_MAP;
+	}
+
+	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 " type %s\n", attr->flags,
+		 efa_av_is_map(av) ? "FI_AV_MAP" : "FI_AV_TABLE");
 
 	*av_fid = &av->util_av.av_fid;
 	(*av_fid)->fid.fclass = FI_CLASS_AV;

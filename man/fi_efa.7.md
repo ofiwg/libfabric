@@ -123,9 +123,10 @@ The following features are supported:
   *COMPLETION ACTIONS*).
 
 *Address vectors*
-: The provider supports *FI_AV_TABLE*. *FI_AV_MAP* was deprecated in Libfabric 2.x.
-  Applications can still use *FI_AV_MAP* to create an address vector. But the EFA
-  provider implementation will print a warning and switch to *FI_AV_TABLE*.
+: The provider supports *FI_AV_TABLE* and *FI_AV_MAP*. With *FI_AV_MAP* the
+  fi_addr_t of an address is the address of the provider's AV entry, so data
+  transfers need no lookup to find the peer. Set *FI_EFA_USE_AV_MAP* to 0 to use
+  *FI_AV_TABLE* for every address vector.
   *FI_EVENT* is unsupported.
 
 *Completion events*
@@ -1246,6 +1247,11 @@ the refill will be skipped.
 
 : Use the direct data path implementation that bypasses rdma-core on data path, including the CQ polling and TX/RX submissions, when it's available.
 Setting this variable as 0 will disable this feature (Default: true).
+
+*FI_EFA_USE_AV_MAP*
+
+: Honor *FI_AV_MAP* when the application requests it. Setting this variable as 0
+uses *FI_AV_TABLE* for every address vector (Default: true).
 
 *FI_EFA_TRACK_MR*
 
