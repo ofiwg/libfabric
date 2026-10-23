@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include <ctype.h>
+
 #include "efa.h"
 #include "efa_hmem.h"
 #include "efa_mr.h"
@@ -153,134 +155,135 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 	return 0;
 }
 
+/**
+ * @brief Check whether an EC2 instance type is known not to support GPUDirect
+ * RDMA
+ *
+ * @param[in]	instance_type	EC2 instance type, e.g. "p5.48xlarge"
+ *
+ * @return	true if the instance type is known not to support GPUDirect
+ *		RDMA, false otherwise (including unknown instance types)
+ */
+bool efa_instance_type_gdr_unsupported(const char *instance_type)
+{
+	/*
+	 * EC2 instance types with EFA and NVIDIA GPUs that do not support
+	 * GPUDirect RDMA. All other instance types are assumed to support it.
+	 * Users on an unlisted instance type without GPUDirect RDMA can set
+	 * FI_HMEM_DISABLE_P2P=1.
+	 *
+	 * Entries are exact instance types (no prefix matching), since support
+	 * can differ between sizes of the same family.
+	 */
+	static const char *const unsupported[] = {
+		"g4dn.12xlarge",
+		"g4dn.16xlarge",
+		"g4dn.8xlarge",
+		"g4dn.metal",
+		"g5.12xlarge",
+		"g5.16xlarge",
+		"g5.24xlarge",
+		"g5.48xlarge",
+		"g5.8xlarge",
+		"g6.12xlarge",
+		"g6.16xlarge",
+		"g6.24xlarge",
+		"g6.48xlarge",
+		"g6.8xlarge",
+		"g6e.12xlarge",
+		"g6e.16xlarge",
+		"g6e.24xlarge",
+		"g6e.48xlarge",
+		"g6e.8xlarge",
+		"g7e.8xlarge",
+		"gr6.8xlarge",
+		"p3dn.24xlarge",
+		"p5.4xlarge",
+	};
+	for (size_t i = 0; i < ARRAY_SIZE(unsupported); i++) {
+		if (!strcmp(instance_type, unsupported[i]))
+			return true;
+	}
+
+	return false;
+}
+
+#if HAVE_CUDA
+/**
+ * @brief Read the EC2 instance type from efa_env.instance_type_file
+ *
+ * @param[out]	buf	Buffer to store the NUL-terminated instance type
+ * @param[in]	len	Size of buf
+ *
+ * @return	0 on success, negative libfabric error code otherwise
+ */
+static int efa_hmem_get_instance_type(char *buf, size_t len)
+{
+	FILE *fp;
+	size_t n;
+	int ret = 0;
+
+	if (!efa_env.instance_type_file)
+		return -FI_ENOENT;
+
+	fp = fopen(efa_env.instance_type_file, "r");
+	if (!fp)
+		return -errno;
+
+	if (!fgets(buf, len, fp)) {
+		ret = -FI_ENODATA;
+		goto out;
+	}
+
+	n = strlen(buf);
+	while (n > 0 && isspace((unsigned char) buf[n - 1]))
+		buf[--n] = '\0';
+
+	if (!n)
+		ret = -FI_ENODATA;
+out:
+	fclose(fp);
+	return ret;
+}
+#endif /* HAVE_CUDA */
+
 static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *info) {
 #if HAVE_CUDA
-	CUdevice cu_dev;
-	CUcontext cu_ctx = NULL;
-	CUresult cu_ret;
-	void *ptr = 0;
-	struct ibv_mr *ibv_mr;
-	struct ibv_pd *ibv_pd;
-	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
-	size_t len = ofi_get_page_size() * 2;
+	char instance_type[64];
 	int ret;
-	int dmabuf_fd;
-	uint64_t dmabuf_offset;
-	bool own_cuda_ctx = false;
 
-	cu_ret = ofi_cuCtxGetCurrent(&cu_ctx);
-	if (cu_ret != CUDA_SUCCESS) {
-		info->initialized = false;
-		EFA_WARN(FI_LOG_CORE, "Failed to probe CUDA ctx: %d\n", cu_ret);
-		return;
-	}
-
-	if (!cu_ctx) {
-		cu_ret = ofi_cuDeviceGet(&cu_dev, 0);
-		if (cu_ret != CUDA_SUCCESS) {
-			info->initialized = false;
-			EFA_WARN(FI_LOG_CORE, "Failed to get CUDA device: %d\n", cu_ret);
-			return;
-		}
-
-		/*
-		 * Create a CUDA context explicitly. This is to prevent implicit ctx creation when
-		 * using the higher-level CUDA runtime functions (e.g., cudaMalloc). Managing the
-		 * ctx ourselves lets us make sure that we clean up properly to have minimal impact
-		 * on the system after we are done probing for p2p support.
-		 */
-		cu_ret = ofi_cuCtxCreate_v2(&cu_ctx, 0, cu_dev);
-		if (cu_ret != CUDA_SUCCESS) {
-			info->initialized = false;
-			EFA_WARN(FI_LOG_CORE, "Failed to create CUDA context: %d\n", cu_ret);
-			return;
-		}
-
-		own_cuda_ctx = true;
-	}
-
-	cu_ret = ofi_cudaMalloc(&ptr, len);
-	if (cu_ret != CUDA_SUCCESS) {
-		info->initialized = false;
-		EFA_WARN(FI_LOG_CORE, "Failed to allocate CUDA buffer: %d\n", cu_ret);
-		if (own_cuda_ctx) {
-			ofi_cuCtxDestroy(cu_ctx);
-		}
-		return;
-	}
-
-	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
-	if (!ibv_pd) {
-		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d\n", errno);
-		ofi_cudaFree(ptr);
-		if (own_cuda_ctx) {
-			ofi_cuCtxDestroy(cu_ctx);
-		}
-		return;
-	}
-
-#if HAVE_EFA_DMABUF_MR
-	if (ofi_hmem_is_dmabuf_env_var_enabled(FI_HMEM_CUDA)) {
-		ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_CUDA, (void *)ptr, len, &dmabuf_fd, &dmabuf_offset);
-		if (ret == FI_SUCCESS) {
-			ibv_mr = ibv_reg_dmabuf_mr(ibv_pd, dmabuf_offset,
-						   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-			(void)ofi_hmem_put_dmabuf_fd(FI_HMEM_CUDA, dmabuf_fd);
-			if (!ibv_mr) {
-				EFA_INFO(FI_LOG_CORE,
-					"Unable to register CUDA device buffer via dmabuf: %s. "
-					"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
-				ibv_mr = ibv_reg_mr(ibv_pd, (void *)ptr, len, ibv_access);
-				info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
-			} else {
-				info->dmabuf_supported_by_device = EFA_DMABUF_SUPPORTED;
-			}
-		} else {
-			EFA_INFO(FI_LOG_CORE,
-				"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
-				"Fall back to ibv_reg_mr\n", ret);
-			ibv_mr = ibv_reg_mr(ibv_pd, (void *)ptr, len, ibv_access);
-			info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
-		}
+	/*
+	 * Determine GPUDirect RDMA support from the instance type instead of
+	 * allocating and registering a CUDA buffer, so that fi_getinfo does
+	 * not initialize a CUDA context.
+	 */
+	ret = efa_hmem_get_instance_type(instance_type, sizeof instance_type);
+	if (ret) {
+		EFA_INFO(FI_LOG_CORE,
+			 "Unable to determine EC2 instance type from %s: %s. "
+			 "Assuming CUDA P2P support.\n",
+			 efa_env.instance_type_file, fi_strerror(-ret));
+		info->p2p_supported_by_device = true;
 	} else {
-		EFA_INFO(FI_LOG_CORE, "FI_HMEM_CUDA_USE_DMABUF set to false. Not using DMABUF for CUDA.\n");
-		ibv_mr = ibv_reg_mr(ibv_pd, (void *)ptr, len, ibv_access);
+		info->p2p_supported_by_device =
+			!efa_instance_type_gdr_unsupported(instance_type);
+		EFA_INFO(FI_LOG_CORE,
+			 info->p2p_supported_by_device ?
+				 "Assuming CUDA P2P support for instance type %s\n" :
+				 "Instance type %s is known not to support CUDA P2P\n",
+			 instance_type);
+	}
+
+	/*
+	 * dmabuf support is assumed rather than probed. If dmabuf registration
+	 * fails, efa_mr_reg_ibv_mr() falls back to ibv_reg_mr and marks dmabuf
+	 * as not supported.
+	 */
+	info->dmabuf_fallback_enabled = true;
+	if (!cuda_is_dmabuf_supported()) {
+		EFA_INFO(FI_LOG_CORE, "dmabuf is not supported for CUDA\n");
 		info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
 	}
-#else
-	ibv_mr = ibv_reg_mr(ibv_pd, (void *)ptr, len, ibv_access);
-#endif
-
-	if (!ibv_mr) {
-		info->p2p_supported_by_device = false;
-		EFA_WARN(FI_LOG_CORE,
-			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
-		ofi_cudaFree(ptr);
-		(void) ibv_dealloc_pd(ibv_pd);
-		if (own_cuda_ctx) {
-			ofi_cuCtxDestroy(cu_ctx);
-		}
-		return;
-	}
-
-	ret = ibv_dereg_mr(ibv_mr);
-	ofi_cudaFree(ptr);
-	(void) ibv_dealloc_pd(ibv_pd);
-	if (ret) {
-		EFA_WARN(FI_LOG_CORE,
-			 "Failed to deregister CUDA buffer: %s\n",
-			 fi_strerror(-ret));
-		if (own_cuda_ctx) {
-			ofi_cuCtxDestroy(cu_ctx);
-		}
-		return;
-	}
-
-	info->p2p_supported_by_device = true;
-	if (own_cuda_ctx) {
-		ofi_cuCtxDestroy(cu_ctx);
-	}
-
 #endif
 	return;
 }

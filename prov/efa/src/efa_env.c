@@ -34,6 +34,7 @@ struct efa_env efa_env = {
 	.efa_read_segment_size = 1073741824,
 	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
+	.instance_type_file = "/sys/devices/virtual/dmi/id/product_name",
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
