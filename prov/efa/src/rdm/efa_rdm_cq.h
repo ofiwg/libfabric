@@ -39,9 +39,23 @@ static inline struct efa_rdm_pke *efa_rdm_cq_get_pke_from_wr_id_solicited(uint64
 
 	wr_id &= ~((uint64_t)EFA_RDM_GEN_MASK);
 	pkt_entry = (struct efa_rdm_pke *) wr_id;
+	/*
+	 * The generation is bumped every time a packet entry completes, so a
+	 * mismatch means this completion is stale or duplicated: the entry
+	 * already completed and may have been released, reposted or reused.
+	 * Processing it would release the entry a second time and break the RX
+	 * pool accounting, and the next refill would dereference a NULL entry.
+	 * There is no safe way to continue.
+	 */
 	if (OFI_UNLIKELY(pkt_entry->gen != gen)) {
 		EFA_WARN(FI_LOG_CQ, "Received packet from wrong generation! pkt_entry %p expected gen %d received gen %d\n", pkt_entry, pkt_entry->gen, gen);
-		assert(pkt_entry->gen == gen);
+		fprintf(stderr,
+			"Libfabric EFA provider received a completion for packet "
+			"entry %p with generation %d, expected %d. The completion "
+			"is stale or duplicated.\n"
+			"Your application will now abort().\n",
+			pkt_entry, gen, pkt_entry->gen);
+		abort();
 	}
 
 	return pkt_entry;
