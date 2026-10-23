@@ -389,6 +389,8 @@ ssize_t efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 			"Posting of receipt packet failed! err=%s\n",
 			fi_strerror(err));
 		efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
+		assert(rxe->efa_outstanding_tx_ops == 0);
+		efa_rdm_rxe_release(rxe);
 		return err;
 	}
 
