@@ -244,7 +244,9 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   SDMA is used. This covers eager SDMA (see FI_OPX_EAGER_SDMA) and the rendezvous data
   phase. Below this threshold an eligible eager send uses PIO.
   This only has an effect with HMEM enabled builds of OPX.
-  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, 512 for ROCr builds.
+  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, and one past
+  FI_OPX_DEV_REG_SEND_THRESHOLD for ROCr builds so that the device-registered copy covers
+  the lengths below it.
 
 *FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
 : Integer. The maximum number of times writev will be called during a single poll cycle.
@@ -276,7 +278,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
   rendezvous is used. Messages smaller than this threshold use eager or multi-packet eager.
   This only has an effect with HMEM enabled builds of OPX.
-  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds, 8192 for ROCr builds.
+  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds. For ROCr builds the
+  default is one byte past the PIO flow eager threshold, so that every length eager SDMA can
+  carry uses it and longer messages use rendezvous rather than multi-packet eager. That
+  threshold depends on the PIO credit count and the packet size, so the resulting default is
+  hardware dependent and is commonly 10241.
 
 *FI_OPX_HFISVC_MIN_PAYLOAD_BYTES*
 : Integer. Applies to sends from host memory. The minimum message length in bytes where
@@ -300,7 +306,16 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   larger of this value and FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does
   not cause smaller messages to use the HFI Service.
   This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
-  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 1048576 for ROCr builds.
+  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 16384 for ROCr builds.
+
+*FI_OPX_HFISVC_INLINE_EDGE*
+: Boolean (0/1, on/off, true/false, yes/no). For unaligned device (GPU) memory transfers over
+  the HFI Service, carry the unaligned edge bytes inline in the rendezvous request-to-send.
+  This lets the receiver place those bytes itself, at the cost of the sender reading them
+  from the source buffer before it can send the request-to-send.
+  A sender with either setting interoperates with an unmodified peer.
+  This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
+  Defaults to 0 (disabled).
 
 *FI_OPX_MP_EAGER*
 : Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
@@ -341,7 +356,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
-  The default threshold is 512 for CUDA and ROCr builds, 4096 otherwise.
+  The default threshold is 512 for CUDA builds, 2048 for ROCr builds, and 4096 otherwise.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_DEV_REG_RECV_THRESHOLD*
@@ -382,6 +397,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   on the node. Setting it to NO disables shm except peers with same lid and same
   hfi1 (loopback).  Defaults to: "YES"
   Deprecated alias: FI_OPX_SHM_ENABLE (still honored, emits a deprecation warning).
+
+*FI_OPX_SHM_USE_PEER*
+: Boolean (1/0, on/off, true/false, yes/no). Selects the intra-node transport. When NO
+  (default) OPX uses its native shared-memory ring. When YES OPX routes node-local traffic
+  through the shm provider imported as a FI_PEER.  Defaults to: "NO"
 
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
@@ -425,6 +445,27 @@ or underruns.  Default is false.
   payload smaller than this threshold use a single HFI rail even when striping is enabled.
   Only effective when FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
   Default: 65536 (64 KiB).
+
+*FI_OPX_FLOW_CONTROL*
+: String. Selects the flow-control mode for the process. The selection is made once, when the
+  first OPX endpoint is enabled, and is then fixed for the lifetime of the process. All
+  subsequent endpoints in the same process use the cached result.
+
+  Recognized values:
+
+  - `none`: No flow-control work is performed on packet send or receive paths. This is the
+    default when the variable is unset.
+  - `rccc`: Receiver-controlled credit-based flow control. Senders reserve receiver capacity
+    before transmitting on remote HFI paths; the receiver grants credit windows and admission
+    is governed per flow. Intranode shared-memory traffic is not governed.
+  - `conformance`: Recognized but not available in this build. Endpoint initialization fails.
+
+  Any value that is not one of the above, including an empty string, is rejected. Endpoint
+  initialization fails with an error and no fallback to `none` occurs. Because the result is
+  cached process-wide, a failed selection causes all subsequent endpoint initializations in the
+  same process to fail with the same error.
+
+  Default: unset, which selects `none`.
 
 # TRACING
 
