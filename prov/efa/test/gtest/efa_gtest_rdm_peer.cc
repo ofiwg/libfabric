@@ -38,6 +38,26 @@ class EfaRdmPeerTest : public testing::Test
 		MockEfa::set(nullptr);
 		efa_test_resource_destruct(&resource);
 	}
+
+	void expect_order(enum efa_test_order_scenario scenario,
+			  uint32_t first_msg_id, uint32_t exp_msg_id_before,
+			  size_t count)
+	{
+		struct efa_test_order_result res = {};
+
+		ASSERT_EQ(efa_test_ordered_receive(resource.ep, peer_addr,
+						   scenario, &res),
+			  0);
+		EXPECT_EQ(res.pre_log_len, 0u);
+		EXPECT_EQ(res.exp_msg_id_before, exp_msg_id_before);
+		ASSERT_EQ(res.log_len, count);
+		for (size_t i = 0; i < count; i++) {
+			EXPECT_EQ(res.log[i], first_msg_id + i);
+			EXPECT_EQ(res.callback_count[i], 1u);
+		}
+		EXPECT_EQ(res.exp_msg_id, first_msg_id + count);
+		EXPECT_TRUE(res.drained);
+	}
 };
 
 TEST_F(EfaRdmPeerTest, reordered_packet_retains_callback)
@@ -64,13 +84,22 @@ TEST_F(EfaRdmPeerTest, reordered_rta_retains_callback)
 
 TEST_F(EfaRdmPeerTest, reorder_drain_invokes_callback)
 {
-	struct efa_test_reorder_callback_result res = {};
+	expect_order(EFA_TEST_ORDER_SINGLE_DRAIN, 1, 0, 1);
+}
 
-	ASSERT_EQ(efa_test_reorder_drain_invokes_callback(
-			  resource.ep, peer_addr, &res),
-		  0);
-	EXPECT_EQ(res.callback_invocations, 1);
-	EXPECT_EQ(res.exp_msg_id, 2u);
+TEST_F(EfaRdmPeerTest, mixed_rtm_rta_drains_in_msg_id_order)
+{
+	expect_order(EFA_TEST_ORDER_MIXED_RTM_RTA, 50, 50, 3);
+}
+
+TEST_F(EfaRdmPeerTest, reorder_drain_continues_after_callback_error)
+{
+	expect_order(EFA_TEST_ORDER_DRAIN_ERROR, 1, 1, 2);
+}
+
+TEST_F(EfaRdmPeerTest, in_order_callback_error_still_drains_ready_successor)
+{
+	expect_order(EFA_TEST_ORDER_IN_ORDER_ERROR, 10, 10, 2);
 }
 
 /**

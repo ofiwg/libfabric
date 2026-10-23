@@ -78,8 +78,6 @@ int efa_test_av_remove_releases_unexp_pkt(
 struct efa_test_reorder_callback_result {
 	int callback_set;
 	int protocol_correct;
-	int callback_invocations;
-	uint32_t exp_msg_id;
 };
 
 int efa_test_reordered_packet_retains_callback(
@@ -88,9 +86,24 @@ int efa_test_reordered_packet_retains_callback(
 int efa_test_reordered_rta_retains_callback(
 	struct fid_ep *ep, fi_addr_t peer_addr,
 	struct efa_test_reorder_callback_result *out);
-int efa_test_reorder_drain_invokes_callback(
-	struct fid_ep *ep, fi_addr_t peer_addr,
-	struct efa_test_reorder_callback_result *out);
+
+enum efa_test_order_scenario {
+	EFA_TEST_ORDER_MIXED_RTM_RTA,
+	EFA_TEST_ORDER_DRAIN_ERROR,
+	EFA_TEST_ORDER_IN_ORDER_ERROR,
+	EFA_TEST_ORDER_SINGLE_DRAIN,
+};
+
+struct efa_test_order_result {
+	uint32_t log[3], exp_msg_id_before, exp_msg_id;
+	size_t log_len, pre_log_len;
+	unsigned int callback_count[3];
+	int drained;
+};
+
+int efa_test_ordered_receive(struct fid_ep *ep, fi_addr_t peer_addr,
+			     enum efa_test_order_scenario scenario,
+			     struct efa_test_order_result *out);
 
 // Sentinel values that will be used in assertions
 #define EFA_TEST_RTM_TAG	 0x1234567890abcdefULL
