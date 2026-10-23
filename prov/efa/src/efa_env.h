@@ -38,7 +38,7 @@ struct efa_env {
 	int rnr_backoff_initial_wait_time; /* unit is us */
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
-	size_t efa_max_gdrcopy_msg_size;
+	size_t efa_max_gdrcopy_from_hmem_size;
 	size_t efa_read_segment_size;
 	size_t efa_write_segment_size;
 	/**
