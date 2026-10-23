@@ -605,12 +605,12 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 
 	peer->rnr_backoff_begin_ts = ofi_gettime_us();
 	if (peer->rnr_backoff_wait_time == 0) {
-		if (efa_env.rnr_backoff_initial_wait_time > 0)
+		if (efa_env.rnr_backoff_initial_wait_time > 0) {
 			peer->rnr_backoff_wait_time = efa_env.rnr_backoff_initial_wait_time;
-		else
-			peer->rnr_backoff_wait_time = MAX(random_min_timeout,
-							  rand() %
-							  random_max_timeout);
+		} else {
+			int random_timeout = rand() % random_max_timeout;
+			peer->rnr_backoff_wait_time = MAX(random_min_timeout, random_timeout);
+		}
 
 		EFA_DBG(FI_LOG_EP_DATA,
 			"initializing backoff timeout for peer fi_addr: "
