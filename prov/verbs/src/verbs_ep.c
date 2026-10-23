@@ -73,6 +73,9 @@ int vrb_post_recv_internal(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
 	ctx->op_queue = VRB_OP_RQ;
+	ctx->recv_buf = (wr->num_sge && ep->util_ep.type == FI_EP_DGRAM) ?
+				(void *) (uintptr_t) wr->sg_list[0].addr :
+				NULL;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
@@ -518,7 +521,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
-			vrb_report_wc(cq, &wc);
+			vrb_report_wc(cq, &wc, NULL, NULL);
 	}
 }
 
@@ -546,7 +549,7 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
-			vrb_report_wc(cq, &wc);
+			vrb_report_wc(cq, &wc, NULL, NULL);
 	}
 }
 
@@ -574,7 +577,7 @@ static void vrb_flush_prepost_wr(struct vrb_ep *ep)
 		vrb_free_recv_wr(vrb_ep2_progress(ep), wr);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
-			vrb_report_wc(cq, &wc);
+			vrb_report_wc(cq, &wc, NULL, NULL);
 	}
 }
 
