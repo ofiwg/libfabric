@@ -197,15 +197,6 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 	return 0;
 }
 
-static int efa_test_reorder_callback_invocations;
-
-static ssize_t efa_test_reorder_callback(struct efa_rdm_pke *pke)
-{
-	efa_test_reorder_callback_invocations++;
-	efa_rdm_pke_release_rx(pke);
-	return 0;
-}
-
 static struct efa_rdm_pke *
 efa_test_reorder_pke(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
 		     uint32_t msg_id)
@@ -337,41 +328,184 @@ int efa_test_reordered_rta_retains_callback(
 	return 0;
 }
 
-int efa_test_reorder_drain_invokes_callback(
-	struct fid_ep *ep_fid, fi_addr_t peer_addr,
-	struct efa_test_reorder_callback_result *out)
-{
-	struct efa_rdm_ep *ep = container_of(
-		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+struct efa_test_order_callback_ctx {
+	struct efa_test_order_result *out;
+	uint32_t first_msg_id;
+	uint32_t fail_msg_id;
+};
 
-	memset(out, 0, sizeof *out);
-	if (!peer)
-		return -FI_EINVAL;
-	struct efa_rdm_pke *pke = efa_test_reorder_pke(ep, peer, 1);
+static struct efa_test_order_callback_ctx efa_test_order_ctx;
+
+static ssize_t efa_test_order_callback(struct efa_rdm_pke *pke){
+	struct efa_test_order_result *out = efa_test_order_ctx.out;
+	uint32_t msg_id = efa_rdm_pke_get_rtm_msg_id(pke);
+	size_t index = msg_id - efa_test_order_ctx.first_msg_id;
+
+	assert(index < ARRAY_SIZE(out->log) &&
+	       out->log_len < ARRAY_SIZE(out->log));
+	out->log[out->log_len++] = msg_id;
+	out->callback_count[index]++;
+	efa_rdm_pke_release_rx(pke);
+	return msg_id == efa_test_order_ctx.fail_msg_id ? -FI_EIO : 0;
+}
+
+static struct efa_rdm_pke *efa_test_order_pke(struct efa_rdm_ep *ep,
+					      struct efa_rdm_peer *peer,
+					      uint32_t msg_id, int atomic){
+	struct efa_rdm_pke *pke = efa_rdm_pke_alloc(
+		ep, ep->rx_unexp_pkt_pool, EFA_RDM_PKE_FROM_UNEXP_POOL);
+	struct efa_rdm_rtm_base_hdr *hdr;
 
 	if (!pke)
-		return -FI_ENOMEM;
-	pke->handle_pke = efa_test_reorder_callback;
+		return NULL;
 
-	int saved_rx_copy_ooo = efa_env.rx_copy_ooo;
+	pke->peer = peer;
+	hdr = (struct efa_rdm_rtm_base_hdr *) pke->wiredata;
+	memset(hdr, 0, atomic ? sizeof(struct efa_rdm_rta_hdr) : sizeof(*hdr));
+	hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	hdr->type = atomic ? EFA_RDM_WRITE_RTA_PKT : EFA_RDM_EAGER_MSGRTM_PKT;
+	hdr->flags = atomic ? EFA_RDM_REQ_ATOMIC : EFA_RDM_REQ_MSG;
+	hdr->msg_id = msg_id;
+	pke->pkt_size = atomic ? sizeof(struct efa_rdm_rta_hdr) : sizeof(*hdr);
 
-	efa_env.rx_copy_ooo = 1;
-	efa_test_reorder_callback_invocations = 0;
-	int ret = efa_rdm_peer_reorder_msg(peer, ep, pke);
-	int pre_drain_invocations = efa_test_reorder_callback_invocations;
+	return pke;
+}
 
-	if (ret == 1 && pre_drain_invocations == 0) {
-		ofi_recvwin_slide(&peer->robuf);
-		efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
+static int efa_test_order_take_queued(struct efa_rdm_pke **pke, int ret){
+	if (ret != 1)
+		return ret ? ret : -FI_EINVAL;
+	*pke = NULL;
+	return 0;
+}
+
+static int efa_test_order_cleanup(struct efa_rdm_peer *peer,
+				  struct efa_test_order_result *out,
+				  struct efa_rdm_pke **pkes,
+				  struct efa_rdm_pke ***slots, size_t count){
+	int drained = ofi_recvwin_is_empty((&peer->robuf)) &&
+		      dlist_empty(&peer->overflow_pke_list);
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (!slots[i])
+			drained = 0;
+		else if (*slots[i]) {
+			drained = 0;
+			if (!out->callback_count[i])
+				efa_rdm_pke_release_rx(*slots[i]);
+			*slots[i] = NULL;
+		}
+		if (pkes[i])
+			efa_rdm_pke_release_rx(pkes[i]);
 	}
-	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	return drained;
+}
 
-	out->callback_invocations = efa_test_reorder_callback_invocations;
-	out->exp_msg_id = peer->robuf.exp_msg_id;
-	return ret == 1 && pre_drain_invocations == 0 &&
-		       efa_test_reorder_callback_invocations == 1 ?
-		       0 : -FI_EINVAL;
+static void efa_test_order_receive(struct efa_rdm_pke **pke){
+	struct efa_rdm_pke *tmp = *pke;
+
+	*pke = NULL;
+	efa_rdm_pke_handle_rta_recv(tmp, efa_test_order_callback);
+}
+
+int efa_test_ordered_receive(struct fid_ep *ep_fid, fi_addr_t peer_addr,
+			     enum efa_test_order_scenario scenario,
+			     struct efa_test_order_result *out){
+	struct efa_test_order_case {
+		uint32_t first_msg_id;
+		uint32_t exp_msg_id_start;
+		uint32_t fail_msg_id;
+		size_t count;
+		bool copy_ooo;
+		bool atomic[3];
+	};
+	static const struct efa_test_order_case cases[] = {
+		[EFA_TEST_ORDER_MIXED_RTM_RTA] =
+			{50, 50, UINT32_MAX, 3, false, {true, false, true}},
+		[EFA_TEST_ORDER_DRAIN_ERROR] =
+			{1, 1, 1, 2, false, {true, false}},
+		[EFA_TEST_ORDER_IN_ORDER_ERROR] =
+			{10, 10, 10, 2, false, {true, true}},
+		[EFA_TEST_ORDER_SINGLE_DRAIN] =
+			{1, 0, UINT32_MAX, 1, true, {false}},
+	};
+	const struct efa_test_order_case *test;
+	struct efa_rdm_ep *ep =
+		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	struct efa_rdm_pke *pkes[3] = {NULL};
+	struct efa_rdm_pke **slots[3] = {NULL};
+	int saved_rx_copy_ooo = efa_env.rx_copy_ooo;
+	int ret = 0;
+	size_t i;
+
+	memset(out, 0, sizeof *out);
+	if (!peer || (unsigned int) scenario >= ARRAY_SIZE(cases))
+		return -FI_EINVAL;
+	test = &cases[scenario];
+	efa_test_order_ctx = (struct efa_test_order_callback_ctx) {
+		out, test->first_msg_id, test->fail_msg_id};
+
+	peer->robuf.exp_msg_id = test->exp_msg_id_start;
+	for (i = 0; i < test->count; i++) {
+		uint32_t msg_id = test->first_msg_id + i;
+
+		pkes[i] = test->copy_ooo ?
+				  efa_test_reorder_pke(ep, peer, msg_id) :
+				  efa_test_order_pke(ep, peer, msg_id,
+						     test->atomic[i]);
+		slots[i] = ofi_recvwin_get_msg(&peer->robuf, msg_id);
+		if (!pkes[i]) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+
+	efa_env.rx_copy_ooo = test->copy_ooo;
+	switch (scenario) {
+	case EFA_TEST_ORDER_MIXED_RTM_RTA:
+		efa_test_order_receive(&pkes[2]);
+		pkes[1]->handle_pke = efa_test_order_callback;
+		ret = efa_test_order_take_queued(
+			&pkes[1], efa_rdm_peer_reorder_msg(peer, ep, pkes[1]));
+		break;
+	case EFA_TEST_ORDER_DRAIN_ERROR:
+		for (i = 0; i < test->count && !ret; i++) {
+			pkes[i]->handle_pke = efa_test_order_callback;
+			ret = efa_test_order_take_queued(
+				&pkes[i],
+				efa_rdm_peer_recvwin_queue_or_append_pke(
+					pkes[i], test->first_msg_id + i,
+					&peer->robuf));
+		}
+		break;
+	case EFA_TEST_ORDER_IN_ORDER_ERROR:
+		efa_test_order_receive(&pkes[1]);
+		break;
+	case EFA_TEST_ORDER_SINGLE_DRAIN:
+		pkes[0]->handle_pke = efa_test_order_callback;
+		ret = efa_test_order_take_queued(
+			&pkes[0], efa_rdm_peer_reorder_msg(peer, ep, pkes[0]));
+		break;
+	}
+	if (ret)
+		goto out;
+	out->pre_log_len = out->log_len;
+	out->exp_msg_id_before = ofi_recvwin_next_exp_id(&peer->robuf);
+	if (scenario == EFA_TEST_ORDER_SINGLE_DRAIN)
+		ofi_recvwin_slide(&peer->robuf);
+	if (scenario == EFA_TEST_ORDER_SINGLE_DRAIN ||
+	    scenario == EFA_TEST_ORDER_DRAIN_ERROR)
+		efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
+	else
+		efa_test_order_receive(&pkes[0]);
+out:
+	out->exp_msg_id = ofi_recvwin_next_exp_id(&peer->robuf);
+	efa_test_order_ctx.out = NULL;
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	out->drained =
+		efa_test_order_cleanup(peer, out, pkes, slots, test->count);
+	return ret;
 }
 
 int efa_test_get_tx_min_credits(void)
