@@ -1318,7 +1318,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 					       rxe->cq_entry.buf,
 					       rxe->cq_entry.data,
 					       rxe->cq_entry.tag,
-					       efa_rdm_peer_fi_addr(rxe->peer));
+					       efa_rdm_peer_app_fi_addr(rxe->peer));
 		else
 			ret = ofi_cq_write(rx_cq,
 					   rxe->cq_entry.op_context,

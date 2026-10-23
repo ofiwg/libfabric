@@ -82,13 +82,18 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
  * @param[in]		addr 		libfabric address
  * @returns pointer to #efa_rdm_peer
  */
-struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t app_addr)
 {
 	struct efa_av_entry *entry;
 	struct efa_rdm_peer *peer;
+	fi_addr_t addr;
 
-	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+	if (OFI_UNLIKELY(app_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
+
+	/* the peer map is keyed by the util_av index, which is the
+	 * application fi_addr for FI_AV_TABLE */
+	addr = efa_av_fi_addr_to_index(ep->base_ep.av, app_addr);
 
 	/* Path 1 (common case): the peer is already in the map. Keep this
 	 * lookup lock-free -- if we find the peer, just return it. */
@@ -96,7 +101,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (peer)
 		return peer;
 
-	entry = efa_av_addr_to_entry(ep->base_ep.av, addr);
+	entry = efa_av_addr_to_entry(ep->base_ep.av, app_addr);
 	if (OFI_UNLIKELY(!entry))
 		return NULL;
 

@@ -201,6 +201,19 @@ static inline fi_addr_t efa_av_entry_app_fi_addr(const struct efa_av *av,
 }
 
 /**
+ * @brief the application fi_addr of a util_av index of the explicit AV
+ */
+static inline fi_addr_t efa_av_index_to_app_fi_addr(struct efa_av *av, fi_addr_t index)
+{
+	struct efa_av_entry *entry;
+
+	if (!efa_av_is_map(av) || index == FI_ADDR_NOTAVAIL)
+		return index;
+	entry = efa_av_addr_to_entry_impl(av->addr_to_entry_map, index);
+	return entry ? (fi_addr_t) (uintptr_t) entry : FI_ADDR_NOTAVAIL;
+}
+
+/**
  * @brief the util_av index of an application fi_addr
  */
 static inline fi_addr_t efa_av_fi_addr_to_index(struct efa_av *av, fi_addr_t fi_addr)
