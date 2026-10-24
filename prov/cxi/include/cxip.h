@@ -64,6 +64,10 @@ struct cxip_libcxi_ops {
 			     struct cxi_cp **cp);
 	int (*modify_cp)(struct cxil_lni *lni, struct cxi_cp *cp,
 			 unsigned int vni);
+	int (*svc_get_vni_range)(struct cxil_dev *dev, unsigned int svc_id,
+				 uint16_t *vni_min, uint16_t *vni_max);
+	int (*svc_get_netns)(struct cxil_dev *dev, unsigned int svc_id,
+			     unsigned int *netns);
 };
 
 extern struct cxip_libcxi_ops cxip_libcxi_ops;

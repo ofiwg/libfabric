@@ -16,75 +16,6 @@
 bool cxip_collectives_supported = true;
 struct cxip_libcxi_ops cxip_libcxi_ops;
 
-static void cxip_libcxi_ops_init(void)
-{
-#ifdef CXIP_LIBCXI_STATIC
-	/* libcxi is linked statically, so the functions declared by the build
-	 * headers are bound directly; there is no shared libcxi.so.1 whose
-	 * symbol set could differ from the headers at runtime.
-	 */
-#ifdef CXI_HAVE_ALLOC_TRIG_CP
-	cxip_libcxi_ops.alloc_trig_cp = cxil_alloc_trig_cp;
-#endif
-#ifdef CXI_HAVE_MODIFY_CP
-	cxip_libcxi_ops.modify_cp = cxil_modify_cp;
-#endif
-
-	CXIP_INFO("libcxi symbols (static link): alloc_trig_cp=%d modify_cp=%d\n",
-		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp);
-#else
-	Dl_info dl_info = {};
-	void *handle = NULL;
-
-	/* Look the symbols up in the libcxi this provider is already bound
-	 * to, whatever its SONAME or path, by locating the object that
-	 * defines cxil_alloc_cp() (LIBCXI_1.0). RTLD_DEFAULT only searches
-	 * the global scope, which excludes libfabric's own dependencies when
-	 * an application loaded libfabric with RTLD_LOCAL. ISO C defines no
-	 * function-to-object pointer conversion, so the address reaches
-	 * dladdr() through uintptr_t, which is exact on the Linux ABIs this
-	 * provider supports and quiet under -pedantic.
-	 */
-	if (dladdr((void *)(uintptr_t)cxil_alloc_cp, &dl_info) &&
-	    dl_info.dli_fname)
-		handle = dlopen(dl_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
-	if (!handle) {
-		handle = RTLD_DEFAULT;
-
-		/* Every libcxi exports cxil_alloc_cp(). A global scope that
-		 * shows it resolves the optional symbols below as usual; one
-		 * that does not is unlikely to resolve any of them, and the
-		 * provider then runs as if the host libcxi predated them.
-		 * Unlike the dladdr() path, this cannot tell which libcxi
-		 * copy answers when more than one is loaded.
-		 */
-		if (dlsym(handle, "cxil_alloc_cp"))
-			CXIP_INFO("Unable to locate the loaded libcxi; "
-				  "resolving optional libcxi symbols from the "
-				  "global scope\n");
-		else
-			CXIP_WARN("Unable to locate the loaded libcxi and the "
-				  "global scope does not expose it; optional "
-				  "libcxi functions may be unavailable\n");
-	}
-
-	/* dlsym() returns an object pointer and ISO C defines no conversion
-	 * to a function pointer; store it through the member's address as
-	 * POSIX dlsym(3) describes.
-	 */
-	*(void **)&cxip_libcxi_ops.alloc_trig_cp =
-		dlsym(handle, "cxil_alloc_trig_cp");
-	*(void **)&cxip_libcxi_ops.modify_cp = dlsym(handle, "cxil_modify_cp");
-
-	CXIP_INFO("libcxi runtime symbols (%s): alloc_trig_cp=%d modify_cp=%d\n",
-		  handle == RTLD_DEFAULT ? "global scope" : dl_info.dli_fname,
-		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp);
-
-	if (handle != RTLD_DEFAULT)
-		dlclose(handle);
-#endif /* CXIP_LIBCXI_STATIC */
-}
-
 char cxip_prov_name[] = "cxi";
 
 struct fi_fabric_attr cxip_fabric_attr = {
@@ -92,11 +23,11 @@ struct fi_fabric_attr cxip_fabric_attr = {
 	.name = cxip_prov_name,
 };
 
-#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
-#define MAX_VNIS (32768)
-#else
-#define MAX_VNIS (4)
-#endif
+/* Static placeholder for the multi-auth-key domain attributes below;
+ * cxip_libcxi_ops_init() sets the effective value from the runtime libcxi.
+ */
+#define CXIP_MAX_VNIS_RANGE (32768)
+#define CXIP_MAX_VNIS_RESTRICTED (4)
 
 /* No ODP, provider specified MR keys */
 struct fi_domain_attr cxip_prov_key_domain_attr = {
@@ -232,7 +163,7 @@ struct fi_domain_attr cxip_prov_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = MAX_VNIS,
+	.max_ep_auth_key = CXIP_MAX_VNIS_RANGE,
 };
 
 /* ODP, provider specified MR keys */
@@ -261,7 +192,7 @@ struct fi_domain_attr cxip_odp_prov_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = MAX_VNIS,
+	.max_ep_auth_key = CXIP_MAX_VNIS_RANGE,
 };
 
 /* No ODP, client specified MR keys */
@@ -290,7 +221,7 @@ struct fi_domain_attr cxip_client_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = MAX_VNIS,
+	.max_ep_auth_key = CXIP_MAX_VNIS_RANGE,
 };
 
 /* ODP, client specified MR keys */
@@ -319,7 +250,7 @@ struct fi_domain_attr cxip_odp_client_key_multi_auth_key_domain_attr = {
 	.auth_key_size = sizeof(struct cxi_auth_key),
 
 	/* Set to the number of VNIs supported by a single CXI service. */
-	.max_ep_auth_key = MAX_VNIS,
+	.max_ep_auth_key = CXIP_MAX_VNIS_RANGE,
 };
 
 struct fi_ep_attr cxip_ep_attr = {
@@ -1441,6 +1372,100 @@ static void cxip_env_init(void)
 			  &cxip_env.disable_cuda_sync_memops);
 
 	set_system_page_size();
+}
+
+static void cxip_libcxi_ops_init(void)
+{
+	size_t max_vnis;
+#ifdef CXIP_LIBCXI_STATIC
+	/* libcxi is linked statically, so the functions declared by the build
+	 * headers are bound directly; there is no shared libcxi.so.1 whose
+	 * symbol set could differ from the headers at runtime.
+	 */
+#ifdef CXI_HAVE_ALLOC_TRIG_CP
+	cxip_libcxi_ops.alloc_trig_cp = cxil_alloc_trig_cp;
+#endif
+#ifdef CXI_HAVE_MODIFY_CP
+	cxip_libcxi_ops.modify_cp = cxil_modify_cp;
+#endif
+#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+	cxip_libcxi_ops.svc_get_vni_range = cxil_svc_get_vni_range;
+#endif
+#ifdef CXI_HAVE_SVC_GET_NETNS
+	cxip_libcxi_ops.svc_get_netns = cxil_svc_get_netns;
+#endif
+
+	CXIP_INFO("libcxi symbols (static link): alloc_trig_cp=%d modify_cp=%d "
+		  "svc_get_vni_range=%d svc_get_netns=%d\n",
+		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp,
+		  !!cxip_libcxi_ops.svc_get_vni_range,
+		  !!cxip_libcxi_ops.svc_get_netns);
+#else
+	Dl_info dl_info = {};
+	void *handle = NULL;
+
+	/* Look the symbols up in the libcxi this provider is already bound
+	 * to, whatever its SONAME or path, by locating the object that
+	 * defines cxil_alloc_cp() (LIBCXI_1.0). RTLD_DEFAULT only searches
+	 * the global scope, which excludes libfabric's own dependencies when
+	 * an application loaded libfabric with RTLD_LOCAL. ISO C defines no
+	 * function-to-object pointer conversion, so the address reaches
+	 * dladdr() through uintptr_t, which is exact on the Linux ABIs this
+	 * provider supports and quiet under -pedantic.
+	 */
+	if (dladdr((void *)(uintptr_t)cxil_alloc_cp, &dl_info) &&
+	    dl_info.dli_fname)
+		handle = dlopen(dl_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+	if (!handle) {
+		handle = RTLD_DEFAULT;
+
+		/* Every libcxi exports cxil_alloc_cp(). A global scope that
+		 * shows it resolves the optional symbols below as usual; one
+		 * that does not is unlikely to resolve any of them, and the
+		 * provider then runs as if the host libcxi predated them.
+		 * Unlike the dladdr() path, this cannot tell which libcxi
+		 * copy answers when more than one is loaded.
+		 */
+		if (dlsym(handle, "cxil_alloc_cp"))
+			CXIP_INFO("Unable to locate the loaded libcxi; "
+				  "resolving optional libcxi symbols from the "
+				  "global scope\n");
+		else
+			CXIP_WARN("Unable to locate the loaded libcxi and the "
+				  "global scope does not expose it; optional "
+				  "libcxi functions may be unavailable\n");
+	}
+
+	/* dlsym() returns an object pointer and ISO C defines no conversion
+	 * to a function pointer; store it through the member's address as
+	 * POSIX dlsym(3) describes.
+	 */
+	*(void **)&cxip_libcxi_ops.alloc_trig_cp =
+		dlsym(handle, "cxil_alloc_trig_cp");
+	*(void **)&cxip_libcxi_ops.modify_cp = dlsym(handle, "cxil_modify_cp");
+	*(void **)&cxip_libcxi_ops.svc_get_vni_range =
+		dlsym(handle, "cxil_svc_get_vni_range");
+	*(void **)&cxip_libcxi_ops.svc_get_netns =
+		dlsym(handle, "cxil_svc_get_netns");
+
+	CXIP_INFO("libcxi runtime symbols (%s): alloc_trig_cp=%d modify_cp=%d "
+		  "svc_get_vni_range=%d svc_get_netns=%d\n",
+		  handle == RTLD_DEFAULT ? "global scope" : dl_info.dli_fname,
+		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp,
+		  !!cxip_libcxi_ops.svc_get_vni_range,
+		  !!cxip_libcxi_ops.svc_get_netns);
+
+	if (handle != RTLD_DEFAULT)
+		dlclose(handle);
+#endif /* CXIP_LIBCXI_STATIC */
+
+	max_vnis = cxip_libcxi_ops.svc_get_vni_range ?
+		CXIP_MAX_VNIS_RANGE : CXIP_MAX_VNIS_RESTRICTED;
+	cxip_prov_key_multi_auth_key_domain_attr.max_ep_auth_key = max_vnis;
+	cxip_odp_prov_key_multi_auth_key_domain_attr.max_ep_auth_key = max_vnis;
+	cxip_client_key_multi_auth_key_domain_attr.max_ep_auth_key = max_vnis;
+	cxip_odp_client_key_multi_auth_key_domain_attr.max_ep_auth_key =
+		max_vnis;
 }
 
 /*
