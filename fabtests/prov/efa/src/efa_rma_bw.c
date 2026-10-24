@@ -62,7 +62,7 @@
  *     1. Both sides enable action support on every endpoint before it is
  *        enabled (fi_setopt FI_OPT_EFA_COMP_ACTION).
  *     2. A memory completion action is created over a one-entry "semaphore"
- *        vector (create_mem_comp_action via the FI_EFA_MEM_COMP_ACTION_OPS ops
+ *        vector (create_mem_comp_action via the FI_EFA_COMP_ACTION_OPS ops
  *        table).
  *     3. The action id a peer's writes have to name is exchanged out of band.
  *     4. Writes go out with FI_EFA_EXTENDED_MSG, attaching a local and/or
@@ -185,7 +185,7 @@ struct action_sem {
 	size_t size;
 };
 
-static struct fi_efa_ops_mem_comp_action *action_ops;
+static struct fi_efa_ops_comp_action *action_ops;
 
 /* Action handles (fids), and the wire action ids used in the WR. */
 static struct fid_efa_comp_action *local_action;
@@ -399,13 +399,13 @@ static int report_action_ep_limits(struct fid_ep *target_ep)
 /* Open the action ops table on the domain. */
 static int open_action_ops(void)
 {
-	uint32_t max_mem_comp_actions;
+	uint32_t max_comp_actions;
 	int ret;
 
-	ret = fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0,
+	ret = fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0,
 			  (void **) &action_ops, NULL);
 	if (ret) {
-		FT_PRINTERR("fi_open_ops(FI_EFA_MEM_COMP_ACTION_OPS)", ret);
+		FT_PRINTERR("fi_open_ops(FI_EFA_COMP_ACTION_OPS)", ret);
 		return ret;
 	}
 
@@ -413,14 +413,13 @@ static int open_action_ops(void)
 	 * Informational only. fi_setopt below is what decides whether the test
 	 * can run, so report whatever the device says and carry on either way.
 	 */
-	ret = action_ops->query_max_mem_comp_actions(domain,
-						     &max_mem_comp_actions);
+	ret = action_ops->query_max_comp_actions(domain, &max_comp_actions);
 	if (ret)
-		FT_WARN("query_max_mem_comp_actions failed: %d (%s)", ret,
+		FT_WARN("query_max_comp_actions failed: %d (%s)", ret,
 			fi_strerror(-ret));
 	else
-		FT_INFO("Device reports max_mem_comp_actions %u",
-			max_mem_comp_actions);
+		FT_INFO("Device reports max_comp_actions %u",
+			max_comp_actions);
 
 	return FI_SUCCESS;
 }
@@ -518,7 +517,7 @@ static int init_fabric_with_action(void)
  */
 static int check_action_support(void)
 {
-	uint32_t max_mem_comp_actions = 0;
+	uint32_t max_comp_actions = 0;
 	int ret;
 
 	if (!hints->fabric_attr->name) {
@@ -531,16 +530,16 @@ static int check_action_support(void)
 	if (!ret)
 		ret = ft_open_fabric_res();
 	if (!ret)
-		ret = fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0,
+		ret = fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0,
 				  (void **) &action_ops, NULL);
 	if (!ret)
-		ret = action_ops->query_max_mem_comp_actions(domain,
-							     &max_mem_comp_actions);
-	if (!ret && !max_mem_comp_actions)
+		ret = action_ops->query_max_comp_actions(domain,
+							 &max_comp_actions);
+	if (!ret && !max_comp_actions)
 		ret = -FI_ENODATA;
 	if (!ret)
-		FT_INFO("Device reports max_mem_comp_actions %u",
-			max_mem_comp_actions);
+		FT_INFO("Device reports max_comp_actions %u",
+			max_comp_actions);
 
 	ft_free_res();
 	return ft_exit_code(ret);

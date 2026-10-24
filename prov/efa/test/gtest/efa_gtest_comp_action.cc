@@ -33,7 +33,7 @@ class EfaCompActionTest : public Test
 {
       protected:
 	struct efa_resource resource = {};
-	struct fi_efa_ops_mem_comp_action *action_ops = nullptr;
+	struct fi_efa_ops_comp_action *action_ops = nullptr;
 
 	/*
 	 * An attribute set the provider accepts, so that a test can change a
@@ -71,7 +71,7 @@ class EfaCompActionTest : public Test
 	void open_ops()
 	{
 		ASSERT_EQ(fi_open_ops(&resource.domain->fid,
-				      FI_EFA_MEM_COMP_ACTION_OPS, 0,
+				      FI_EFA_COMP_ACTION_OPS, 0,
 				      (void **) &action_ops, nullptr),
 			  0);
 		ASSERT_NE(action_ops, nullptr);
@@ -134,34 +134,34 @@ TEST_F(EfaCompActionTest, ops_present)
 	ASSERT_NO_FATAL_FAILURE(open_ops());
 
 	EXPECT_NE(action_ops->create_mem_comp_action, nullptr);
-	EXPECT_NE(action_ops->query_max_mem_comp_actions, nullptr);
+	EXPECT_NE(action_ops->query_max_comp_actions, nullptr);
 }
 
 /*
- * query_max_mem_comp_actions: with build support it rejects NULL (-FI_EINVAL) and
+ * query_max_comp_actions: with build support it rejects NULL (-FI_EINVAL) and
  * returns a value for a valid pointer; without build support both calls return
  * -FI_ENOSYS from the stub.
  */
-TEST_F(EfaCompActionTest, query_max_mem_comp_actions)
+TEST_F(EfaCompActionTest, query_max_comp_actions)
 {
-	uint32_t max_mem_comp_actions = 0;
+	uint32_t max_comp_actions = 0;
 
 	ASSERT_NO_FATAL_FAILURE(construct(false));
 	ASSERT_NO_FATAL_FAILURE(open_ops());
 
 	if (efa_test_build_has_comp_action()) {
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(resource.domain,
-								nullptr),
+		EXPECT_EQ(action_ops->query_max_comp_actions(resource.domain,
+							     nullptr),
 			  -FI_EINVAL);
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
-				  resource.domain, &max_mem_comp_actions),
+		EXPECT_EQ(action_ops->query_max_comp_actions(
+				  resource.domain, &max_comp_actions),
 			  0);
 	} else {
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(resource.domain,
-								nullptr),
+		EXPECT_EQ(action_ops->query_max_comp_actions(resource.domain,
+							     nullptr),
 			  -FI_ENOSYS);
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
-				  resource.domain, &max_mem_comp_actions),
+		EXPECT_EQ(action_ops->query_max_comp_actions(
+				  resource.domain, &max_comp_actions),
 			  -FI_ENOSYS);
 	}
 }
@@ -869,7 +869,7 @@ TEST_F(EfaCompActionTest, disabled_by_env)
 {
 	struct fi_efa_mem_comp_action_attr attr;
 	struct fid_efa_comp_action *action = nullptr;
-	uint32_t max_mem_comp_actions = 1;
+	uint32_t max_comp_actions = 1;
 	bool on = true;
 
 	efa_test_set_enable_comp_action(0);
@@ -883,16 +883,16 @@ TEST_F(EfaCompActionTest, disabled_by_env)
 
 	init_attr(&attr);
 	if (efa_test_build_has_comp_action()) {
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
-				  resource.domain, &max_mem_comp_actions),
+		EXPECT_EQ(action_ops->query_max_comp_actions(
+				  resource.domain, &max_comp_actions),
 			  0);
-		EXPECT_EQ(max_mem_comp_actions, 0u);
+		EXPECT_EQ(max_comp_actions, 0u);
 		EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain,
 							     &attr, &action),
 			  -FI_EOPNOTSUPP);
 	} else {
-		EXPECT_EQ(action_ops->query_max_mem_comp_actions(
-				  resource.domain, &max_mem_comp_actions),
+		EXPECT_EQ(action_ops->query_max_comp_actions(
+				  resource.domain, &max_comp_actions),
 			  -FI_ENOSYS);
 		EXPECT_EQ(action_ops->create_mem_comp_action(resource.domain,
 							     &attr, &action),

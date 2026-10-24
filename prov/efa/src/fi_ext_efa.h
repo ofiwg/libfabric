@@ -12,7 +12,7 @@
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
-#define FI_EFA_MEM_COMP_ACTION_OPS "efa mem comp action ops"
+#define FI_EFA_COMP_ACTION_OPS "efa comp action ops"
 #define FI_EFA_FEATURE_OPS "efa feature ops"
 #define FI_EFA_MODIFY_EP_OPS "efa modify ep ops"
 
@@ -148,12 +148,12 @@ struct fi_efa_ops_gda {
 			     struct fi_efa_comp_cntr_init_attr *efa_attr);
 };
 
-struct fi_efa_ops_mem_comp_action {
+struct fi_efa_ops_comp_action {
 	int (*create_mem_comp_action)(struct fid_domain *domain,
 				      struct fi_efa_mem_comp_action_attr *attr,
 				      struct fid_efa_comp_action **action);
-	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
-					  uint32_t *max_mem_comp_actions);
+	int (*query_max_comp_actions)(struct fid_domain *domain,
+				      uint32_t *max_comp_actions);
 };
 
 /*
