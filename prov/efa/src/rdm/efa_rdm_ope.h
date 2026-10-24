@@ -535,6 +535,8 @@ void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
+bool efa_rdm_ope_is_internal_atomic_response(const struct efa_rdm_ope *ope, int pkt_type);
+
 /**
  * @brief Whether an ope is in scope for the peer-abort (MR abort) protocol.
  *

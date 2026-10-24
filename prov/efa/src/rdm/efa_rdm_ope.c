@@ -2551,6 +2551,23 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 	return err;
 }
 
+bool efa_rdm_ope_is_internal_atomic_response(const struct efa_rdm_ope *ope, int pkt_type){
+	if (ope->type != EFA_RDM_RXE)
+		return false;
+
+	if (!(ope->internal_flags & EFA_RDM_OPE_INTERNAL))
+		return false;
+
+	if (pkt_type == EFA_RDM_RECEIPT_PKT)
+		return ope->op == ofi_op_atomic;
+
+	if (pkt_type == EFA_RDM_ATOMRSP_PKT)
+		return ope->op == ofi_op_atomic_fetch ||
+		       ope->op == ofi_op_atomic_compare;
+
+	return false;
+}
+
 /**
  * @brief Repost the ope that was queued before a handshake is made with peer
  *
@@ -2596,6 +2613,7 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	 */
 	int prov_errno = FI_EFA_ERR_PKT_POST;
 	uint32_t flag = ope->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS;
+	int queued_response_pkt_type = -1;
 
 	if (!flag)
 		return 0;
@@ -2621,9 +2639,12 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 			break;
 		case EFA_RDM_OPE_QUEUED_RNR:
 			assert(!dlist_empty(&ope->queued_pkts));
+			queued_response_pkt_type = efa_rdm_pkt_type_of(
+				container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
 			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
+			queued_response_pkt_type = ope->queued_ctrl_type;
 			ret = efa_rdm_ope_post_ctrl(ope, ope->queued_ctrl_type);
 			break;
 		case EFA_RDM_OPE_QUEUED_READ:
@@ -2654,10 +2675,7 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		 */
 		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
 		release_atomic_response =
-			ope->type == EFA_RDM_RXE &&
-			(ope->internal_flags & EFA_RDM_OPE_INTERNAL) &&
-			(ope->op == ofi_op_atomic_fetch ||
-			 ope->op == ofi_op_atomic_compare);
+			efa_rdm_ope_is_internal_atomic_response(ope, queued_response_pkt_type);
 		if (ope->type == EFA_RDM_TXE)
 			efa_rdm_txe_handle_error(ope, -ret, prov_errno);
 		else

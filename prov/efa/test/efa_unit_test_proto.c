@@ -7,6 +7,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/efa_rdm_pke_rtm.h"
@@ -693,6 +694,9 @@ struct efa_unit_test_atomic_ctx {
 	size_t txe_free;
 	size_t rxe_free;
 	size_t atomrsp_free;
+	size_t efa_rx_pkt_free;
+	size_t rx_ooo_pkt_free;
+	size_t next_posted_rx_index;
 	uint32_t next_msg_id;
 };
 
@@ -797,19 +801,146 @@ test_proto_atomic_posted_pke(struct efa_unit_test_atomic_ctx *ctx)
 	return ctx->ep->send_pkt_entry_vec[0];
 }
 
+static struct efa_rdm_pke* test_proto_atomic_post_success(struct efa_unit_test_atomic_ctx *ctx,
+			       size_t count, uint64_t flags){
+	assert_int_equal(test_proto_atomic_post(ctx, count, flags), 0);
+	return test_proto_atomic_posted_pke(ctx);
+}
+
+static struct efa_rdm_pke* test_proto_atomic_alloc_unexp(struct efa_unit_test_atomic_ctx *ctx){
+	struct efa_rdm_pke *pke =
+		efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool, EFA_RDM_PKE_FROM_UNEXP_POOL);
+
+	assert_non_null(pke);
+	pke->ep = ctx->ep;
+	pke->peer = ctx->peer;
+	return pke;
+}
+
 static struct efa_rdm_pke *test_proto_atomic_request_rx(
 	struct efa_unit_test_atomic_ctx *ctx, struct efa_rdm_pke *req_pke)
 {
-	struct efa_rdm_pke *req_rx;
+	struct efa_rdm_pke *req_rx = test_proto_atomic_alloc_unexp(ctx);
 
-	req_rx = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
-				   EFA_RDM_PKE_FROM_UNEXP_POOL);
-	assert_non_null(req_rx);
-	req_rx->ep = ctx->ep;
-	req_rx->peer = ctx->peer;
 	req_rx->pkt_size = req_pke->pkt_size;
 	memcpy(req_rx->wiredata, req_pke->wiredata, req_pke->pkt_size);
 	return req_rx;
+}
+
+static void test_proto_atomic_assert_real_rx_state(struct efa_unit_test_atomic_ctx *ctx,
+				       size_t received, size_t to_post, size_t held){
+	size_t pool_size = efa_base_ep_get_rx_pool_size(&ctx->ep->base_ep);
+
+	assert_int_equal(ctx->ep->efa_rx_pkts_posted, pool_size - received);
+	assert_int_equal(ctx->ep->efa_rx_pkts_to_post, to_post);
+	assert_int_equal(ctx->ep->efa_rx_pkts_held, held);
+	assert_int_equal(ctx->ep->efa_rx_pkts_posted + to_post + held,
+			 pool_size);
+}
+
+static void test_proto_atomic_post_real_rx(struct efa_unit_test_atomic_ctx *ctx){
+	size_t saved_refill_threshold = efa_env.internal_rx_refill_threshold;
+
+	efa_env.internal_rx_refill_threshold = 1;
+	ofi_genlock_lock(&ctx->ep->srx_lock);
+	efa_rdm_ep_post_internal_rx_pkts(ctx->ep);
+	ofi_genlock_unlock(&ctx->ep->srx_lock);
+	efa_env.internal_rx_refill_threshold = saved_refill_threshold;
+}
+
+static void test_proto_atomic_prime_real_rx(struct efa_unit_test_atomic_ctx *ctx){
+	g_efa_unit_test_mocks.efa_qp_post_recv =
+		efa_mock_efa_qp_post_recv_return_mock;
+	will_return_int_always(efa_mock_efa_qp_post_recv_return_mock, 0);
+	test_proto_atomic_post_real_rx(ctx);
+	test_proto_atomic_assert_real_rx_state(ctx, 0, 0, 0);
+	ctx->efa_rx_pkt_free =
+		test_proto_atomic_bufpool_free_count(ctx->ep->efa_rx_pkt_pool);
+	ctx->rx_ooo_pkt_free = ctx->ep->rx_ooo_pkt_pool ?
+				       test_proto_atomic_bufpool_free_count(
+					       ctx->ep->rx_ooo_pkt_pool) :
+				       0;
+	ctx->next_posted_rx_index = 0;
+}
+
+static struct efa_rdm_pke* test_proto_atomic_request_efa_rx(struct efa_unit_test_atomic_ctx *ctx,
+				 const struct efa_rdm_pke *request){
+	struct efa_rdm_pke *rx;
+
+	assert_true(ctx->next_posted_rx_index <
+		    efa_base_ep_get_rx_pool_size(&ctx->ep->base_ep));
+	rx = ofi_bufpool_get_ibuf(ctx->ep->efa_rx_pkt_pool,
+				  ctx->next_posted_rx_index++);
+	assert_non_null(rx);
+	assert_true(ctx->ep->efa_rx_pkts_posted > 0);
+	ctx->ep->efa_rx_pkts_posted--;
+
+#if ENABLE_DEBUG
+	dlist_remove(&rx->dbg_entry);
+	dlist_insert_tail(&rx->dbg_entry, &ctx->ep->rx_pkt_list);
+#endif
+
+	rx->ep = ctx->ep;
+	rx->peer = ctx->peer;
+	rx->next = NULL;
+	rx->ope = NULL;
+	rx->handle_pke = NULL;
+	rx->proto = NULL;
+	rx->pkt_size = request->pkt_size;
+	memcpy(rx->wiredata, request->wiredata, request->pkt_size);
+	return rx;
+}
+
+static void test_proto_atomic_assert_srx_empty(struct efa_unit_test_atomic_ctx *ctx){
+	struct util_srx_ctx *srx = efa_rdm_ep_get_peer_srx_ctx(ctx->ep);
+
+	assert_true(slist_empty(&srx->msg_queue));
+	assert_true(slist_empty(&srx->tag_queue));
+	assert_true(dlist_empty(&srx->unspec_unexp_msg_queue));
+	assert_true(dlist_empty(&srx->unspec_unexp_tag_queue));
+	assert_true(dlist_empty(&srx->unexp_peers));
+}
+
+static void test_proto_atomic_refill_real_rx(struct efa_unit_test_atomic_ctx *ctx, size_t received){
+	test_proto_atomic_assert_real_rx_state(ctx, received, received, 0);
+	test_proto_atomic_post_real_rx(ctx);
+	test_proto_atomic_assert_real_rx_state(ctx, 0, 0, 0);
+	assert_int_equal(
+		test_proto_atomic_bufpool_free_count(ctx->ep->efa_rx_pkt_pool),
+		ctx->efa_rx_pkt_free);
+	if (ctx->ep->rx_ooo_pkt_pool)
+		assert_int_equal(test_proto_atomic_bufpool_free_count(
+					 ctx->ep->rx_ooo_pkt_pool),
+				 ctx->rx_ooo_pkt_free);
+}
+
+static void test_proto_atomic_setup_dispatch(struct efa_resource *resource,
+				 struct efa_unit_test_atomic_ctx *ctx,
+				 uint8_t **target, uint8_t **source){
+	test_proto_atomic_setup(resource, ctx);
+	test_proto_atomic_prime_real_rx(ctx);
+	*target = ctx->send_buff.buff;
+	*source = *target + 16;
+	ctx->ioc.addr = *source;
+	ctx->rma_ioc.addr = (uint64_t) *target;
+	ctx->rma_ioc.key = fi_mr_key(ctx->send_buff.mr);
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		efa_mock_efa_qp_post_send_return_mock;
+}
+
+static void test_proto_atomic_dispatch(struct efa_unit_test_atomic_ctx *ctx,
+				       struct efa_rdm_pke *request,
+				       uint32_t msg_id, uint32_t next_expected){
+	struct efa_rdm_pke *rx;
+
+	efa_rdm_pke_get_rta_hdr(request)->msg_id = msg_id;
+	rx = test_proto_atomic_request_efa_rx(ctx, request);
+	assert_null(rx->proto);
+	assert_null(rx->handle_pke);
+	test_proto_atomic_assert_srx_empty(ctx);
+	efa_rdm_pke_proc_received(rx);
+	assert_int_equal(ofi_recvwin_next_exp_id(&ctx->peer->robuf),
+			 next_expected);
 }
 
 static struct efa_rdm_pke *
@@ -819,11 +950,7 @@ test_proto_atomic_receipt(struct efa_unit_test_atomic_ctx *ctx,
 	struct efa_rdm_pke *pke;
 	struct efa_rdm_receipt_hdr *hdr;
 
-	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
-				EFA_RDM_PKE_FROM_UNEXP_POOL);
-	assert_non_null(pke);
-	pke->ep = ctx->ep;
-	pke->peer = ctx->peer;
+	pke = test_proto_atomic_alloc_unexp(ctx);
 	hdr = efa_rdm_pke_get_receipt_hdr(pke);
 	memset(hdr, 0, sizeof(*hdr));
 	hdr->type = EFA_RDM_RECEIPT_PKT;
@@ -838,11 +965,7 @@ static struct efa_rdm_pke *test_proto_atomic_atomrsp(
 	struct efa_rdm_atomrsp_pkt *pkt;
 	struct efa_rdm_pke *pke;
 
-	pke = efa_rdm_pke_alloc(ctx->ep, ctx->ep->rx_unexp_pkt_pool,
-				EFA_RDM_PKE_FROM_UNEXP_POOL);
-	assert_non_null(pke);
-	pke->ep = ctx->ep;
-	pke->peer = ctx->peer;
+	pke = test_proto_atomic_alloc_unexp(ctx);
 	pkt = (struct efa_rdm_atomrsp_pkt *) pke->wiredata;
 	memset(pkt, 0, sizeof(pkt->hdr));
 	pkt->hdr.type = EFA_RDM_ATOMRSP_PKT;
@@ -873,6 +996,14 @@ static ssize_t test_proto_atomic_fetch_compare_post(
 				  &result_desc, 1, flags);
 }
 
+static struct efa_rdm_pke *test_proto_atomic_fetch_compare_post_success(
+	struct efa_unit_test_atomic_ctx *ctx, enum fi_op op, size_t count,
+	void *compare, void *result){
+	assert_int_equal(test_proto_atomic_fetch_compare_post(ctx, op, count,
+							      compare, result, FI_COMPLETION),0);
+	return test_proto_atomic_posted_pke(ctx);
+}
+
 static int test_proto_atomic_process_fetch_compare(
 	struct efa_rdm_pke *req_rx, enum fi_op op)
 {
@@ -880,11 +1011,22 @@ static int test_proto_atomic_process_fetch_compare(
 			       efa_rdm_pke_proc_fetch_rta(req_rx);
 }
 
+static void test_proto_atomic_assert_cq_empty(struct efa_unit_test_atomic_ctx *ctx){
+	struct fi_cq_data_entry entry;
+	struct fi_cq_err_entry err_entry = {0};
+
+	assert_int_equal(fi_cq_read(ctx->resource->cq, &entry, 1), -FI_EAGAIN);
+	assert_int_equal(fi_cq_readerr(ctx->resource->cq, &err_entry, 0),
+			 -FI_EAGAIN);
+}
+
 static void test_proto_atomic_assert_clean(
 	struct efa_unit_test_atomic_ctx *ctx, uint32_t next_msg_id)
 {
 	assert_int_equal(
 		efa_unit_test_get_ope_list_length(ctx->ep, EFA_RDM_TXE), 0);
+	assert_int_equal(
+		efa_unit_test_get_ope_list_length(ctx->ep, EFA_RDM_RXE), 0);
 	assert_int_equal(ctx->ep->efa_outstanding_tx_ops, 0);
 	assert_int_equal(ctx->peer->next_msg_id, next_msg_id);
 	assert_int_equal(
@@ -906,21 +1048,12 @@ static void test_proto_atomic_assert_clean(
 	assert_int_equal(ctx->ep->efa_rnr_queued_pkt_cnt, 0);
 	assert_int_equal(ctx->ep->ope_queued_before_handshake_cnt, 0);
 	assert_true(dlist_empty(&ctx->ep->ope_queued_list));
+	assert_true(dlist_empty(&ctx->ep->ope_posted_ack_list));
 	assert_int_equal(ctx->peer->efa_outstanding_tx_ops, 0);
 	assert_int_equal(ctx->peer->rnr_queued_pkt_cnt, 0);
 	assert_true(dlist_empty(&ctx->peer->outstanding_tx_pkts));
-}
-
-static void test_proto_atomic_assert_cq_empty(
-	struct efa_unit_test_atomic_ctx *ctx)
-{
-	struct fi_cq_data_entry entry;
-	struct fi_cq_err_entry err_entry = {0};
-
-	assert_int_equal(fi_cq_read(ctx->resource->cq, &entry, 1),
-			 -FI_EAGAIN);
-	assert_int_equal(fi_cq_readerr(ctx->resource->cq, &err_entry, 0),
-			 -FI_EAGAIN);
+	assert_true(dlist_empty(&ctx->peer->overflow_pke_list));
+	test_proto_atomic_assert_srx_empty(ctx);
 }
 
 static void test_proto_atomic_read_success(struct efa_unit_test_atomic_ctx *ctx,
@@ -961,6 +1094,13 @@ static void test_proto_atomic_read_eq_error(
 	assert_int_equal(err_entry.prov_errno, prov_errno);
 }
 
+static void test_proto_atomic_assert_eq_empty(struct efa_unit_test_atomic_ctx *ctx){
+	struct fi_eq_err_entry err_entry = {0};
+
+	assert_int_equal(fi_eq_readerr(ctx->resource->eq, &err_entry, 0),
+			 -FI_EAGAIN);
+}
+
 static void test_proto_atomic_fail_request(
 	struct efa_unit_test_atomic_ctx *ctx, struct efa_rdm_pke *req_pke,
 	uint64_t cq_flags, uint32_t next_msg_id)
@@ -972,6 +1112,301 @@ static void test_proto_atomic_fail_request(
 		EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE, cq_flags);
 	test_proto_atomic_assert_clean(ctx, next_msg_id);
 	test_proto_atomic_assert_cq_empty(ctx);
+}
+
+static void test_proto_atomic_assert_response_rxe(struct efa_rdm_ope *rxe,
+						  uint32_t op, size_t outstanding,
+						  bool has_atomrsp_data){
+	assert_non_null(rxe);
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_INTERNAL);
+	assert_int_equal(rxe->op, op);
+	assert_int_equal(rxe->efa_outstanding_tx_ops, outstanding);
+	if (has_atomrsp_data) {
+		assert_non_null(rxe->atomrsp_data);
+		assert_int_equal(((uint8_t *) rxe->atomrsp_data)[0], 1);
+	}
+}
+
+static void test_proto_atomic_assert_atomrsp(struct efa_unit_test_atomic_ctx *ctx,
+				 struct efa_rdm_pke *response,
+				 struct efa_rdm_pke *request,
+				 const void *expected, size_t len, uint32_t op){
+	struct efa_rdm_atomrsp_pkt *atomrsp =
+		(struct efa_rdm_atomrsp_pkt *) response->wiredata;
+
+	assert_int_equal(efa_rdm_pkt_type_of(response), EFA_RDM_ATOMRSP_PKT);
+	assert_int_equal(atomrsp->hdr.recv_id,
+			 efa_rdm_pke_get_rta_hdr(request)->recv_id);
+	assert_int_equal(atomrsp->hdr.seg_length, len);
+	assert_memory_equal(atomrsp->data, expected, len);
+	test_proto_atomic_assert_response_rxe(response->ope, op, 1, true);
+	assert_int_equal(
+		efa_unit_test_get_ope_list_length(ctx->ep, EFA_RDM_RXE), 1);
+}
+
+void test_efa_rdm_ope_internal_atomic_response_predicate(void **state){
+	static const struct {
+		enum efa_rdm_ope_type type;
+		bool internal;
+		uint32_t op;
+		int pkt_type;
+		bool expected;
+	} cases[] = {
+		{EFA_RDM_RXE, true, ofi_op_atomic, EFA_RDM_RECEIPT_PKT, true},
+		{EFA_RDM_RXE, true, ofi_op_atomic_fetch, EFA_RDM_ATOMRSP_PKT,
+		 true},
+		{EFA_RDM_RXE, true, ofi_op_atomic_compare, EFA_RDM_ATOMRSP_PKT,
+		 true},
+		{EFA_RDM_RXE, true, ofi_op_msg, EFA_RDM_RECEIPT_PKT, false},
+		{EFA_RDM_RXE, false, ofi_op_atomic, EFA_RDM_RECEIPT_PKT, false},
+		{EFA_RDM_RXE, true, ofi_op_atomic_fetch, EFA_RDM_RECEIPT_PKT,
+		 false},
+		{EFA_RDM_RXE, true, ofi_op_atomic, EFA_RDM_ATOMRSP_PKT, false},
+		{EFA_RDM_TXE, true, ofi_op_atomic, EFA_RDM_RECEIPT_PKT, false},
+		{EFA_RDM_TXE, true, ofi_op_atomic_fetch, EFA_RDM_ATOMRSP_PKT,
+		 false},
+		{EFA_RDM_RXE, true, ofi_op_atomic_compare,
+		 EFA_RDM_EAGER_MSGRTM_PKT, false},
+		{EFA_RDM_RXE, true, ofi_op_write, EFA_RDM_RECEIPT_PKT, false},
+		{EFA_RDM_RXE, false, ofi_op_tagged, EFA_RDM_RECEIPT_PKT, false},
+	};
+	struct efa_rdm_ope ope = {0};
+	size_t i;
+
+	(void) state;
+	for (i = 0; i < ARRAY_SIZE(cases); i++) {
+		ope.type = cases[i].type;
+		ope.internal_flags =
+			cases[i].internal ? EFA_RDM_OPE_INTERNAL : 0;
+		ope.op = cases[i].op;
+		if (efa_rdm_ope_is_internal_atomic_response(
+			    &ope, cases[i].pkt_type) != cases[i].expected)
+			fail_msg("predicate row %zu", i);
+	}
+}
+
+enum test_proto_atomic_success {
+	TEST_PROTO_ATOMIC_WRITE_SUCCESS,
+	TEST_PROTO_ATOMIC_RECEIPT_SUCCESS,
+	TEST_PROTO_ATOMIC_FETCH_SUCCESS,
+};
+
+static void test_proto_atomic_ordered_success_case(void **state,
+						enum test_proto_atomic_success kind){
+
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_pke *request, *response, *response_rx;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_rta_hdr *request_hdr;
+	uint8_t *target, *source, *compare, *result;
+	uint8_t old = 1;
+	uint32_t expected_msg_id;
+	size_t outstanding_before;
+	size_t peer_outstanding_before;
+	bool is_fetch = kind == TEST_PROTO_ATOMIC_FETCH_SUCCESS;
+	bool is_receipt = kind == TEST_PROTO_ATOMIC_RECEIPT_SUCCESS;
+
+	test_proto_atomic_setup_dispatch(resource, &ctx, &target, &source);
+	compare = source + 16;
+	result = compare + 16;
+	target[0] = 1;
+	source[0] = 2;
+	result[0] = 0;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	expected_msg_id = ofi_recvwin_next_exp_id(&ctx.peer->robuf);
+	if (is_fetch)
+		request = test_proto_atomic_fetch_compare_post_success(
+			&ctx, FI_SUM, 1, compare, result);
+	else
+		request = test_proto_atomic_post_success(
+			&ctx, 1,
+			FI_COMPLETION |
+				(is_receipt ? FI_DELIVERY_COMPLETE : 0));
+	request_hdr = efa_rdm_pke_get_rta_hdr(request);
+	outstanding_before = ctx.ep->efa_outstanding_tx_ops;
+	peer_outstanding_before = ctx.peer->efa_outstanding_tx_ops;
+	test_proto_atomic_dispatch(&ctx, request, expected_msg_id,
+				   expected_msg_id + 1);
+
+	assert_int_equal(target[0], is_fetch ? 3 : 2);
+	if (kind == TEST_PROTO_ATOMIC_WRITE_SUCCESS) {
+		assert_int_equal(
+			efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_RXE),
+			0);
+		assert_int_equal(ctx.ep->efa_outstanding_tx_ops,
+				 outstanding_before);
+		efa_rdm_pke_handle_send_completion(request);
+		test_proto_atomic_read_success(&ctx, 1, FI_ATOMIC | FI_WRITE);
+	} else {
+		assert_int_equal(ctx.ep->efa_outstanding_tx_ops,
+				 outstanding_before + 1);
+		assert_int_equal(ctx.peer->efa_outstanding_tx_ops,
+				 peer_outstanding_before + 1);
+		response = test_proto_atomic_posted_pke(&ctx);
+		rxe = response->ope;
+		if (is_receipt) {
+			assert_int_equal(efa_rdm_pkt_type_of(response),
+					 EFA_RDM_RECEIPT_PKT);
+			assert_int_equal(
+				efa_rdm_pke_get_receipt_hdr(response)->tx_id,
+				request_hdr->send_id);
+			test_proto_atomic_assert_response_rxe(
+				rxe, ofi_op_atomic, 1, false);
+			assert_ptr_equal(ctx.ep->ope_posted_ack_list.next,
+					 &rxe->ack_list_entry);
+		} else {
+			test_proto_atomic_assert_atomrsp(&ctx, response,
+							 request, &old, 1,
+							 ofi_op_atomic_fetch);
+		}
+		assert_int_equal(
+			efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_RXE),
+			1);
+		response_rx = test_proto_atomic_request_rx(&ctx, response);
+		efa_rdm_pke_handle_send_completion(request);
+		if (is_receipt)
+			test_proto_atomic_assert_cq_empty(&ctx);
+		efa_rdm_pke_handle_send_completion(response);
+		efa_rdm_pke_proc_received(response_rx);
+		if (is_fetch)
+			assert_int_equal(result[0], 1);
+		test_proto_atomic_read_success(
+			&ctx, 1, FI_ATOMIC | (is_fetch ? FI_READ : FI_WRITE));
+	}
+
+	test_proto_atomic_refill_real_rx(&ctx, 1);
+	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	test_proto_atomic_assert_cq_empty(&ctx);
+	test_proto_atomic_assert_eq_empty(&ctx);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+#define TEST_PROTO_ATOMIC_CASE(name, helper, arg) \
+	void name(void **state)                   \
+	{                                         \
+		helper(state, arg);               \
+	}
+
+TEST_PROTO_ATOMIC_CASE(test_proto_atomic_ordered_write_in_order,
+		       test_proto_atomic_ordered_success_case,
+		       TEST_PROTO_ATOMIC_WRITE_SUCCESS)
+TEST_PROTO_ATOMIC_CASE(test_proto_atomic_ordered_dc_write_receipt_success,
+		       test_proto_atomic_ordered_success_case,
+		       TEST_PROTO_ATOMIC_RECEIPT_SUCCESS)
+TEST_PROTO_ATOMIC_CASE(test_proto_atomic_ordered_fetch_immediate_lifecycle,
+		       test_proto_atomic_ordered_success_case,
+		       TEST_PROTO_ATOMIC_FETCH_SUCCESS)
+
+void test_proto_atomic_ordered_fetch_reordered_lifecycle(void **state){
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	struct efa_rdm_pke *fetch_pke, *gap_pke, *atomrsp_pke, *atomrsp_rx;
+	struct efa_rdm_pke *stored, **future_slot;
+	uint8_t *target, *source, *compare, *result, *gap_target, *gap_source;
+	uint8_t old = 1;
+	uint32_t expected_msg_id, sender_next_msg_id;
+	size_t outstanding_before, ooo_free_before;
+	int saved_rx_copy_ooo, copy_ooo;
+
+	saved_rx_copy_ooo = efa_env.rx_copy_ooo;
+	efa_env.rx_copy_ooo = 1;
+	test_proto_atomic_setup_dispatch(resource, &ctx, &target, &source);
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	assert_non_null(ctx.ep->rx_ooo_pkt_pool);
+
+	compare = source + 16;
+	result = compare + 16;
+	gap_target = result + 16;
+	gap_source = gap_target + 16;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	for (copy_ooo = 0; copy_ooo <= 1; copy_ooo++) {
+		target[0] = 1;
+		source[0] = 2;
+		result[0] = 0;
+		gap_target[0] = 4;
+		gap_source[0] = 5;
+		ctx.ioc.addr = source;
+		ctx.rma_ioc.addr = (uint64_t) target;
+		ctx.rma_ioc.key = fi_mr_key(ctx.send_buff.mr);
+		expected_msg_id = ofi_recvwin_next_exp_id(&ctx.peer->robuf);
+		sender_next_msg_id = ctx.peer->next_msg_id;
+
+		fetch_pke = test_proto_atomic_fetch_compare_post_success(
+			&ctx, FI_SUM, 1, compare, result);
+		outstanding_before = ctx.ep->efa_outstanding_tx_ops;
+		ooo_free_before = test_proto_atomic_bufpool_free_count(
+			ctx.ep->rx_ooo_pkt_pool);
+
+		efa_env.rx_copy_ooo = copy_ooo;
+		test_proto_atomic_dispatch(&ctx, fetch_pke, expected_msg_id + 1,
+					   expected_msg_id);
+		efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+
+		future_slot = ofi_recvwin_get_msg(&ctx.peer->robuf,
+						  expected_msg_id + 1);
+		stored = *future_slot;
+		assert_non_null(stored);
+		assert_ptr_equal(stored->handle_pke,
+				 efa_rdm_pke_proc_fetch_rta);
+		assert_int_equal(target[0], 1);
+		assert_int_equal(ctx.ep->efa_outstanding_tx_ops,
+				 outstanding_before);
+		assert_int_equal(
+			efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_RXE),
+			0);
+		assert_int_equal(stored->alloc_type,
+				 copy_ooo ? EFA_RDM_PKE_FROM_OOO_POOL :
+					    EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_int_equal(test_proto_atomic_bufpool_free_count(
+					 ctx.ep->rx_ooo_pkt_pool),
+				 ooo_free_before - copy_ooo);
+		if (!copy_ooo)
+			assert_true(stored->flags &
+				    EFA_RDM_PKE_HELD_BY_PROGRESS);
+		test_proto_atomic_assert_real_rx_state(&ctx, 1, copy_ooo,
+						       !copy_ooo);
+		assert_int_equal(test_proto_atomic_bufpool_used_count(
+					 ctx.ep->rx_unexp_pkt_pool),
+				 0);
+		test_proto_atomic_assert_srx_empty(&ctx);
+
+		ctx.msg.op = FI_ATOMIC_WRITE;
+		ctx.ioc.addr = gap_source;
+		ctx.rma_ioc.addr = (uint64_t) gap_target;
+		gap_pke =
+			test_proto_atomic_post_success(&ctx, 1, FI_COMPLETION);
+		test_proto_atomic_dispatch(&ctx, gap_pke, expected_msg_id,
+					   expected_msg_id + 2);
+
+		assert_int_equal(gap_target[0], gap_source[0]);
+		assert_int_equal(target[0], 3);
+		assert_null(*future_slot);
+		assert_int_equal(ctx.ep->efa_outstanding_tx_ops,
+				 outstanding_before + 2);
+		atomrsp_pke = test_proto_atomic_posted_pke(&ctx);
+		test_proto_atomic_assert_atomrsp(&ctx, atomrsp_pke, fetch_pke,
+						 &old, 1, ofi_op_atomic_fetch);
+		atomrsp_rx = test_proto_atomic_request_rx(&ctx, atomrsp_pke);
+
+		efa_rdm_pke_handle_send_completion(gap_pke);
+		test_proto_atomic_read_success(&ctx, 1, FI_ATOMIC | FI_WRITE);
+		efa_rdm_pke_handle_send_completion(fetch_pke);
+		efa_rdm_pke_handle_send_completion(atomrsp_pke);
+		efa_rdm_pke_proc_received(atomrsp_rx);
+		assert_int_equal(result[0], 1);
+		test_proto_atomic_read_success(&ctx, 1, FI_ATOMIC | FI_READ);
+
+		test_proto_atomic_refill_real_rx(&ctx, 2);
+		test_proto_atomic_assert_clean(&ctx, sender_next_msg_id + 2);
+		test_proto_atomic_assert_cq_empty(&ctx);
+		test_proto_atomic_assert_eq_empty(&ctx);
+	}
+
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	efa_unit_test_buff_destruct(&ctx.send_buff);
 }
 
 void test_proto_atomic_write_post_and_complete(void **state)
@@ -1572,128 +2007,196 @@ void test_proto_atomic_fetch_compare_completion(void **state) {
 		&ctx, FI_ETRUNC,
 		EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
 	test_proto_atomic_assert_clean(&ctx, next_msg_id);
-	test_proto_atomic_assert_cq_empty(&ctx);
 	efa_unit_test_buff_destruct(&ctx.send_buff);
 }
 
-void test_proto_atomic_responder_post_error(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_unit_test_atomic_ctx ctx;
-	enum {
-		TEST_PROTO_ATOMIC_DIRECT_FAILURE,
-		TEST_PROTO_ATOMIC_QUEUED_FAILURE,
-		TEST_PROTO_ATOMIC_ASYNC_FAILURE,
-	};
-	const struct {
-		enum fi_op op;
-		int failure;
-	} cases[] = {
-		{FI_SUM, TEST_PROTO_ATOMIC_DIRECT_FAILURE},
-		{FI_CSWAP, TEST_PROTO_ATOMIC_QUEUED_FAILURE},
-		{FI_SUM, TEST_PROTO_ATOMIC_ASYNC_FAILURE},
-	};
-	struct efa_rdm_pke *req_pke, *req_rx, *resp_pke;
+enum test_proto_atomic_response_failure {
+	TEST_PROTO_ATOMIC_DIRECT_FAILURE,
+	TEST_PROTO_ATOMIC_QUEUED_FAILURE,
+	TEST_PROTO_ATOMIC_ASYNC_FAILURE,
+	TEST_PROTO_ATOMIC_RNR_RETRY_FAILURE,
+};
+
+static const int test_proto_atomic_response_post_results[] = {EIO, ENOMEM, 0, 0};
+
+static void test_proto_atomic_inject_response_failure(
+	struct efa_unit_test_atomic_ctx *ctx, int pkt_type, uint32_t op,
+	enum test_proto_atomic_response_failure failure,
+	size_t request_outstanding, size_t request_peer_outstanding){
+	struct efa_rdm_pke *response;
 	struct efa_rdm_ope *rxe;
-	uint8_t *target, *source, *compare, *result;
-	uint32_t next_msg_id;
-	size_t i;
-	int ret;
+	bool is_async = failure == TEST_PROTO_ATOMIC_ASYNC_FAILURE;
 
-	test_proto_atomic_setup(resource, &ctx);
-	target = ctx.send_buff.buff;
-	source = target + 16;
-	compare = source + 16;
-	result = compare + 16;
-	ctx.ioc.addr = source;
-	ctx.rma_ioc.addr = (uint64_t) target;
-	ctx.rma_ioc.key = fi_mr_key(ctx.send_buff.mr);
-	g_efa_unit_test_mocks.efa_qp_post_send =
-		efa_mock_efa_qp_post_send_return_mock;
-
-	for (i = 0; i < ARRAY_SIZE(cases); i++) {
-		target[0] = compare[0] = 1;
-		source[0] = 2;
-		result[0] = 0;
-		next_msg_id = ctx.peer->next_msg_id;
-		will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
-		switch (cases[i].failure) {
-		case TEST_PROTO_ATOMIC_DIRECT_FAILURE:
-			will_return_int(
-				efa_mock_efa_qp_post_send_return_mock, EIO);
-			break;
-		case TEST_PROTO_ATOMIC_QUEUED_FAILURE:
-			will_return_int(
-				efa_mock_efa_qp_post_send_return_mock, ENOMEM);
-			will_return_int(
-				efa_mock_efa_qp_post_send_return_mock, EIO);
-			break;
-		case TEST_PROTO_ATOMIC_ASYNC_FAILURE:
-			will_return_int(
-				efa_mock_efa_qp_post_send_return_mock, 0);
-			break;
-		}
-
-		assert_int_equal(test_proto_atomic_fetch_compare_post(
-					 &ctx, cases[i].op, 1, compare, result,
-					 FI_COMPLETION),
-				 0);
-		req_pke = test_proto_atomic_posted_pke(&ctx);
-		req_rx = test_proto_atomic_request_rx(&ctx, req_pke);
-		ret = test_proto_atomic_process_fetch_compare(
-			req_rx, cases[i].op);
-
-		switch (cases[i].failure) {
-		case TEST_PROTO_ATOMIC_DIRECT_FAILURE:
-			assert_int_equal(ret, -FI_EIO);
-			test_proto_atomic_read_eq_error(
-				&ctx, FI_EIO, FI_EFA_ERR_PKT_POST);
-			break;
-		case TEST_PROTO_ATOMIC_QUEUED_FAILURE:
-			assert_int_equal(ret, 0);
-			assert_false(dlist_empty(&ctx.ep->ope_queued_list));
-			rxe = container_of(ctx.ep->ope_queued_list.next,
-					   struct efa_rdm_ope, queued_entry);
-			assert_true(rxe->internal_flags &
-				    EFA_RDM_OPE_QUEUED_CTRL);
-			assert_non_null(rxe->atomrsp_data);
-			assert_int_equal(((uint8_t *) rxe->atomrsp_data)[0], 1);
-			assert_int_equal(
-				efa_rdm_ope_process_queued_ope(rxe), -FI_EIO);
-			test_proto_atomic_read_eq_error(
-				&ctx, FI_EIO, FI_EFA_ERR_PKT_POST);
-			break;
-		case TEST_PROTO_ATOMIC_ASYNC_FAILURE:
-			assert_int_equal(ret, 0);
-			resp_pke = test_proto_atomic_posted_pke(&ctx);
-			assert_int_equal(
-				efa_rdm_pkt_type_of(resp_pke),
-				EFA_RDM_ATOMRSP_PKT);
+	if (failure == TEST_PROTO_ATOMIC_DIRECT_FAILURE) {
+		assert_true(dlist_empty(&ctx->ep->ope_queued_list));
+	} else if (failure == TEST_PROTO_ATOMIC_QUEUED_FAILURE) {
+		assert_false(dlist_empty(&ctx->ep->ope_queued_list));
+		rxe = container_of(ctx->ep->ope_queued_list.next,
+				   struct efa_rdm_ope, queued_entry);
+		test_proto_atomic_assert_response_rxe(
+			rxe, op, 0, pkt_type == EFA_RDM_ATOMRSP_PKT);
+		assert_true(rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
+		assert_int_equal(rxe->queued_ctrl_type, pkt_type);
+		test_proto_atomic_assert_eq_empty(ctx);
+		assert_int_equal(efa_rdm_ope_process_queued_ope(rxe), -FI_EIO);
+	} else {
+		response = test_proto_atomic_posted_pke(ctx);
+		assert_int_equal(efa_rdm_pkt_type_of(response), pkt_type);
+		rxe = response->ope;
+		test_proto_atomic_assert_response_rxe(
+			rxe, op, 1, pkt_type == EFA_RDM_ATOMRSP_PKT);
+		assert_int_equal(ctx->ep->efa_outstanding_tx_ops,
+				 request_outstanding + 1);
+		assert_int_equal(ctx->peer->efa_outstanding_tx_ops,
+				 request_peer_outstanding + 1);
+		if (is_async) {
 			efa_rdm_pke_handle_tx_error(
-				resp_pke,
+				response,
 				EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
-			test_proto_atomic_read_eq_error(
-				&ctx, FI_EHOSTUNREACH,
-				EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
-			break;
+		} else {
+			efa_rdm_pke_handle_tx_error(
+				response, EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR);
+			assert_true(rxe->internal_flags &
+				    EFA_RDM_OPE_QUEUED_RNR);
+			assert_ptr_equal(rxe->queued_pkts.next,
+					 &response->entry);
+			assert_int_equal(rxe->efa_outstanding_tx_ops, 0);
+			assert_int_equal(ctx->ep->efa_rnr_queued_pkt_cnt, 1);
+			assert_int_equal(ctx->peer->rnr_queued_pkt_cnt, 1);
+			assert_int_equal(ctx->ep->efa_outstanding_tx_ops,
+					 request_outstanding);
+			assert_int_equal(ctx->peer->efa_outstanding_tx_ops,
+					 request_peer_outstanding);
+			test_proto_atomic_assert_eq_empty(ctx);
+			will_return_int(efa_mock_efa_qp_post_send_return_mock,
+					EIO);
+			assert_int_equal(efa_rdm_ope_process_queued_ope(rxe),
+					 -FI_EIO);
 		}
-
-		assert_int_equal(
-			efa_unit_test_get_ope_list_length(
-				ctx.ep, EFA_RDM_RXE),
-			0);
-		assert_int_equal(
-			test_proto_atomic_bufpool_free_count(
-				ctx.ep->rx_atomrsp_pool),
-			ctx.atomrsp_free);
-		assert_true(dlist_empty(&ctx.ep->ope_queued_list));
-		test_proto_atomic_fail_request(
-			&ctx, req_pke, FI_ATOMIC | FI_READ,
-			next_msg_id + 1);
 	}
 
+	test_proto_atomic_read_eq_error(
+		ctx, is_async ? FI_EHOSTUNREACH : FI_EIO,
+		is_async ? EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE :
+			   FI_EFA_ERR_PKT_POST);
+	test_proto_atomic_assert_eq_empty(ctx);
+	assert_int_equal(
+		efa_unit_test_get_ope_list_length(ctx->ep, EFA_RDM_RXE), 0);
+	assert_int_equal(
+		test_proto_atomic_bufpool_free_count(ctx->ep->base_ep.rxe_pool),
+		ctx->rxe_free);
+	assert_int_equal(
+		test_proto_atomic_bufpool_free_count(ctx->ep->rx_atomrsp_pool),
+		ctx->atomrsp_free);
+	assert_true(dlist_empty(&ctx->ep->ope_queued_list));
+	assert_true(dlist_empty(&ctx->ep->ope_posted_ack_list));
+	assert_int_equal(ctx->ep->efa_outstanding_tx_ops, request_outstanding);
+	assert_int_equal(ctx->peer->efa_outstanding_tx_ops,
+			 request_peer_outstanding);
+	assert_int_equal(ctx->ep->efa_rnr_queued_pkt_cnt, 0);
+	assert_int_equal(ctx->peer->rnr_queued_pkt_cnt, 0);
+}
+
+static void test_proto_atomic_response_failure_case(
+	struct efa_unit_test_atomic_ctx *ctx, int pkt_type, enum fi_op op,
+	enum test_proto_atomic_response_failure failure){
+	struct efa_rdm_pke *request;
+	uint8_t *target = ctx->send_buff.buff;
+	uint8_t *source = target + 16;
+	uint8_t *compare = source + 16;
+	uint8_t *result = compare + 16;
+	uint32_t expected_msg_id = ofi_recvwin_next_exp_id(&ctx->peer->robuf);
+	uint32_t sender_next_msg_id = ctx->peer->next_msg_id;
+	uint32_t response_op;
+	uint64_t cq_flags;
+	uint8_t expected_target;
+	size_t request_outstanding, request_peer_outstanding;
+	bool is_receipt = pkt_type == EFA_RDM_RECEIPT_PKT;
+
+	target[0] = compare[0] = 1;
+	source[0] = 2;
+	result[0] = 0;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+	will_return_int(efa_mock_efa_qp_post_send_return_mock,
+			test_proto_atomic_response_post_results[failure]);
+	if (failure == TEST_PROTO_ATOMIC_QUEUED_FAILURE)
+		will_return_int(efa_mock_efa_qp_post_send_return_mock, EIO);
+	ctx->msg.op = FI_ATOMIC_WRITE;
+	if (is_receipt)
+		request = test_proto_atomic_post_success(
+			ctx, 1, FI_DELIVERY_COMPLETE | FI_COMPLETION);
+	else
+		request = test_proto_atomic_fetch_compare_post_success(
+			ctx, op, 1, compare, result);
+	response_op = is_receipt     ? ofi_op_atomic :
+		      op == FI_CSWAP ? ofi_op_atomic_compare :
+				       ofi_op_atomic_fetch;
+	cq_flags = FI_ATOMIC | (is_receipt ? FI_WRITE : FI_READ);
+
+	request_outstanding = ctx->ep->efa_outstanding_tx_ops;
+	request_peer_outstanding = ctx->peer->efa_outstanding_tx_ops;
+	test_proto_atomic_dispatch(ctx, request, expected_msg_id,
+				   expected_msg_id + 1);
+	expected_target = is_receipt ? 2 : 2 + (op == FI_SUM);
+	assert_int_equal(target[0], expected_target);
+	test_proto_atomic_inject_response_failure(ctx, pkt_type, response_op,
+						  failure, request_outstanding,
+						  request_peer_outstanding);
+	assert_int_equal(target[0], expected_target);
+	test_proto_atomic_refill_real_rx(ctx, 1);
+	test_proto_atomic_fail_request(ctx, request, cq_flags,
+				       sender_next_msg_id + 1);
+}
+
+void test_proto_atomic_responder_post_error(void **state){
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	static const enum fi_op ops[] = {
+		FI_SUM,
+		FI_CSWAP,
+		FI_SUM,
+		FI_SUM,
+	};
+	uint8_t *target, *source;
+	enum test_proto_atomic_response_failure failure;
+
+	test_proto_atomic_setup_dispatch(resource, &ctx, &target, &source);
+	for (failure = TEST_PROTO_ATOMIC_DIRECT_FAILURE;
+	     failure <= TEST_PROTO_ATOMIC_RNR_RETRY_FAILURE; failure++)
+		test_proto_atomic_response_failure_case(
+			&ctx, EFA_RDM_ATOMRSP_PKT, ops[failure], failure);
 	efa_unit_test_buff_destruct(&ctx.send_buff);
 }
+
+static void test_proto_atomic_dc_write_receipt_failure_cleanup_case(
+	void **state, enum test_proto_atomic_response_failure failure){
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_atomic_ctx ctx;
+	uint8_t *target, *source;
+
+	test_proto_atomic_setup_dispatch(resource, &ctx, &target, &source);
+	test_proto_atomic_response_failure_case(&ctx, EFA_RDM_RECEIPT_PKT,
+						FI_ATOMIC_WRITE, failure);
+	efa_unit_test_buff_destruct(&ctx.send_buff);
+}
+
+TEST_PROTO_ATOMIC_CASE(
+	test_proto_atomic_dc_write_receipt_direct_failure_cleanup,
+	test_proto_atomic_dc_write_receipt_failure_cleanup_case,
+	TEST_PROTO_ATOMIC_DIRECT_FAILURE)
+TEST_PROTO_ATOMIC_CASE(
+	test_proto_atomic_dc_write_receipt_queued_ctrl_failure_cleanup,
+	test_proto_atomic_dc_write_receipt_failure_cleanup_case,
+	TEST_PROTO_ATOMIC_QUEUED_FAILURE)
+TEST_PROTO_ATOMIC_CASE(test_proto_atomic_dc_write_receipt_async_failure_cleanup,
+		       test_proto_atomic_dc_write_receipt_failure_cleanup_case,
+		       TEST_PROTO_ATOMIC_ASYNC_FAILURE)
+TEST_PROTO_ATOMIC_CASE(
+	test_proto_atomic_dc_write_receipt_queued_rnr_failure_cleanup,
+	test_proto_atomic_dc_write_receipt_failure_cleanup_case,
+	TEST_PROTO_ATOMIC_RNR_RETRY_FAILURE)
+
+#undef TEST_PROTO_ATOMIC_CASE
 
 static ssize_t test_proto_atomic_unexpected_source_copy(void **desc, char *buff,
 							size_t buff_size,
@@ -1806,7 +2309,6 @@ void test_proto_atomic_compare_responder_iov(void **state) {
 	struct fi_ioc source_iov[2], compare_iov[2], result_iov[2];
 	struct fi_rma_ioc rma_iov[2];
 	struct fi_msg_atomic msg;
-	struct efa_rdm_atomrsp_pkt *atomrsp;
 	struct efa_rdm_pke *req_pke, *req_rx, *resp_pke, *resp_rx;
 	void *desc[2], *compare_desc[2], *result_desc[2];
 	uint8_t old[] = {1, 2}, updated[] = {11, 22};
@@ -1860,19 +2362,17 @@ void test_proto_atomic_compare_responder_iov(void **state) {
 	efa_rdm_pke_proc_received(req_rx);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, submitted_before + 1);
 	resp_pke = test_proto_atomic_posted_pke(&ctx);
-	assert_int_equal(efa_rdm_pkt_type_of(resp_pke), EFA_RDM_ATOMRSP_PKT);
-	atomrsp = (struct efa_rdm_atomrsp_pkt *) resp_pke->wiredata;
-	assert_memory_equal(atomrsp->data, old, sizeof(old));
+	test_proto_atomic_assert_atomrsp(&ctx, resp_pke, req_pke, old,
+					 sizeof(old), ofi_op_atomic_compare);
 	assert_memory_equal(target, updated, sizeof(updated));
-	resp_rx = test_proto_atomic_atomrsp(&ctx, req_pke->ope->tx_id,
-					    atomrsp->data,
-					    atomrsp->hdr.seg_length);
+	resp_rx = test_proto_atomic_request_rx(&ctx, resp_pke);
 	efa_rdm_pke_handle_send_completion(resp_pke);
 	efa_rdm_pke_handle_send_completion(req_pke);
-	efa_rdm_pke_handle_atomrsp_recv(resp_rx);
+	efa_rdm_pke_proc_received(resp_rx);
 	assert_memory_equal(result, old, sizeof(old));
 	test_proto_atomic_read_success(&ctx, 2, FI_ATOMIC | FI_READ);
 	test_proto_atomic_assert_clean(&ctx, ctx.next_msg_id + 1);
+	test_proto_atomic_assert_cq_empty(&ctx);
 	efa_unit_test_buff_destruct(&ctx.send_buff);
 }
 

@@ -553,7 +553,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
 			struct efa_rdm_ope *rxe = pkt_entry->ope;
-			bool release_atomic_response = (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_ATOMRSP_PKT);
+			bool release_atomic_response =
+				efa_rdm_ope_is_internal_atomic_response(rxe, efa_rdm_pkt_type_of(pkt_entry));
 
 			efa_rdm_rxe_handle_error(rxe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);

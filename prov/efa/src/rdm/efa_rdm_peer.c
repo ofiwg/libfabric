@@ -500,6 +500,7 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 	uint32_t msg_id = 0, exp_msg_id = 0;
 
 	while (1) {
+		ret = 0;
 		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
 		if (!pending_pkt)
 			return;
@@ -530,7 +531,6 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 			EFA_WARN(FI_LOG_CQ,
 				"Error processing msg_id %d from robuf: %s\n",
 				msg_id, fi_strerror(-ret));
-			return;
 		}
 	}
 	return;
