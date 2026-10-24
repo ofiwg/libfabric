@@ -6,6 +6,7 @@
 
 /* CXI fabric discovery implementation. */
 
+#include <dlfcn.h>
 #include "ofi_prov.h"
 #include "cxip.h"
 
@@ -13,6 +14,76 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 bool cxip_collectives_supported = true;
+struct cxip_libcxi_ops cxip_libcxi_ops;
+
+static void cxip_libcxi_ops_init(void)
+{
+#ifdef CXIP_LIBCXI_STATIC
+	/* libcxi is linked statically, so the functions declared by the build
+	 * headers are bound directly; there is no shared libcxi.so.1 whose
+	 * symbol set could differ from the headers at runtime.
+	 */
+#ifdef CXI_HAVE_ALLOC_TRIG_CP
+	cxip_libcxi_ops.alloc_trig_cp = cxil_alloc_trig_cp;
+#endif
+#ifdef CXI_HAVE_MODIFY_CP
+	cxip_libcxi_ops.modify_cp = cxil_modify_cp;
+#endif
+
+	CXIP_INFO("libcxi symbols (static link): alloc_trig_cp=%d modify_cp=%d\n",
+		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp);
+#else
+	Dl_info dl_info = {};
+	void *handle = NULL;
+
+	/* Look the symbols up in the libcxi this provider is already bound
+	 * to, whatever its SONAME or path, by locating the object that
+	 * defines cxil_alloc_cp() (LIBCXI_1.0). RTLD_DEFAULT only searches
+	 * the global scope, which excludes libfabric's own dependencies when
+	 * an application loaded libfabric with RTLD_LOCAL. ISO C defines no
+	 * function-to-object pointer conversion, so the address reaches
+	 * dladdr() through uintptr_t, which is exact on the Linux ABIs this
+	 * provider supports and quiet under -pedantic.
+	 */
+	if (dladdr((void *)(uintptr_t)cxil_alloc_cp, &dl_info) &&
+	    dl_info.dli_fname)
+		handle = dlopen(dl_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+	if (!handle) {
+		handle = RTLD_DEFAULT;
+
+		/* Every libcxi exports cxil_alloc_cp(). A global scope that
+		 * shows it resolves the optional symbols below as usual; one
+		 * that does not is unlikely to resolve any of them, and the
+		 * provider then runs as if the host libcxi predated them.
+		 * Unlike the dladdr() path, this cannot tell which libcxi
+		 * copy answers when more than one is loaded.
+		 */
+		if (dlsym(handle, "cxil_alloc_cp"))
+			CXIP_INFO("Unable to locate the loaded libcxi; "
+				  "resolving optional libcxi symbols from the "
+				  "global scope\n");
+		else
+			CXIP_WARN("Unable to locate the loaded libcxi and the "
+				  "global scope does not expose it; optional "
+				  "libcxi functions may be unavailable\n");
+	}
+
+	/* dlsym() returns an object pointer and ISO C defines no conversion
+	 * to a function pointer; store it through the member's address as
+	 * POSIX dlsym(3) describes.
+	 */
+	*(void **)&cxip_libcxi_ops.alloc_trig_cp =
+		dlsym(handle, "cxil_alloc_trig_cp");
+	*(void **)&cxip_libcxi_ops.modify_cp = dlsym(handle, "cxil_modify_cp");
+
+	CXIP_INFO("libcxi runtime symbols (%s): alloc_trig_cp=%d modify_cp=%d\n",
+		  handle == RTLD_DEFAULT ? "global scope" : dl_info.dli_fname,
+		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp);
+
+	if (handle != RTLD_DEFAULT)
+		dlclose(handle);
+#endif /* CXIP_LIBCXI_STATIC */
+}
 
 char cxip_prov_name[] = "cxi";
 
@@ -1378,7 +1449,9 @@ static void cxip_env_init(void)
 CXI_INI
 {
 	int ret = 0;
+
 	cxip_env_init();
+	cxip_libcxi_ops_init();
 	/* 
 	 * Check to see if we had any issues when binding the curl symbols or during multi init
 	 * If we failed, then collective support will be removed from the CXI provider fi_info
