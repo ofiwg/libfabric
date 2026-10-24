@@ -213,16 +213,16 @@ int cxip_if_valid_rgroup_vni(struct cxip_if *iface, unsigned int rgroup_id,
 			if (vni == svc_desc.vnis[i])
 				return FI_SUCCESS;
 		}
-	} else {
-#ifdef CXI_HAVE_SVC_GET_VNI_RANGE
+	} else if (cxip_libcxi_ops.svc_get_vni_range) {
 		uint16_t vni_min;
 		uint16_t vni_max;
 
-		ret = cxil_svc_get_vni_range(iface->dev, rgroup_id, &vni_min,
-					     &vni_max);
+		ret = cxip_libcxi_ops.svc_get_vni_range(iface->dev, rgroup_id,
+							&vni_min, &vni_max);
 		if (!ret && vni >= vni_min && vni <= vni_max)
-#endif /* CXI_HAVE_SVC_GET_VNI_RANGE */
 			return FI_SUCCESS;
+	} else {
+		return FI_SUCCESS;
 	}
 
 	CXIP_WARN("Invalid VNI %d for %s and svc_id %d\n", vni,
