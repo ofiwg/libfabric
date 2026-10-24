@@ -898,18 +898,18 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 }
 
 static int
-efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
-				      uint32_t *max_mem_comp_actions)
+efa_domain_query_max_comp_actions(struct fid_domain *domain_fid,
+				  uint32_t *max_comp_actions)
 {
 	struct efa_domain *domain;
 
-	if (!max_mem_comp_actions)
+	if (!max_comp_actions)
 		return -FI_EINVAL;
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
 
-	*max_mem_comp_actions = efa_device_support_comp_action() ?
+	*max_comp_actions = efa_device_support_comp_action() ?
 		domain->device->efa_attr.max_comp_actions : 0;
 	return FI_SUCCESS;
 }
@@ -925,17 +925,17 @@ efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
 }
 
 static int
-efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
-				      uint32_t *max_mem_comp_actions)
+efa_domain_query_max_comp_actions(struct fid_domain *domain_fid,
+				  uint32_t *max_comp_actions)
 {
 	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_EFADV_COMP_ACTION */
 
-static struct fi_efa_ops_mem_comp_action efa_ops_mem_comp_action = {
+static struct fi_efa_ops_comp_action efa_ops_comp_action = {
 	.create_mem_comp_action = efa_domain_create_mem_comp_action,
-	.query_max_mem_comp_actions = efa_domain_query_max_mem_comp_actions,
+	.query_max_comp_actions = efa_domain_query_max_comp_actions,
 };
 
 struct fi_efa_ops_domain efa_ops_domain = {
@@ -1062,13 +1062,13 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		*ops = &efa_ops_gda;
 		return ret;
 	}
-	if (strcmp(ops_name, FI_EFA_MEM_COMP_ACTION_OPS) == 0) {
+	if (strcmp(ops_name, FI_EFA_COMP_ACTION_OPS) == 0) {
 		efa_domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
 		if (efa_domain->info_type != EFA_INFO_DIRECT) {
-			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MEM_COMP_ACTION_OPS\n");
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_COMP_ACTION_OPS\n");
 			return -FI_EOPNOTSUPP;
 		}
-		*ops = &efa_ops_mem_comp_action;
+		*ops = &efa_ops_comp_action;
 		return ret;
 	}
 	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {

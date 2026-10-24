@@ -267,20 +267,20 @@ work request action attachment (data path).
 
 ## Action registration (control path)
 
-Memory action registration is exposed as a domain ops table obtained with
-`fi_open_ops()` using the name *FI_EFA_MEM_COMP_ACTION_OPS*, defined in
+Completion action registration is exposed as a domain ops table obtained with
+`fi_open_ops()` using the name *FI_EFA_COMP_ACTION_OPS*, defined in
 *rdma/fi_ext_efa.h*:
 
 ```c
-struct fi_efa_ops_mem_comp_action *action_ops;
-fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&action_ops, NULL);
+struct fi_efa_ops_comp_action *action_ops;
+fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0, (void **)&action_ops, NULL);
 
-struct fi_efa_ops_mem_comp_action {
+struct fi_efa_ops_comp_action {
 	int (*create_mem_comp_action)(struct fid_domain *domain,
 				      struct fi_efa_mem_comp_action_attr *attr,
 				      struct fid_efa_comp_action **action);
-	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
-					  uint32_t *max_mem_comp_actions);
+	int (*query_max_comp_actions)(struct fid_domain *domain,
+				      uint32_t *max_comp_actions);
 };
 ```
 
@@ -297,9 +297,9 @@ struct fi_efa_ops_mem_comp_action {
   an action executed at the target (a remote action) that id must be
   communicated out of band from the target to the initiator.
 
-*query_max_mem_comp_actions*
-: Reports how many memory completion actions the domain can have registered at
-  once. A value of 0 means the device does not support them and
+*query_max_comp_actions*
+: Reports how many completion actions the domain can have registered at once.
+  A value of 0 means the device does not support them and
   *create_mem_comp_action* fails.
 
 *create_mem_comp_action* rejects the following with *-FI_EINVAL*: a non-zero
@@ -488,11 +488,11 @@ Target: register a memory action over a one entry host semaphore and send its id
 to the initiator out of band.
 
 ```c
-struct fi_efa_ops_mem_comp_action *ops;
+struct fi_efa_ops_comp_action *ops;
 struct fid_efa_comp_action *action;
 uint32_t sem = 0;
 
-fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
+fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
 
 struct fi_efa_mem_comp_action_attr attr = {
 	.mem_modify_type = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
