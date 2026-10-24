@@ -25,13 +25,21 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
 	}
 }
 
+/* Triggered CP separation (LCID 0 reserved for triggered CQ/cntr use) is only
+ * in effect when cxil_alloc_trig_cp() is available in the runtime libcxi and
+ * the kernel driver has not rejected it (see cxip_alloc_cp_hw()).
+ */
+static bool cxip_trig_cp_active(struct cxip_lni *lni)
+{
+	return cxip_libcxi_ops.alloc_trig_cp && !lni->trig_cp_unsupported;
+}
+
 static bool cxip_cp_lcid_match(struct cxip_lni *lni, unsigned int lcid,
 			       bool trig_cp)
 {
-#ifdef CXI_HAVE_ALLOC_TRIG_CP
-	if (!lni->trig_cp_unsupported)
+	if (cxip_trig_cp_active(lni))
 		return !trig_cp ? lcid != 0 : lcid == 0;
-#endif
+
 	return true;
 }
 
@@ -40,13 +48,13 @@ static int cxip_alloc_cp_hw(struct cxip_lni *lni, uint16_t vni,
 			    enum cxi_traffic_class_type tc_type,
 			    bool trig_cp, struct cxi_cp **cp)
 {
-#ifdef CXI_HAVE_ALLOC_TRIG_CP
 	int ret;
 
-	if (!lni->trig_cp_unsupported) {
-		ret = cxil_alloc_trig_cp(lni->lni, vni, tc, tc_type,
-					 trig_cp ? TRIG_LCID : NON_TRIG_LCID,
-					 cp);
+	if (cxip_trig_cp_active(lni)) {
+		ret = cxip_libcxi_ops.alloc_trig_cp(lni->lni, vni, tc, tc_type,
+						    trig_cp ? TRIG_LCID :
+							      NON_TRIG_LCID,
+						    cp);
 		if (ret != -EINVAL)
 			return ret;
 
@@ -58,7 +66,7 @@ static int cxip_alloc_cp_hw(struct cxip_lni *lni, uint16_t vni,
 		}
 		return ret;
 	}
-#endif
+
 	return cxil_alloc_cp(lni->lni, vni, tc, tc_type, cp);
 }
 
@@ -71,8 +79,8 @@ static int cxip_cp_find(struct cxip_lni *lni, uint16_t vni,
 
 	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
 				remap_entry) {
-		/* LCID 0 is reserved for triggered CQ/cntr use when
-		 * triggered CP allocation is supported.
+		/* LCID 0 is reserved for triggered CQ/cntr use when triggered
+		 * CP allocation is available and supported.
 		 */
 		if (sw_cp->remap_cp.vni == vni &&
 		    sw_cp->remap_cp.tc == tc &&
@@ -246,10 +254,12 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 			enum cxi_traffic_class tc)
 {
 	int ret;
-#if defined(CXI_HAVE_MODIFY_CP)
 	int i;
 	struct cxi_cp *hw_cp = NULL;
 	struct cxip_lni *lni = cmdq->lni;
+
+	if (!cxip_libcxi_ops.modify_cp)
+		goto cp_set;
 
 	pthread_rwlock_wrlock(&lni->cp_lock);
 
@@ -265,7 +275,7 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 	}
 
 	if (hw_cp) {
-		ret = cxil_modify_cp(cmdq->lni->lni, hw_cp, vni);
+		ret = cxip_libcxi_ops.modify_cp(cmdq->lni->lni, hw_cp, vni);
 		if (!ret) {
 			hw_cp->vni_pcp = vni;
 			cmdq->cur_cp->vni_pcp = vni;
@@ -280,8 +290,8 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 	pthread_rwlock_unlock(&lni->cp_lock);
 
 	return -FI_ENOENT;
-#endif /* CXI_HAVE_MODIFY_CP */
 
+cp_set:
 	ret = cxip_cmdq_cp_set(cmdq, vni, tc, CXI_TC_TYPE_DEFAULT);
 	if (ret)
 		CXIP_WARN("Failed to change communication profile: %d\n", ret);

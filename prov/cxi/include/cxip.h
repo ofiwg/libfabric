@@ -48,6 +48,26 @@
 #include "cxip_faults.h"
 #include "fi_cxi_ext.h"
 
+#if !defined(CXI_HAVE_TRIG_LCID) && !defined(CXI_HAVE_ALLOC_TRIG_CP)
+enum cxi_trig_cp {
+	TRIG_LCID,
+	NON_TRIG_LCID,
+	ANY_LCID,
+};
+#endif
+
+struct cxip_libcxi_ops {
+	int (*alloc_trig_cp)(struct cxil_lni *lni, unsigned int vni,
+			     enum cxi_traffic_class tc,
+			     enum cxi_traffic_class_type tc_type,
+			     enum cxi_trig_cp cp_type,
+			     struct cxi_cp **cp);
+	int (*modify_cp)(struct cxil_lni *lni, struct cxi_cp *cp,
+			 unsigned int vni);
+};
+
+extern struct cxip_libcxi_ops cxip_libcxi_ops;
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif

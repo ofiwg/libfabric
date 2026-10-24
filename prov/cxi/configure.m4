@@ -147,6 +147,51 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 				[#include "libcxi/libcxi.h"]
 			)
 
+			AC_CHECK_DECL([TRIG_LCID],
+				[AC_DEFINE([CXI_HAVE_TRIG_LCID],[1],
+				    [Whether cxi-abi.h defines enum cxi_trig_cp])],
+				[],
+				[#include "libcxi/libcxi.h"]
+			)
+
+			# Post-LIBCXI_1.8 libcxi functions are resolved at runtime with
+			# dlsym() so one libfabric build loads against older host
+			# libcxi.so.1 libraries. That only applies when -lcxi resolves
+			# to the shared library; with a static libcxi.a the declared
+			# functions are bound directly instead. Without positive
+			# evidence of a static link, assume the shared library.
+			AS_IF([test "$cxi_happy" = "1"], [
+				AC_CHECK_TOOL([READELF], [readelf], [:])
+				cxi_libcxi_shared=yes
+				cxi_configure_save_LDFLAGS=$LDFLAGS
+				cxi_configure_save_LIBS=$LIBS
+				LDFLAGS="$cxi_LDFLAGS $LDFLAGS"
+				LIBS="$cxi_LIBS $LIBS"
+				AC_MSG_CHECKING([whether libcxi links as a shared library])
+				cxi_libcxi_link_known=no
+				AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <libcxi/libcxi.h>]],
+						[[struct cxil_dev *dev; return cxil_open_device(0, &dev);]])],
+					[cxi_readelf_out=`$READELF -d conftest$ac_exeext 2>/dev/null`
+					 cxi_readelf_rc=$?
+					 AS_IF([test $cxi_readelf_rc -eq 0 && test -n "$cxi_readelf_out"],
+						[cxi_libcxi_link_known=yes
+						 AS_IF([echo "$cxi_readelf_out" | grep -q 'NEEDED.*libcxi'], [],
+							[cxi_libcxi_shared=no])])],
+					[])
+				AS_IF([test "$cxi_libcxi_link_known" = "yes"],
+					[AC_MSG_RESULT([$cxi_libcxi_shared])],
+					[AC_MSG_RESULT([unknown, assuming yes])
+					 AC_MSG_WARN([could not inspect the libcxi link result with readelf; assuming a shared libcxi])])
+				LDFLAGS=$cxi_configure_save_LDFLAGS
+				LIBS=$cxi_configure_save_LIBS
+				AS_IF([test "$cxi_libcxi_shared" = "no"],
+					[AC_DEFINE([CXIP_LIBCXI_STATIC], [1],
+						[Whether libcxi is linked statically])])
+				AS_IF([test "$cxi_libcxi_shared" = "yes" && test "$with_dlopen" = "no"],
+					[AC_MSG_WARN([the CXI provider needs dlopen support with a shared libcxi])
+					 cxi_happy=0])
+			])
+
 			AC_CHECK_DECL([cxil_svc_get_netns],
 				[AC_DEFINE([CXI_HAVE_SVC_GET_NETNS],[1],
 				    [Whether libcxi.h has cxil_svc_get_netns() support])],
