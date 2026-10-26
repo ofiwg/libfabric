@@ -183,12 +183,6 @@ descriptor, and its flags; these are the same descriptors used by
 fi_wr_attr, and everything it references, is input only and is not accessed
 after fi_wr_prepare returns.
 
-Because the operation descriptors are shared with the deferred work queue
-interface, two of their fields do not apply here.  The endpoint they reference
-must match the endpoint the call is issued on; a mismatch returns -FI_EINVAL.
-Their per operation context, for example fi_msg::context, is ignored, as the
-context of a queued operation is supplied by the queue call instead.
-
 `fi_wr` is an opaque handle, defined as `void *`.  Its contents are provider
 defined and its buffer size is reported by the provider.  The application
 allocates the work request, backing it with a buffer of at least
@@ -202,6 +196,94 @@ supplying its own context.  If the provider requires the FI_CONTEXT or
 FI_CONTEXT2 mode, the context passed to the queue call must be a
 struct fi_context or struct fi_context2 respectively, following the usual rules
 for those modes.
+
+## Operation Descriptors
+
+The op_type field selects the member of the op union, and with it the
+descriptor type:
+
+| op_type | op member | Descriptor |
+|---|---|---|
+| FI_OP_SEND, FI_OP_RECV | msg | struct fi_op_msg |
+| FI_OP_TSEND, FI_OP_TRECV | tagged | struct fi_op_tagged |
+| FI_OP_READ, FI_OP_WRITE | rma | struct fi_op_rma |
+| FI_OP_ATOMIC | atomic | struct fi_op_atomic |
+| FI_OP_FETCH_ATOMIC | fetch_atomic | struct fi_op_fetch_atomic |
+| FI_OP_COMPARE_ATOMIC | compare_atomic | struct fi_op_compare_atomic |
+
+The descriptors are defined in `rdma/fi_trigger.h` as follows.  The counter
+operations of the deferred work queue, FI_OP_CNTR_SET and FI_OP_CNTR_ADD, and
+their struct fi_op_cntr, do not apply to work requests.
+
+```c
+struct fi_op_msg {
+	struct fid_ep           *ep;
+	struct fi_msg           msg;
+	uint64_t                flags;
+};
+
+struct fi_op_tagged {
+	struct fid_ep           *ep;
+	struct fi_msg_tagged    msg;
+	uint64_t                flags;
+};
+
+struct fi_op_rma {
+	struct fid_ep           *ep;
+	struct fi_msg_rma       msg;
+	uint64_t                flags;
+};
+
+struct fi_op_atomic {
+	struct fid_ep           *ep;
+	struct fi_msg_atomic    msg;
+	uint64_t                flags;
+};
+
+struct fi_op_fetch_atomic {
+	struct fid_ep           *ep;
+	struct fi_msg_atomic    msg;
+	struct fi_msg_fetch     fetch;
+	uint64_t                flags;
+};
+
+struct fi_op_compare_atomic {
+	struct fid_ep           *ep;
+	struct fi_msg_atomic    msg;
+	struct fi_msg_fetch     fetch;
+	struct fi_msg_compare   compare;
+	uint64_t                flags;
+};
+```
+
+*ep*
+: The endpoint the operation is issued on.
+
+*msg*
+: The operation's message descriptor, the same structure the corresponding
+  fi_*msg call takes: struct fi_msg for fi_sendmsg and fi_recvmsg (see
+  [`fi_msg`(3)](fi_msg.3.html)), struct fi_msg_tagged for fi_tsendmsg and
+  fi_trecvmsg (see [`fi_tagged`(3)](fi_tagged.3.html)), struct fi_msg_rma for
+  fi_readmsg and fi_writemsg (see [`fi_rma`(3)](fi_rma.3.html)), and struct
+  fi_msg_atomic for the atomic calls (see [`fi_atomic`(3)](fi_atomic.3.html)).
+
+*fetch*
+: The result buffers of a fetching or compare atomic operation, as passed to
+  fi_fetch_atomicmsg and fi_compare_atomicmsg.
+
+*compare*
+: The compare buffers of a compare atomic operation, as passed to
+  fi_compare_atomicmsg.
+
+*flags*
+: The operation flags, with the meaning they have for the corresponding
+  fi_*msg call; see FLAGS below.
+
+Because the operation descriptors are shared with the deferred work queue
+interface, two of their fields do not apply here.  The endpoint they reference
+must match the endpoint the call is issued on; a mismatch returns -FI_EINVAL.
+Their per operation context, for example fi_msg::context, is ignored, as the
+context of a queued operation is supplied by the queue call instead.
 
 ## fi_wr_prepare
 
