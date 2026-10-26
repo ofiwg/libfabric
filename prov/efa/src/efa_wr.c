@@ -287,8 +287,19 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 	const struct fi_msg_rma *msg = &op_rma->msg;
 	struct efa_io_tx_meta_desc *meta_desc = &wqe->meta;
 	struct ibv_data_buf inline_data_list[EFA_IO_TX_DESC_NUM_RDMA_BUFS];
+	struct efa_comp_action_wr sig = {0};
 	size_t total_len;
 	int err;
+
+	if (op_rma->flags & FI_EFA_EXTENDED_MSG) {
+		const struct fi_efa_op_rma *eop =
+			(const struct fi_efa_op_rma *) op_rma;
+
+		err = efa_comp_action_wr_init(
+			base_ep, efa_comp_action_fields(eop), &sig);
+		if (OFI_UNLIKELY(err))
+			return err;
+	}
 
 	err = efa_wr_prepare_rdma_common(base_ep, op_rma, wqe,
 					 EFA_IO_RDMA_WRITE, &total_len);
@@ -301,23 +312,43 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 	if (op_rma->flags & FI_EFA_WR_HIGH_PPS)
 		efa_send_wr_set_processing_hint_high_pps(meta_desc);
 
-	if (total_len == 0)
-		return efa_wr_prepare_rdma_sgl(base_ep, msg, wqe, total_len);
-
-	err = efa_msg_use_inline(msg->desc, msg->iov_count, total_len,
-				 base_ep->qp->max_inline_write, op_rma->flags);
-	if (OFI_UNLIKELY(err < 0))
+	if (total_len == 0) {
+		err = efa_wr_prepare_rdma_sgl(base_ep, msg, wqe, total_len);
+	} else {
+		err = efa_msg_use_inline(msg->desc, msg->iov_count, total_len,
+					 base_ep->qp->max_inline_write,
+					 op_rma->flags);
+		if (OFI_UNLIKELY(err < 0))
+			return err;
+		if (!err) {
+			err = efa_wr_prepare_rdma_sgl(base_ep, msg, wqe,
+						      total_len);
+		} else {
+			efa_msg_setup_inline_data_list(base_ep, msg->msg_iov,
+						       msg->iov_count,
+						       inline_data_list);
+			assert(msg->iov_count == 1);
+			efa_data_path_direct_set_rdma_inline_data(
+				wqe, inline_data_list[0].addr,
+				inline_data_list[0].length);
+			err = 0;
+		}
+	}
+	if (OFI_UNLIKELY(err))
 		return err;
-	if (!err)
-		return efa_wr_prepare_rdma_sgl(base_ep, msg, wqe, total_len);
 
-	efa_msg_setup_inline_data_list(base_ep, msg->msg_iov, msg->iov_count,
-				       inline_data_list);
-	assert(msg->iov_count == 1);
-	efa_data_path_direct_set_rdma_inline_data(wqe, inline_data_list[0].addr,
-						  inline_data_list[0].length);
+	if (sig.feature_bits)
+		efa_data_path_direct_set_comp_actions(
+			wqe, &base_ep->qp->data_path_direct_qp.sq, &sig);
 
 	return 0;
+}
+
+/* Whether a prepared transmit work request carries completion actions. */
+static inline bool efa_wr_tx_has_comp_actions(const struct efa_io_tx_wqe_128 *wqe)
+{
+	return EFA_GET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_LOCAL_ACTION_REQ) ||
+	       EFA_GET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_REMOTE_ACTION_REQ);
 }
 
 static inline bool efa_wr_op_is_tx(enum fi_op_type op_type)
@@ -411,7 +442,9 @@ static inline int efa_wr_setup_tx_inline_or_sgl(struct efa_base_ep *base_ep,
 		/*
 		 * Clear the inline payload so unused SGL slots are zeroed. It is
 		 * at most inline_size bytes, and for an RDMA write it follows the
-		 * remote address, which the SGL keeps.
+		 * remote address, which the SGL keeps. inline_size, the QP's
+		 * inline limit, leaves room for a completion-action block, so
+		 * the block is untouched as well.
 		 */
 		memset(is_rdma ? wqe->data.rdma_req.inline_data :
 				 wqe->data.inline_data,
@@ -491,6 +524,21 @@ static inline int efa_wr_prepare_recv(struct efa_base_ep *base_ep,
 	return efa_wr_setup_rx_buf(base_ep, rx_buf, msg->msg_iov, msg->desc,
 				     msg->iov_count);
 }
+
+/* The operation flags of @attr, for the op types fi_wr_prepare accepts. */
+static inline uint64_t efa_wr_attr_flags(const struct fi_wr_attr *attr)
+{
+	switch (attr->op_type) {
+	case FI_OP_RECV:
+	case FI_OP_SEND:
+		return attr->op.msg->flags;
+	case FI_OP_READ:
+	case FI_OP_WRITE:
+		return attr->op.rma->flags;
+	default:
+		return 0;
+	}
+}
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */
 
 static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
@@ -516,6 +564,15 @@ static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
 		return -FI_ETOOSMALL;
 
 	memset(wr, 0, len);
+
+	/* Completion actions attach to RDMA writes only. */
+	if (OFI_UNLIKELY(efa_wr_attr_flags(attr) & FI_EFA_EXTENDED_MSG) &&
+	    attr->op_type != FI_OP_WRITE) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG applies to rma write, op_type %d "
+			 "does not\n", attr->op_type);
+		return -FI_EBADFLAGS;
+	}
 
 	switch (attr->op_type) {
 	case FI_OP_RECV:
@@ -831,7 +888,8 @@ static int efa_wr_modify_data(struct fid_ep *ep_fid, fi_wr wr,
 
 #define EFA_WR_SUPPORTED_FLAGS \
 	(FI_REMOTE_CQ_DATA | FI_INJECT | FI_COMPLETION | \
-	 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE | FI_EFA_WR_HIGH_PPS)
+	 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE | FI_EFA_WR_HIGH_PPS | \
+	 FI_EFA_EXTENDED_MSG)
 
 static int efa_wr_modify_flags(struct fid_ep *ep_fid, fi_wr wr,
 			       enum fi_op_type op_type, uint64_t flags)
@@ -851,9 +909,31 @@ static int efa_wr_modify_flags(struct fid_ep *ep_fid, fi_wr wr,
 		return -FI_EBADFLAGS;
 	}
 
+	/*
+	 * FI_EFA_EXTENDED_MSG selects the descriptor the work request was
+	 * prepared from, and so whether it carries completion actions. It
+	 * cannot be added, since there are no action fields to add, nor
+	 * removed, so it must agree with the prepared work request.
+	 */
+	if (OFI_UNLIKELY((flags & FI_EFA_EXTENDED_MSG) &&
+			 op_type != FI_OP_WRITE)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG applies to rma write, op_type %d "
+			 "does not\n", op_type);
+		return -FI_EINVAL;
+	}
+
 	/* a receive descriptor carries none of the remaining flags */
 	if (!efa_wr_op_is_tx(op_type))
 		return 0;
+
+	if (OFI_UNLIKELY(!!(flags & FI_EFA_EXTENDED_MSG) !=
+			 efa_wr_tx_has_comp_actions(wqe))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG must match whether the work "
+			 "request was prepared with completion actions\n");
+		return -FI_EINVAL;
+	}
 
 	if (OFI_UNLIKELY(
 		    !!(flags & FI_REMOTE_CQ_DATA) !=

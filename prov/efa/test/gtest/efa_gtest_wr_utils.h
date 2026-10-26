@@ -97,6 +97,17 @@ int efa_test_wr_tx_processing_hints(const void *wr);
 
 int efa_test_wr_processing_hint_high_pps(void);
 
+/**
+ * @brief The completion actions a prepared transmit work request carries: the
+ * local and remote action request bits of its meta descriptor, and the action
+ * ids and operands in its action block, which sits at the offset the endpoint's
+ * send queue reports. The block is read only for a request bit that is set.
+ */
+void efa_test_wr_tx_comp_actions(struct fid_ep *ep_fid, const void *wr,
+				 int *local_req, uint32_t *local_id,
+				 uint64_t *local_data, int *remote_req,
+				 uint32_t *remote_id, uint64_t *remote_data);
+
 void efa_test_wr_tx_sge(const void *wr, enum fi_op_type op_type, size_t index,
 			uint64_t *addr, uint32_t *len, uint32_t *lkey);
 

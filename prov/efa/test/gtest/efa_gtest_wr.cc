@@ -5,8 +5,10 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
+#include "efa_gtest_domain_utils.h"
 #include "efa_gtest_wr_utils.h"
 #include "fi_ext_efa.h"
+#include "rdma/fi_ext.h"
 #include <rdma/fi_rma.h>
 #include <rdma/fi_trigger.h>
 #include <rdma/fi_wr.h>
@@ -1400,4 +1402,383 @@ TEST_F(EfaWrInlineWriteTest, modify_iov_inline_to_sgl_keeps_remote_addr)
 	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
 }
 
+
+class EfaWrCompActionTestBase : public EfaWrTestBase
+{
+	protected:
+	int prev_enable_comp_action = 0;
+	struct fi_efa_op_rma eop = {};
+
+	void setup()
+	{
+		EfaWrTestBase::setup();
+		if (testing::Test::IsSkipped())
+			return;
+		prev_enable_comp_action = efa_test_set_enable_comp_action(1);
+		if (!efa_test_device_supports_rma())
+			GTEST_SKIP() << "device does not support RDMA read/write";
+		if (!efa_test_device_supports_comp_action())
+			GTEST_SKIP() << "device without completion action support";
+	}
+
+	void teardown()
+	{
+		EfaWrTestBase::teardown();
+		efa_test_set_enable_comp_action(prev_enable_comp_action);
+	}
+
+	void construct_actions(bool enable_actions, size_t inject_size = 0)
+	{
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+		bool on = true;
+		int ret;
+
+		ASSERT_NE(hints, nullptr);
+		hints->caps |= FI_WR;
+		hints->mode &= ~FI_CONTEXT2;
+
+		efa_test_resource_getinfo(&resource, hints);
+		ASSERT_NE(resource.info, nullptr);
+		if (inject_size)
+			resource.info->tx_attr->inject_size = inject_size;
+		efa_test_resource_open(&resource);
+		ASSERT_NE(resource.ep, nullptr);
+		if (enable_actions)
+			ASSERT_EQ(fi_setopt(&resource.ep->fid, FI_OPT_ENDPOINT,
+					    FI_OPT_EFA_COMP_ACTION, &on,
+					    sizeof(on)),
+				  0);
+		ASSERT_EQ(fi_enable(resource.ep), 0);
+		ASSERT_EQ(efa_test_get_comp_action_enabled(resource.ep),
+			  enable_actions);
+
+		local_buf = (uint8_t *) calloc(2 * EFA_TEST_WR_SEG_LEN, 1);
+		ASSERT_NE(local_buf, nullptr);
+		ret = fi_mr_reg(resource.domain, local_buf,
+				2 * EFA_TEST_WR_SEG_LEN,
+				FI_SEND | FI_RECV | FI_READ | FI_WRITE, 0, 0, 0,
+				&local_mr, NULL);
+		ASSERT_EQ(ret, 0) << "fi_mr_reg failed: " << fi_strerror(-ret);
+		local_desc = fi_mr_desc(local_mr);
+
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void prepare_write_ext(const struct fi_wr_attr **attr_out,
+			       size_t *wr_len, uint64_t feature_bits)
+	{
+		prepare_rma(FI_OP_WRITE, attr_out, wr_len);
+
+		memset(&eop, 0, sizeof(eop));
+		eop.op = op_rma;
+		eop.op.flags = FI_EFA_EXTENDED_MSG;
+		eop.feature_bits = feature_bits;
+		eop.local_id = 7;
+		eop.local_value = 0x1122334455667788ULL;
+		eop.remote_id = 9;
+		eop.remote_value = 0xa5;
+		attr.op.rma = &eop.op;
+	}
+};
+
+class EfaWrCompActionTest : public EfaWrCompActionTestBase, public Test
+{
+	protected:
+	void SetUp() override { setup(); }
+	void TearDown() override { teardown(); }
+};
+
+TEST_F(EfaWrCompActionTest, prepare_write_attaches_actions)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+	int local_req, remote_req;
+	uint32_t local_id, remote_id;
+	uint64_t local_data, remote_data;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	prepare_write_ext(&attr, &wr_len,
+			  FI_EFA_LOCAL_ACTION_ID | FI_EFA_LOCAL_ACTION_VALUE |
+				  FI_EFA_REMOTE_ACTION_ID |
+				  FI_EFA_REMOTE_ACTION_VALUE);
+
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	EXPECT_EQ(efa_test_wr_tx_op_type(wr()),
+		  efa_test_wr_op_type_rdma_write());
+
+	efa_test_wr_tx_comp_actions(resource.ep, wr(), &local_req, &local_id,
+				    &local_data, &remote_req, &remote_id,
+				    &remote_data);
+	EXPECT_TRUE(local_req);
+	EXPECT_EQ(local_id, 7u);
+	EXPECT_EQ(local_data, 0x1122334455667788ULL);
+	EXPECT_TRUE(remote_req);
+	EXPECT_EQ(remote_id, 9u);
+	EXPECT_EQ(remote_data, 0xa5u);
+}
+
+TEST_F(EfaWrCompActionTest, prepare_write_attaches_remote_action_without_value)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+	int local_req, remote_req;
+	uint32_t local_id, remote_id;
+	uint64_t local_data, remote_data;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	prepare_write_ext(&attr, &wr_len, FI_EFA_REMOTE_ACTION_ID);
+
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	efa_test_wr_tx_comp_actions(resource.ep, wr(), &local_req, &local_id,
+				    &local_data, &remote_req, &remote_id,
+				    &remote_data);
+	EXPECT_FALSE(local_req);
+	EXPECT_TRUE(remote_req);
+	EXPECT_EQ(remote_id, 9u);
+	EXPECT_EQ(remote_data, 0u);
+}
+
+TEST_F(EfaWrCompActionTest, prepare_write_without_extended_msg_attaches_none)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+	int local_req, remote_req;
+	uint32_t local_id, remote_id;
+	uint64_t local_data, remote_data;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	prepare_rma(FI_OP_WRITE, &attr, &wr_len);
+
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	efa_test_wr_tx_comp_actions(resource.ep, wr(), &local_req, &local_id,
+				    &local_data, &remote_req, &remote_id,
+				    &remote_data);
+	EXPECT_FALSE(local_req);
+	EXPECT_FALSE(remote_req);
+}
+
+TEST_F(EfaWrCompActionTest, queue_tx_posts_prepared_actions)
+{
+	const struct fi_wr_attr *attr;
+	struct fi_context2 ctx = {};
+	size_t wr_len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	prepare_write_ext(&attr, &wr_len,
+			  FI_EFA_LOCAL_ACTION_ID | FI_EFA_REMOTE_ACTION_ID);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_EQ(efa_test_ep_tx_num_wqe_pending(resource.ep), 0u);
+
+	EXPECT_EQ(fi_wr_queue_tx(resource.ep, wr(), &ctx), 0);
+	EXPECT_EQ(efa_test_ep_tx_num_wqe_pending(resource.ep), 1u);
+}
+
+TEST_F(EfaWrCompActionTest, modify_iov_inline_to_sgl_keeps_actions)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec big_iov;
+	size_t wr_len;
+	int local_req, remote_req;
+	uint32_t local_id, remote_id;
+	uint64_t local_data, remote_data;
+
+	if (!efa_test_device_supports_wide_wqe())
+		GTEST_SKIP() << "device does not support wide send queue entries";
+
+	ASSERT_NO_FATAL_FAILURE(
+		construct_actions(true, efa_test_device_inline_buf_size() + 1));
+	prepare_write_ext(&attr, &wr_len,
+			  FI_EFA_LOCAL_ACTION_ID | FI_EFA_LOCAL_ACTION_VALUE |
+				  FI_EFA_REMOTE_ACTION_ID |
+				  FI_EFA_REMOTE_ACTION_VALUE);
+	iovs[0].iov_len = 8;
+	rma_iov.len = 8;
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	if (!efa_test_wr_tx_is_inline(wr()))
+		GTEST_SKIP() << "endpoint has no inline RDMA write room beside "
+				"the action block";
+
+	big_iov.iov_base = local_buf;
+	big_iov.iov_len = EFA_TEST_WR_SEG_LEN;
+	ASSERT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_WRITE, &big_iov,
+				   descs, 1),
+		  0);
+	ASSERT_FALSE(efa_test_wr_tx_is_inline(wr()));
+
+	efa_test_wr_tx_comp_actions(resource.ep, wr(), &local_req, &local_id,
+				    &local_data, &remote_req, &remote_id,
+				    &remote_data);
+	EXPECT_TRUE(local_req);
+	EXPECT_EQ(local_id, 7u);
+	EXPECT_EQ(local_data, 0x1122334455667788ULL);
+	EXPECT_TRUE(remote_req);
+	EXPECT_EQ(remote_id, 9u);
+	EXPECT_EQ(remote_data, 0xa5u);
+}
+
+struct WrCompActionRejectCase {
+	const char *name;
+	bool enable_actions;
+	uint64_t feature_bits;
+	int expected;
+};
+
+class EfaWrCompActionRejectTest
+	: public EfaWrCompActionTestBase,
+	  public TestWithParam<WrCompActionRejectCase>
+{
+	protected:
+	void SetUp() override { setup(); }
+	void TearDown() override { teardown(); }
+};
+
+TEST_P(EfaWrCompActionRejectTest, prepare_write_rejects_bad_descriptor)
+{
+	const WrCompActionRejectCase &param = GetParam();
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(param.enable_actions));
+	prepare_write_ext(&attr, &wr_len, param.feature_bits);
+
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len),
+		  param.expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaWrCompActionRejectTest,
+	Values(WrCompActionRejectCase{"actions_not_enabled", false,
+				      FI_EFA_LOCAL_ACTION_ID, -FI_EINVAL},
+	       WrCompActionRejectCase{"unknown_feature_bits", true,
+				      FI_EFA_LOCAL_ACTION_ID | (1ULL << 40),
+				      -FI_EOPNOTSUPP},
+	       WrCompActionRejectCase{"value_without_id", true,
+				      FI_EFA_LOCAL_ACTION_VALUE, -FI_EINVAL}),
+	[](const testing::TestParamInfo<WrCompActionRejectCase> &info) {
+		return std::string(info.param.name);
+	});
+
+class EfaWrCompActionOtherOpTest
+	: public EfaWrCompActionTestBase,
+	  public TestWithParam<enum fi_op_type>
+{
+	protected:
+	void SetUp() override { setup(); }
+	void TearDown() override { teardown(); }
+};
+
+TEST_P(EfaWrCompActionOtherOpTest, prepare_rejects_extended_msg)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+
+	switch (GetParam()) {
+	case FI_OP_SEND:
+		prepare_send(&attr, &wr_len, FI_EFA_EXTENDED_MSG);
+		break;
+	case FI_OP_RECV:
+		prepare_recv(&attr, &wr_len);
+		op_msg.flags = FI_EFA_EXTENDED_MSG;
+		break;
+	default:
+		prepare_rma(GetParam(), &attr, &wr_len);
+		op_rma.flags = FI_EFA_EXTENDED_MSG;
+		break;
+	}
+
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len),
+		  -FI_EBADFLAGS);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaWrCompActionOtherOpTest, Values(FI_OP_SEND, FI_OP_RECV, FI_OP_READ),
+	[](const testing::TestParamInfo<enum fi_op_type> &info) {
+		switch (info.param) {
+		case FI_OP_SEND:
+			return std::string("send");
+		case FI_OP_RECV:
+			return std::string("recv");
+		default:
+			return std::string("read");
+		}
+	});
+
+struct WrCompActionModifyCase {
+	const char *name;
+	bool prepared_with_actions;
+	uint64_t flags;
+	int expected;
+};
+
+class EfaWrCompActionModifyTest
+	: public EfaWrCompActionTestBase,
+	  public TestWithParam<WrCompActionModifyCase>
+{
+	protected:
+	void SetUp() override { setup(); }
+	void TearDown() override { teardown(); }
+};
+
+TEST_P(EfaWrCompActionModifyTest, modify_flags_keeps_extended_msg_layout)
+{
+	const WrCompActionModifyCase &param = GetParam();
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+	int local_req, remote_req;
+	uint32_t local_id, remote_id;
+	uint64_t local_data, remote_data;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	if (param.prepared_with_actions)
+		prepare_write_ext(&attr, &wr_len, FI_EFA_LOCAL_ACTION_ID);
+	else
+		prepare_rma(FI_OP_WRITE, &attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_WRITE,
+				     param.flags),
+		  param.expected);
+
+	efa_test_wr_tx_comp_actions(resource.ep, wr(), &local_req, &local_id,
+				    &local_data, &remote_req, &remote_id,
+				    &remote_data);
+	EXPECT_EQ(!!local_req, param.prepared_with_actions);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaWrCompActionModifyTest,
+	Values(WrCompActionModifyCase{"keep_with_actions", true,
+				      FI_EFA_EXTENDED_MSG | FI_COMPLETION, 0},
+	       WrCompActionModifyCase{"drop_with_actions", true, FI_COMPLETION,
+				      -FI_EINVAL},
+	       WrCompActionModifyCase{"add_without_actions", false,
+				      FI_EFA_EXTENDED_MSG, -FI_EINVAL},
+	       WrCompActionModifyCase{"absent_without_actions", false,
+				      FI_COMPLETION, 0}),
+	[](const testing::TestParamInfo<WrCompActionModifyCase> &info) {
+		return std::string(info.param.name);
+	});
+
+TEST_F(EfaWrCompActionTest, modify_flags_rejects_extended_msg_on_send)
+{
+	const struct fi_wr_attr *attr;
+	size_t wr_len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_actions(true));
+	prepare_send(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+
+	EXPECT_EQ(fi_wr_modify_flags(resource.ep, wr(), FI_OP_SEND,
+				     FI_EFA_EXTENDED_MSG),
+		  -FI_EINVAL);
+}
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */

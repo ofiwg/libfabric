@@ -158,6 +158,37 @@ uint32_t efa_test_wr_tx_imm_data(const void *wr)
 	return htobe32(wqe->meta.immediate_data);
 }
 
+void efa_test_wr_tx_comp_actions(struct fid_ep *ep_fid, const void *wr,
+				 int *local_req, uint32_t *local_id,
+				 uint64_t *local_data, int *remote_req,
+				 uint32_t *remote_id, uint64_t *remote_data)
+{
+	const struct efa_io_tx_wqe_128 *wqe = wr;
+	const struct efa_io_action_block *block;
+	struct efa_base_ep *base_ep = efa_test_wr_base_ep(ep_fid);
+
+	*local_req = EFA_GET(&wqe->meta.ctrl2,
+			     EFA_IO_TX_META_DESC_LOCAL_ACTION_REQ);
+	*remote_req = EFA_GET(&wqe->meta.ctrl2,
+			      EFA_IO_TX_META_DESC_REMOTE_ACTION_REQ);
+	*local_id = *remote_id = 0;
+	*local_data = *remote_data = 0;
+	if (!*local_req && !*remote_req)
+		return;
+
+	block = (const struct efa_io_action_block *) (
+		(const uint8_t *) wqe +
+		base_ep->qp->data_path_direct_qp.sq.action_block_offset);
+	if (*local_req) {
+		*local_id = block->local_action_handle;
+		*local_data = block->local_action_data;
+	}
+	if (*remote_req) {
+		*remote_id = block->remote_action_handle;
+		*remote_data = block->remote_action_data;
+	}
+}
+
 int efa_test_wr_tx_processing_hints(const void *wr)
 {
 	const struct efa_io_tx_wqe_128 *wqe = wr;
