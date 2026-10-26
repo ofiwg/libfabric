@@ -5,6 +5,7 @@
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_rdm_pke_utils.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <string>
 
@@ -14,6 +15,7 @@ using testing::Return;
 using testing::StrictMock;
 using testing::Test;
 using testing::TestWithParam;
+using testing::Values;
 using testing::ValuesIn;
 using testing::WithParamInterface;
 
@@ -147,4 +149,89 @@ INSTANTIATE_TEST_SUITE_P(
 	, EfaRdmPkeCopyFromHmemTest, ValuesIn(kCopyFromHmemCases),
 	[](const testing::TestParamInfo<EfaCopyFromHmemCase> &info) {
 		return std::string(info.param.name);
+	});
+
+class EfaRdmPkeQueuedCopyTest : public TestWithParam<size_t>
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+	size_t saved_max_queued_copy = 0;
+
+	void SetUp() override
+	{
+		struct fi_info *hints;
+
+		saved_max_queued_copy = efa_test_get_max_queued_copy();
+		efa_test_set_max_queued_copy(GetParam());
+
+		memset(&resource, 0, sizeof(resource));
+		hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->rx_attr->size = 4;
+		efa_test_resource_construct(&resource, hints);
+		ASSERT_NE(resource.ep, nullptr);
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+		efa_test_set_max_queued_copy(saved_max_queued_copy);
+	}
+};
+
+TEST_P(EfaRdmPkeQueuedCopyTest, raises_rx_size_to_minimum)
+{
+	size_t max_queued_copy = GetParam();
+	size_t rx_size = 0;
+	size_t len = sizeof(rx_size);
+
+	ASSERT_EQ(fi_getopt(&resource.ep->fid, FI_OPT_ENDPOINT, FI_OPT_RX_SIZE,
+			    &rx_size, &len),
+		  0);
+	EXPECT_EQ(rx_size,
+		  std::min(efa_test_device_max_rx_size(),
+			   efa_test_get_internal_rx_refill_threshold() +
+				   max_queued_copy));
+}
+
+TEST_P(EfaRdmPkeQueuedCopyTest, flushes_when_queue_full)
+{
+	size_t max_queued_copy = GetParam();
+	struct efa_test_queued_copy_step steps[EFA_TEST_QUEUED_COPY_MAX_PKTS];
+	size_t i;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_to_hmem_iov, FI_HMEM_ROCR,
+			EFA_TEST_COPY_HMEM_DEVICE, _, 1u, _, _,
+			EFA_TEST_COPY_HMEM_DATA_SIZE)
+		.Times((int) max_queued_copy)
+		.WillRepeatedly(Return(EFA_TEST_COPY_HMEM_DATA_SIZE));
+
+	ASSERT_EQ(efa_test_flushes_when_queue_full(resource.ep, max_queued_copy,
+						   steps),
+		  0);
+
+	for (i = 0; i + 1 < max_queued_copy; i++) {
+		EXPECT_EQ(steps[i].ret, 0);
+		EXPECT_EQ(steps[i].queued_copy_num, (int) (i + 1));
+		EXPECT_EQ(steps[i].bytes_copied, 0u);
+		EXPECT_EQ(steps[i].bytes_queued_blocking_copy,
+			  (i + 1) * EFA_TEST_COPY_HMEM_DATA_SIZE);
+		EXPECT_EQ(steps[i].rx_pkts_released, 0u);
+	}
+
+	EXPECT_EQ(steps[i].ret, 0);
+	EXPECT_EQ(steps[i].queued_copy_num, 0);
+	EXPECT_EQ(steps[i].bytes_copied,
+		  max_queued_copy * EFA_TEST_COPY_HMEM_DATA_SIZE);
+	EXPECT_EQ(steps[i].bytes_queued_blocking_copy, 0u);
+	EXPECT_EQ(steps[i].rx_pkts_released, max_queued_copy);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmPkeQueuedCopyTest, Values((size_t) 1, (size_t) 4),
+	[](const testing::TestParamInfo<size_t> &info) {
+		return "max_queued_copy_" + std::to_string(info.param);
 	});

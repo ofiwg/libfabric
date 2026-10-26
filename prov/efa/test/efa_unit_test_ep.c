@@ -1662,7 +1662,7 @@ void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 	device_rx_size =
 		efa_rdm_ep->base_ep.domain->device->rdm_info->rx_attr->size;
 	pool_size = MIN(device_rx_size,
-			MAX(rx_size, threshold + EFA_RDM_MAX_QUEUED_COPY));
+			MAX(rx_size, threshold + efa_env.max_queued_copy));
 	assert_int_equal(efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep),
 			 pool_size);
 

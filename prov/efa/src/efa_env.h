@@ -97,6 +97,7 @@ struct efa_env {
 	 * Two-sided sends only; the RMA paths are not affected by this env var.
 	 */
 	char *rdm_force_send_proto;
+	size_t max_queued_copy;
 };
 
 extern struct efa_env efa_env;

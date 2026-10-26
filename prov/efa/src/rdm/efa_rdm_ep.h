@@ -32,6 +32,9 @@ struct efa_rdm_ep_queued_copy {
 	size_t data_offset;
 };
 
+/*
+ * Upper bound of FI_EFA_MAX_QUEUED_COPY, and the capacity of queued_copy_vec.
+ */
 #define EFA_RDM_MAX_QUEUED_COPY (8)
 
 /*
@@ -799,7 +802,7 @@ static inline size_t efa_rdm_ep_get_available_tx_pkts(struct efa_rdm_ep *ep)
  * @brief minimum rx size of an efa-protocol endpoint
  *
  * In efa-protocol, up to FI_EFA_INTERNAL_RX_REFILL_THRESHOLD rx packets can
- * be waiting for refill and up to EFA_RDM_MAX_QUEUED_COPY can be held for
+ * be waiting for refill and up to FI_EFA_MAX_QUEUED_COPY can be held for
  * batched hmem copy. The rx pool must hold at least that many, otherwise all
  * rx packets can be held or waiting for refill. There will be no RX WQEs
  * posted and peers get RNR forever.
@@ -808,7 +811,7 @@ static inline size_t efa_rdm_ep_get_available_tx_pkts(struct efa_rdm_ep *ep)
  */
 static inline size_t efa_rdm_ep_get_min_rx_size(void)
 {
-	return efa_env.internal_rx_refill_threshold + EFA_RDM_MAX_QUEUED_COPY;
+	return efa_env.internal_rx_refill_threshold + efa_env.max_queued_copy;
 }
 
 /**

@@ -47,6 +47,7 @@ struct efa_env efa_env = {
 	.use_sq_req_id_64_bit = 1,
 	.enable_comp_action = 0,
 	.rdm_force_send_proto = NULL,
+	.max_queued_copy = EFA_RDM_MAX_QUEUED_COPY,
 };
 
 /**
@@ -190,6 +191,21 @@ void efa_env_param_get(void)
 	if (efa_env.rdm_force_send_proto && !*efa_env.rdm_force_send_proto)
 		efa_env.rdm_force_send_proto = NULL;
 
+	fi_param_get_size_t(&efa_prov, "max_queued_copy",
+			    &efa_env.max_queued_copy);
+	if (efa_env.max_queued_copy < 1) {
+		EFA_WARN(
+			FI_LOG_CORE,
+			"FI_EFA_MAX_QUEUED_COPY must be at least 1, using 1\n");
+		efa_env.max_queued_copy = 1;
+	} else if (efa_env.max_queued_copy > EFA_RDM_MAX_QUEUED_COPY) {
+		EFA_WARN(
+			FI_LOG_CORE,
+			"FI_EFA_MAX_QUEUED_COPY must be at most %d, using %d\n",
+			EFA_RDM_MAX_QUEUED_COPY, EFA_RDM_MAX_QUEUED_COPY);
+		efa_env.max_queued_copy = EFA_RDM_MAX_QUEUED_COPY;
+	}
+
 	efa_fork_support_request_initialize();
 	efa_env_unregistered_param_get();
 }
@@ -310,6 +326,11 @@ void efa_env_define()
 		"environment variable does not affect protocol selection for "
 		"emulated RMA operations. (Default: unset, i.e. use default "
 		"protocol selection logic.");
+	fi_param_define(&efa_prov, "max_queued_copy", FI_PARAM_SIZE_T,
+			"The maximum number of rx pkts whose payload copies to "
+			"device memory are queued and done together. Must be "
+			"between 1 and %d. 1 disables batching. (Default: %zu)",
+			EFA_RDM_MAX_QUEUED_COPY, efa_env.max_queued_copy);
 }
 
 

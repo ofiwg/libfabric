@@ -248,7 +248,7 @@ void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe)
 /*
  * @brief copy data to hmem buffer by queueing
  *
- * This function queue multiple (up to EFA_RDM_MAX_QUEUED_COPY) copies to
+ * This function queue multiple (up to FI_EFA_MAX_QUEUED_COPY) copies to
  * device memory, and do them at the same time. This is to avoid any memory
  * barrier between copies, which will cause a flush.
  *
@@ -265,7 +265,7 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
 
 	ep = pke->ep;
 	assert(ep);
-	assert(ep->queued_copy_num < EFA_RDM_MAX_QUEUED_COPY);
+	assert(ep->queued_copy_num < efa_env.max_queued_copy);
 	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pke;
 	ep->queued_copy_vec[ep->queued_copy_num].data = pke->payload;
 	ep->queued_copy_vec[ep->queued_copy_num].data_size = pke->payload_size;
@@ -276,7 +276,7 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
 
 	efa_rdm_pke_mark_held(pke);
 
-	if (ep->queued_copy_num < EFA_RDM_MAX_QUEUED_COPY &&
+	if (ep->queued_copy_num < efa_env.max_queued_copy &&
 	    rxe->bytes_copied + rxe->bytes_queued_blocking_copy < rxe->total_len) {
 		return 0;
 	}
