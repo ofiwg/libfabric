@@ -17910,6 +17910,12 @@ FI_OPT_SHARED_MEMORY_PERMITTED setopt call will fail with -FI_EINVAL.
 :   The maximum number of bytes that will be eagerly sent by inflight
     messages uses runting read message protocol (Default 307200).
 
+*FI_EFA_INTER_MAX_GDRCOPY_FROM_HMEM_SIZE*
+:   The maximum message size in bytes for which the provider copies data
+    out of CUDA memory with gdrcopy when the data is staged through
+    internal bounce buffers. Larger message sizes use cudaMemcpy.
+    (Default 32768).
+
 *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
 :   The minimum message size in bytes for inter EFA read message
     protocol. If instance support RDMA read, messages whose size is
