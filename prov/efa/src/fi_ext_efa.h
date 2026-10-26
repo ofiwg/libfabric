@@ -8,6 +8,7 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
+#include <rdma/fi_trigger.h>
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
@@ -209,6 +210,15 @@ enum {
 
 struct fi_efa_msg_rma {
 	struct fi_msg_rma msg;
+	uint64_t feature_bits;
+	uint32_t local_id;
+	uint32_t remote_id;
+	uint64_t local_value;
+	uint64_t remote_value;
+};
+
+struct fi_efa_op_rma {
+	struct fi_op_rma op;
 	uint64_t feature_bits;
 	uint32_t local_id;
 	uint32_t remote_id;

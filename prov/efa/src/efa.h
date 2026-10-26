@@ -142,6 +142,10 @@ struct efa_comp_action_wr {
 static_assert(offsetof(struct fi_efa_msg_rma, msg) == 0,
 	      "fi_msg_rma must be the first member of fi_efa_msg_rma");
 
+/* Likewise struct fi_efa_op_rma, handed to fi_wr_prepare() as a fi_op_rma. */
+static_assert(offsetof(struct fi_efa_op_rma, op) == 0,
+	      "fi_op_rma must be the first member of fi_efa_op_rma");
+
 /*
  * Every feature bit this provider understands. Kept out of the public header:
  * an application has no use for the provider's own notion of "all of them",
@@ -150,6 +154,116 @@ static_assert(offsetof(struct fi_efa_msg_rma, msg) == 0,
 #define EFA_EXTENDED_MSG_SUPPORTED_FEATURE_BITS                                  \
 	(FI_EFA_LOCAL_ACTION_ID | FI_EFA_REMOTE_ACTION_ID |                    \
 	 FI_EFA_LOCAL_ACTION_VALUE | FI_EFA_REMOTE_ACTION_VALUE)
+
+/*
+ * The completion-action fields that struct fi_efa_msg_rma and struct
+ * fi_efa_op_rma both carry, in the same layout, right after their core
+ * descriptor. The provider reads either through this view. The asserts below
+ * keep the three in step: a field appended to one must be appended to all.
+ */
+struct efa_comp_action_fields {
+	uint64_t feature_bits;
+	uint32_t local_id;
+	uint32_t remote_id;
+	uint64_t local_value;
+	uint64_t remote_value;
+};
+
+#define EFA_COMP_ACTION_FIELDS_ASSERT(type, member)                            \
+	static_assert(offsetof(type, member) - offsetof(type, feature_bits) ==  \
+			      offsetof(struct efa_comp_action_fields, member), \
+		      #type "." #member " is out of step with "               \
+		      "struct efa_comp_action_fields")
+
+#define EFA_COMP_ACTION_FIELDS_ASSERT_ALL(type)                                \
+	EFA_COMP_ACTION_FIELDS_ASSERT(type, local_id);                         \
+	EFA_COMP_ACTION_FIELDS_ASSERT(type, remote_id);                        \
+	EFA_COMP_ACTION_FIELDS_ASSERT(type, local_value);                      \
+	EFA_COMP_ACTION_FIELDS_ASSERT(type, remote_value);                     \
+	static_assert(sizeof(type) - offsetof(type, feature_bits) ==           \
+			      sizeof(struct efa_comp_action_fields),           \
+		      #type " has fields struct efa_comp_action_fields lacks")
+
+EFA_COMP_ACTION_FIELDS_ASSERT_ALL(struct fi_efa_msg_rma);
+EFA_COMP_ACTION_FIELDS_ASSERT_ALL(struct fi_efa_op_rma);
+
+/* The completion-action fields of @desc, a struct fi_efa_msg_rma or fi_efa_op_rma. */
+#define efa_comp_action_fields(desc)                                           \
+	((const struct efa_comp_action_fields *) &(desc)->feature_bits)
+
+/**
+ * @brief Validate the completion-action fields of a WR and pack them for the
+ *        WQE builders
+ *
+ * Shared by fi_writemsg() (struct fi_efa_msg_rma) and fi_wr_prepare()
+ * (struct fi_efa_op_rma), which carry the same fields; each passes its own
+ * through efa_comp_action_fields(). Fills @sig with the action ids and their
+ * device operands. A member whose feature bit is unset is
+ * not read and its operand stays 0, which is what the device treats as "no
+ * data".
+ *
+ * @param base_ep  endpoint the WR is posted on
+ * @param fields   the caller's completion-action fields
+ * @param sig[out] per-WR action descriptor handed to the WQE builders
+ * @return 0 on success, otherwise a negative libfabric error code.
+ */
+static inline int
+efa_comp_action_wr_init(struct efa_base_ep *base_ep,
+			const struct efa_comp_action_fields *fields,
+			struct efa_comp_action_wr *sig)
+{
+	uint64_t fb = fields->feature_bits;
+	uint64_t unknown =
+		fb & ~(uint64_t) EFA_EXTENDED_MSG_SUPPORTED_FEATURE_BITS;
+
+	/*
+	 * Checked before the endpoint state so a descriptor built against a
+	 * newer header is rejected on its own terms, not silently treated as if
+	 * the unknown fields were absent.
+	 */
+	if (unknown) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "Unsupported feature_bits in the extended RMA "
+			 "descriptor: 0x%lx\n",
+			 (unsigned long) unknown);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (!base_ep->comp_action_enabled) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG used but action support is not "
+			 "enabled on the endpoint\n");
+		return -FI_EINVAL;
+	}
+
+	/* An action's value bit requires its ID bit. */
+	if (((fb & FI_EFA_LOCAL_ACTION_VALUE) &&
+	     !(fb & FI_EFA_LOCAL_ACTION_ID)) ||
+	    ((fb & FI_EFA_REMOTE_ACTION_VALUE) &&
+	     !(fb & FI_EFA_REMOTE_ACTION_ID))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_*_ACTION_VALUE set without the corresponding "
+			 "FI_EFA_*_ACTION_ID\n");
+		return -FI_EINVAL;
+	}
+
+	sig->feature_bits = fb;
+
+	if (fb & FI_EFA_LOCAL_ACTION_ID) {
+		sig->local_action_id = fields->local_id;
+		sig->local_action_data =
+			(fb & FI_EFA_LOCAL_ACTION_VALUE) ? fields->local_value : 0;
+	}
+
+	if (fb & FI_EFA_REMOTE_ACTION_ID) {
+		sig->remote_action_id = fields->remote_id;
+		sig->remote_action_data =
+			(fb & FI_EFA_REMOTE_ACTION_VALUE) ? fields->remote_value :
+							     0;
+	}
+
+	return 0;
+}
 
 #define EFA_SETUP_IOV(iov, buf, len)           \
 	do {                                   \
