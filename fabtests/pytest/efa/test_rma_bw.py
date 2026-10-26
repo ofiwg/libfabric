@@ -192,11 +192,16 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
 @pytest.mark.memory_type(memory_type_list_host_and_neuron)
 @pytest.mark.parametrize("action_mode", ["local", "remote", "both"])
 @pytest.mark.parametrize("action_width", ["8", "16", "32"])
+@pytest.mark.parametrize("use_wr", [pytest.param(False, id="writemsg"),
+                                    pytest.param(True, id="wr",
+                                                 marks=pytest.mark.fi_wr)])
 def test_efa_rma_bw_comp_action(cmdline_args, memory_type, action_mode,
-                                action_width, rma_fabric):
+                                action_width, use_wr, rma_fabric):
     command = ("fi_efa_rma_bw -e rdm -I 8 -o write"
                " --action-mode " + action_mode +
                " --action-width " + action_width)
+    if use_wr:
+        command += " --use-wr --fi-version 2.7 -M context2"
     efa_run_client_server_test(cmdline_args, command, None,
                                "transmit_complete", memory_type, 4096,
                                fabric=rma_fabric,

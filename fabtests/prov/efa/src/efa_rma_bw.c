@@ -719,6 +719,106 @@ static void free_actions(void)
 
 #endif /* FI_EFA_EXTENDED_MSG */
 
+/*
+ * --use-wr: format the RMA once per endpoint with fi_wr_prepare(), retarget it
+ * at each post's buffers with fi_wr_modify_iov() and fi_wr_modify_rma_iov(),
+ * and submit it with fi_wr_queue_tx(). A post with FI_MORE stays queued, and
+ * the fi_tx_flush() of the next post without it initiates the batch, as the
+ * doorbell of fi_writemsg() would. Everything else about the operation,
+ * including its completion actions, is the same for every post of a run. With
+ * actions the operation is a struct fi_efa_op_rma carrying the same action
+ * fields as the fi_efa_msg_rma of the fi_writemsg() path.
+ */
+static void **ep_wrs;
+
+static int prepare_rma_wr(struct fid_ep *ep, enum fi_op_type op_type,
+			  const struct fi_msg_rma *msg, uint64_t flags,
+			  void **wr)
+{
+	size_t wr_len = fi->ep_attr->max_tx_wr_size;
+#ifdef FI_EFA_EXTENDED_MSG
+	struct fi_efa_op_rma eop = {0};
+	struct fi_op_rma *op = &eop.op;
+#else
+	struct fi_op_rma op_storage = {0};
+	struct fi_op_rma *op = &op_storage;
+#endif
+	struct fi_wr_attr attr = {
+		.op_type = op_type,
+		.op.rma = op,
+	};
+	int ret;
+
+	*wr = calloc(1, wr_len);
+	if (!*wr)
+		return -FI_ENOMEM;
+
+	op->ep = ep;
+	op->msg = *msg;
+	op->flags = flags;
+#ifdef FI_EFA_EXTENDED_MSG
+	if (flags & FI_EFA_EXTENDED_MSG) {
+		const struct fi_efa_msg_rma *emsg =
+			(const struct fi_efa_msg_rma *) msg;
+
+		eop.feature_bits = emsg->feature_bits;
+		eop.local_id = emsg->local_id;
+		eop.remote_id = emsg->remote_id;
+		eop.local_value = emsg->local_value;
+		eop.remote_value = emsg->remote_value;
+	}
+#endif
+
+	ret = fi_wr_prepare(ep, &attr, *wr, &wr_len);
+	if (ret) {
+		free(*wr);
+		*wr = NULL;
+	}
+	return ret;
+}
+
+static ssize_t post_rma_wr(struct fid_ep *ep, enum fi_op_type op_type,
+			   const struct fi_msg_rma *msg, uint64_t flags)
+{
+	uint64_t more = flags & FI_MORE;
+	int ep_idx;
+	ssize_t ret;
+
+	for (ep_idx = 0; ep_idx < num_eps && eps[ep_idx] != ep; ep_idx++)
+		;
+	if (ep_idx == num_eps)
+		return -FI_EINVAL;
+
+	if (!ep_wrs) {
+		ep_wrs = calloc(num_eps, sizeof(*ep_wrs));
+		if (!ep_wrs)
+			return -FI_ENOMEM;
+	}
+
+	if (!ep_wrs[ep_idx]) {
+		ret = prepare_rma_wr(ep, op_type, msg, flags & ~FI_MORE,
+				     &ep_wrs[ep_idx]);
+		if (ret)
+			return ret;
+	} else {
+		ret = fi_wr_modify_iov(ep, ep_wrs[ep_idx], op_type,
+				       msg->msg_iov, msg->desc,
+				       msg->iov_count);
+		if (ret)
+			return ret;
+		ret = fi_wr_modify_rma_iov(ep, ep_wrs[ep_idx], op_type,
+					   msg->rma_iov, msg->rma_iov_count);
+		if (ret)
+			return ret;
+	}
+
+	ret = fi_wr_queue_tx(ep, ep_wrs[ep_idx], msg->context);
+	if (ret || more)
+		return ret;
+
+	return fi_tx_flush(ep, 0);
+}
+
 static ssize_t post_rma(struct fid_ep *target_ep, fi_addr_t target_addr,
 			char *buf, size_t size,
 			struct fi_rma_iov *remote, void *context,
@@ -761,6 +861,8 @@ static ssize_t post_rma(struct fid_ep *target_ep, fi_addr_t target_addr,
 
 	if (opts.rma_op == FT_RMA_READ) {
 		msg->data = 0;
+		if (opts.use_wr_api)
+			return post_rma_wr(target_ep, FI_OP_READ, msg, flags);
 		return fi_readmsg(target_ep, msg, flags);
 	}
 
@@ -796,6 +898,9 @@ static ssize_t post_rma(struct fid_ep *target_ep, fi_addr_t target_addr,
 		flags |= FI_EFA_EXTENDED_MSG;
 	}
 #endif
+
+	if (opts.use_wr_api)
+		return post_rma_wr(target_ep, FI_OP_WRITE, msg, flags);
 
 	ret = fi_writemsg(target_ep, msg, flags);
 
