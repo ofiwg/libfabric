@@ -262,6 +262,34 @@ void efa_test_selects_copy_method(struct fid_ep *ep, struct fid_av *av,
 size_t efa_test_get_max_gdrcopy_from_hmem_size(void);
 void efa_test_set_max_gdrcopy_from_hmem_size(size_t size);
 
+#define EFA_TEST_QUEUED_COPY_MAX_PKTS 8u
+
+struct efa_test_queued_copy_step {
+	ssize_t ret;
+	int queued_copy_num;
+	uint64_t bytes_copied;
+	uint64_t bytes_queued_blocking_copy;
+	size_t rx_pkts_released;
+};
+
+/**
+ * @brief Copy @p num_pkts rx packets of EFA_TEST_COPY_HMEM_DATA_SIZE bytes
+ * into an hmem rxe through efa_rdm_pke_copy_payload_to_ope(), and record the
+ * queued copy state after each packet. The rxe's message is longer than all
+ * the packets, so it never completes.
+ *
+ * @param[in]	ep		RDM efa endpoint
+ * @param[in]	num_pkts	at most EFA_TEST_QUEUED_COPY_MAX_PKTS
+ * @param[out]	steps		state after each packet, @p num_pkts entries
+ * @return	0 on success, negative fi errno on setup failure
+ */
+int efa_test_flushes_when_queue_full(struct fid_ep *ep, size_t num_pkts,
+				     struct efa_test_queued_copy_step *steps);
+
+size_t efa_test_get_max_queued_copy(void);
+void efa_test_set_max_queued_copy(size_t value);
+size_t efa_test_get_internal_rx_refill_threshold(void);
+
 #ifdef __cplusplus
 }
 #endif

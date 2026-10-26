@@ -185,6 +185,12 @@ struct dlist_entry;
 	   size_t hmem_iov_count, uint64_t hmem_iov_offset),                   \
 	  (dest, size, hmem_iface, handle, hmem_iov, hmem_iov_count,           \
 	   hmem_iov_offset))                                                   \
+	X(ssize_t, ofi_copy_to_hmem_iov,                                       \
+	  (enum fi_hmem_iface hmem_iface, uint64_t device,                     \
+	   const struct iovec *hmem_iov, size_t hmem_iov_count,                \
+	   uint64_t hmem_iov_offset, const void *src, size_t size),            \
+	  (hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset, src, \
+	   size))                                                              \
 	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)                                    \
 	EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)
 

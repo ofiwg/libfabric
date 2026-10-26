@@ -1130,6 +1130,80 @@ void efa_test_set_max_gdrcopy_from_hmem_size(size_t size)
 	efa_env.efa_max_gdrcopy_from_hmem_size = size;
 }
 
+int efa_test_flushes_when_queue_full(struct fid_ep *ep, size_t num_pkts,
+				     struct efa_test_queued_copy_step *steps)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	static char buf[(EFA_TEST_QUEUED_COPY_MAX_PKTS + 1) *
+			EFA_TEST_COPY_HMEM_DATA_SIZE];
+	struct efa_rdm_mr mr = {0};
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_pke *pke;
+	size_t i, to_post_before;
+
+	if (num_pkts > EFA_TEST_QUEUED_COPY_MAX_PKTS)
+		return -FI_EINVAL;
+
+	/* non-cuda, non-neuron hmem always takes the queued blocking copy */
+	mr.efa_mr.iface = FI_HMEM_ROCR;
+	mr.device = EFA_TEST_COPY_HMEM_DEVICE;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	if (!rxe)
+		return -FI_ENOMEM;
+	rxe->iov_count = 1;
+	rxe->iov[0].iov_base = buf;
+	rxe->iov[0].iov_len = sizeof(buf);
+	rxe->cq_entry.len = sizeof(buf);
+	rxe->desc[0] = &mr;
+	rxe->total_len = sizeof(buf);
+
+	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+
+	for (i = 0; i < num_pkts; i++) {
+		pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+					EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		if (!pke) {
+			rxe->desc[0] = NULL;
+			efa_rdm_rxe_release(rxe);
+			return -FI_ENOMEM;
+		}
+		/* eager rtm carries data with no segment offset */
+		efa_rdm_pke_get_base_hdr(pke)->type = EFA_RDM_EAGER_MSGRTM_PKT;
+		pke->payload = pke->wiredata;
+		pke->payload_size = EFA_TEST_COPY_HMEM_DATA_SIZE;
+
+		steps[i].ret = efa_rdm_pke_copy_payload_to_ope(pke, rxe);
+		steps[i].queued_copy_num = efa_rdm_ep->queued_copy_num;
+		steps[i].bytes_copied = rxe->bytes_copied;
+		steps[i].bytes_queued_blocking_copy =
+			rxe->bytes_queued_blocking_copy;
+		steps[i].rx_pkts_released =
+			efa_rdm_ep->efa_rx_pkts_to_post - to_post_before;
+	}
+
+	/* drops any copies still queued for the rxe */
+	rxe->desc[0] = NULL;
+	efa_rdm_rxe_release(rxe);
+	return 0;
+}
+
+size_t efa_test_get_max_queued_copy(void)
+{
+	return efa_env.max_queued_copy;
+}
+
+void efa_test_set_max_queued_copy(size_t value)
+{
+	efa_env.max_queued_copy = value;
+}
+
+size_t efa_test_get_internal_rx_refill_threshold(void)
+{
+	return efa_env.internal_rx_refill_threshold;
+}
+
 static size_t efa_test_dlist_count(struct dlist_entry *head)
 {
 	struct dlist_entry *item;

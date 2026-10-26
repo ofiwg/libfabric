@@ -716,9 +716,9 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 					 "FI_EFA_RX_SIZE=%zu is below the "
 					 "minimum rx size "
 					 "(FI_EFA_INTERNAL_RX_REFILL_THRESHOLD"
-					 " + %d), using %zu\n",
+					 " + %zu), using %zu\n",
 					 efa_env.rx_size,
-					 EFA_RDM_MAX_QUEUED_COPY,
+					 efa_env.max_queued_copy,
 					 prov_info_rdm->rx_attr->size);
 		}
 	}

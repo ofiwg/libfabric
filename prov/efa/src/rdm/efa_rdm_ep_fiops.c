@@ -543,11 +543,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ep_info->rx_attr->size < efa_rdm_ep_get_min_rx_size())
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "device rx size %zu is below the minimum rx size %zu "
-			 "(FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + %d); rx pkts "
+			 "(FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + %zu); rx pkts "
 			 "will be reposted only after all of them are "
 			 "released\n",
 			 efa_domain->device->rdm_info->rx_attr->size,
-			 efa_rdm_ep_get_min_rx_size(), EFA_RDM_MAX_QUEUED_COPY);
+			 efa_rdm_ep_get_min_rx_size(), efa_env.max_queued_copy);
 	else if (ep_info->rx_attr->size != info->rx_attr->size)
 		EFA_INFO(FI_LOG_EP_CTRL, "rx size %zu raised to %zu\n",
 			 info->rx_attr->size, ep_info->rx_attr->size);

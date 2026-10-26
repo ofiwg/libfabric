@@ -426,6 +426,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=ibv_modify_qp \
 	-Wl,--wrap=ofi_copy_from_hmem_iov \
 	-Wl,--wrap=ofi_dev_reg_copy_from_hmem_iov \
+	-Wl,--wrap=ofi_copy_to_hmem_iov \
 	-Wl,--wrap=malloc
 
 if HAVE_EFADV_QUERY_QP_WQS
