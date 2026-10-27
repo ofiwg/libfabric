@@ -528,7 +528,7 @@ Specifies the type of address vectors that are usable with this domain.
 For additional details on AV type, see [`fi_av`(3)](fi_av.3.html).
 The following values may be specified.
 
-*FI_AV_MAP* (deprecated)
+*FI_AV_MAP*
 : Only address vectors of type AV map are requested or supported.
 
 *FI_AV_TABLE*
