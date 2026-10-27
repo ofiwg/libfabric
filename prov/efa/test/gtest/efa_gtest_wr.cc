@@ -1319,5 +1319,85 @@ TEST_F(EfaWrModifyTest, modify_flags_cannot_add_inject_to_sgl_wr)
 	EXPECT_FALSE(efa_test_wr_tx_is_inline(wr()));
 }
 
+class EfaWrInlineWriteTest : public EfaWrTestBase, public Test
+{
+	protected:
+	void SetUp() override
+	{
+		setup();
+		if (testing::Test::IsSkipped())
+			return;
+		if (!efa_test_device_supports_rma())
+			GTEST_SKIP() << "device does not support RDMA read/write";
+		if (!efa_test_device_supports_wide_wqe())
+			GTEST_SKIP() << "device does not support wide send queue "
+					"entries";
+	}
+
+	void TearDown() override { teardown(); }
+
+	/* An FI_WR endpoint whose QP is created for inline RDMA writes. */
+	void construct_inline_write()
+	{
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+		int ret;
+
+		ASSERT_NE(hints, nullptr);
+		hints->caps |= FI_WR;
+		hints->mode &= ~FI_CONTEXT2;
+
+		efa_test_resource_getinfo(&resource, hints);
+		ASSERT_NE(resource.info, nullptr);
+		resource.info->tx_attr->inject_size =
+			efa_test_device_inline_buf_size() + 1;
+		efa_test_resource_open(&resource);
+		ASSERT_NE(resource.ep, nullptr);
+		ASSERT_EQ(fi_enable(resource.ep), 0);
+
+		local_buf = (uint8_t *) calloc(2 * EFA_TEST_WR_SEG_LEN, 1);
+		ASSERT_NE(local_buf, nullptr);
+		ret = fi_mr_reg(resource.domain, local_buf,
+				2 * EFA_TEST_WR_SEG_LEN,
+				FI_SEND | FI_RECV | FI_READ | FI_WRITE, 0, 0, 0,
+				&local_mr, NULL);
+		ASSERT_EQ(ret, 0) << "fi_mr_reg failed: " << fi_strerror(-ret);
+		local_desc = fi_mr_desc(local_mr);
+
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
+
+		MockEfa::set(&mock_efa);
+	}
+};
+
+TEST_F(EfaWrInlineWriteTest, modify_iov_inline_to_sgl_keeps_remote_addr)
+{
+	const struct fi_wr_attr *attr;
+	struct iovec big_iov;
+	size_t wr_len;
+	uint64_t addr;
+	uint32_t rkey, len;
+
+	ASSERT_NO_FATAL_FAILURE(construct_inline_write());
+	prepare_rma(FI_OP_WRITE, &attr, &wr_len);
+	iovs[0].iov_len = 8;
+	rma_iov.len = 8;
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr(), &wr_len), 0);
+	ASSERT_TRUE(efa_test_wr_tx_is_inline(wr()));
+
+	big_iov.iov_base = local_buf;
+	big_iov.iov_len = EFA_TEST_WR_SEG_LEN;
+	ASSERT_EQ(fi_wr_modify_iov(resource.ep, wr(), FI_OP_WRITE, &big_iov,
+				   descs, 1),
+		  0);
+	ASSERT_FALSE(efa_test_wr_tx_is_inline(wr()));
+
+	efa_test_wr_tx_rdma_addr(wr(), &addr, &rkey, &len);
+	EXPECT_EQ(addr, rma_iov.addr);
+	EXPECT_EQ(rkey, (uint32_t) rma_iov.key);
+	EXPECT_EQ(len, (uint32_t) EFA_TEST_WR_SEG_LEN);
+}
 
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */

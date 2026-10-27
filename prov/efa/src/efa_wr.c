@@ -408,8 +408,14 @@ static inline int efa_wr_setup_tx_inline_or_sgl(struct efa_base_ep *base_ep,
 
 	if (!efa_msg_use_inline(desc, count, len, inline_size, 0)) {
 		EFA_SET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG, 0);
-		/* clear inline data so unused SGL slots are zeroed */
-		memset(&wqe->data, 0, sizeof(wqe->data));
+		/*
+		 * Clear the inline payload so unused SGL slots are zeroed. It is
+		 * at most inline_size bytes, and for an RDMA write it follows the
+		 * remote address, which the SGL keeps.
+		 */
+		memset(is_rdma ? wqe->data.rdma_req.inline_data :
+				 wqe->data.inline_data,
+		       0, inline_size);
 		return efa_wr_setup_tx_sgl(base_ep, wqe, op_type, iov, desc,
 					   count);
 	}
