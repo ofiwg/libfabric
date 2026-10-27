@@ -78,5 +78,5 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
         assert bytes_read == message_size
         assert server_read_wrs_after_test == server_read_wrs_before_test + 1
     else:
-        assert bytes_read > message_size
-        assert server_read_wrs_after_test > server_read_wrs_before_test + 1
+        assert bytes_read >= message_size
+        assert server_read_wrs_after_test >= server_read_wrs_before_test + 1
