@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+
+#ifndef EFA_GTEST_RDM_SRX_UTILS_H
+#define EFA_GTEST_RDM_SRX_UTILS_H
+
+#include <rdma/fi_endpoint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct efa_test_srx_directed_match_result {
+	int dir_recv;
+	int queues_empty;
+	void *posted_context[2];
+	void *matched_context[2];
+};
+
+int efa_test_srx_directed_match_honors_post_order(
+	struct fid_ep *ep, struct fid_av *av, int tagged,
+	struct efa_test_srx_directed_match_result *out);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* EFA_GTEST_RDM_SRX_UTILS_H */
