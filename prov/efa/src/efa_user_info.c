@@ -730,7 +730,7 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 					 hints->tx_attr->inject_size);
 				return -FI_ENODATA;
 			}
-			info->tx_attr->size = max_sq_depth;
+			info->tx_attr->size = MIN(info->tx_attr->size, max_sq_depth);
 #else
 			return -FI_ENODATA;
 #endif
