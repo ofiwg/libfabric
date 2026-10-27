@@ -25,6 +25,43 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
 	}
 }
 
+static bool cxip_cp_lcid_match(struct cxip_lni *lni, unsigned int lcid,
+			       bool trig_cp)
+{
+#ifdef CXI_HAVE_ALLOC_TRIG_CP
+	if (!lni->trig_cp_unsupported)
+		return !trig_cp ? lcid != 0 : lcid == 0;
+#endif
+	return true;
+}
+
+static int cxip_alloc_cp_hw(struct cxip_lni *lni, uint16_t vni,
+			    enum cxi_traffic_class tc,
+			    enum cxi_traffic_class_type tc_type,
+			    bool trig_cp, struct cxi_cp **cp)
+{
+#ifdef CXI_HAVE_ALLOC_TRIG_CP
+	int ret;
+
+	if (!lni->trig_cp_unsupported) {
+		ret = cxil_alloc_trig_cp(lni->lni, vni, tc, tc_type,
+					 trig_cp ? TRIG_LCID : NON_TRIG_LCID,
+					 cp);
+		if (ret != -EINVAL)
+			return ret;
+
+		ret = cxil_alloc_cp(lni->lni, vni, tc, tc_type, cp);
+		if (!ret) {
+			CXIP_INFO("cxil_alloc_trig_cp unsupported by driver; "
+				  "falling back to cxil_alloc_cp\n");
+			lni->trig_cp_unsupported = true;
+		}
+		return ret;
+	}
+#endif
+	return cxil_alloc_cp(lni->lni, vni, tc, tc_type, cp);
+}
+
 static int cxip_cp_find(struct cxip_lni *lni, uint16_t vni,
 		       enum cxi_traffic_class tc,
 		       enum cxi_traffic_class_type tc_type,
@@ -34,11 +71,13 @@ static int cxip_cp_find(struct cxip_lni *lni, uint16_t vni,
 
 	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
 				remap_entry) {
-		/* LCID 0 is reserved for triggered CQ/cntr use. */
+		/* LCID 0 is reserved for triggered CQ/cntr use when
+		 * triggered CP allocation is supported.
+		 */
 		if (sw_cp->remap_cp.vni == vni &&
 		    sw_cp->remap_cp.tc == tc &&
 		    sw_cp->remap_cp.tc_type == tc_type &&
-		    (!trig_cp ? sw_cp->remap_cp.lcid : !sw_cp->remap_cp.lcid)) {
+		    cxip_cp_lcid_match(lni, sw_cp->remap_cp.lcid, trig_cp)) {
 			CXIP_INFO("Reusing SW lcid:%u VNI:%u TC:%s TYPE:%s trig_cp:%d\n",
 				 sw_cp->remap_cp.lcid, sw_cp->remap_cp.vni,
 				 cxi_tc_to_str(sw_cp->remap_cp.tc),
@@ -94,14 +133,8 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 		goto err_unlock;
 	}
 
-#if CXI_HAVE_ALLOC_TRIG_CP
-	ret = cxil_alloc_trig_cp(lni->lni, vni, tc, tc_type,
-				 trig_cp ? TRIG_LCID : NON_TRIG_LCID,
-				 &lni->hw_cps[lni->n_cps]);
-#else
-	ret = cxil_alloc_cp(lni->lni, vni, tc, tc_type,
-			    &lni->hw_cps[lni->n_cps]);
-#endif
+	ret = cxip_alloc_cp_hw(lni, vni, tc, tc_type, trig_cp,
+			       &lni->hw_cps[lni->n_cps]);
 	if (ret) {
 		/* Attempt to fall back to remap traffic class with the same
 		 * traffic class type and allocate HW CP if necessary.
@@ -118,21 +151,17 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 		for (i = 0; i < lni->n_cps; i++) {
 			if (lni->hw_cps[i]->vni == vni &&
 			    lni->hw_cps[i]->tc == remap_tc &&
-			    lni->hw_cps[i]->tc_type == tc_type) {
+			    lni->hw_cps[i]->tc_type == tc_type &&
+			    cxip_cp_lcid_match(lni, lni->hw_cps[i]->lcid,
+					       trig_cp)) {
 				sw_cp->hw_cp = lni->hw_cps[i];
 				goto found_hw_cp;
 			}
 		}
 
 		/* Attempt to allocated a remapped HW CP. */
-#if CXI_HAVE_ALLOC_TRIG_CP
-		ret = cxil_alloc_trig_cp(lni->lni, vni, remap_tc, tc_type,
-					 trig_cp ? TRIG_LCID : NON_TRIG_LCID,
-					 &lni->hw_cps[lni->n_cps]);
-#else
-		ret = cxil_alloc_cp(lni->lni, vni, remap_tc, tc_type,
-				    &lni->hw_cps[lni->n_cps]);
-#endif
+		ret = cxip_alloc_cp_hw(lni, vni, remap_tc, tc_type, trig_cp,
+				       &lni->hw_cps[lni->n_cps]);
 		if (ret) {
 			CXIP_WARN("Failed to allocate CP, ret: %d VNI: %u TC: %s TYPE: %s\n",
 				  ret, vni, cxi_tc_to_str(remap_tc),
