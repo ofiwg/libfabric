@@ -777,6 +777,7 @@ struct cxip_lni {
 	/* Hardware communication profiles */
 	struct cxi_cp *hw_cps[MAX_HW_CPS];
 	int n_cps;
+	bool trig_cp_unsupported;
 
 	/* Software remapped communication profiles. */
 	struct dlist_entry remap_cps;
