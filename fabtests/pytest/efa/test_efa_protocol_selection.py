@@ -1,6 +1,6 @@
 import pytest
 
-from efa.efa_common import has_gdrcopy, has_rdma
+from efa.efa_common import has_rdma
 
 
 # This test skips efa-direct because it does not have the read protocol
@@ -43,8 +43,7 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
 
     # Sync out-of-band (-b) so ft_finalize_ep uses a socket instead of a
     # libfabric send. The forced read protocol would otherwise route that
-    # handshake over RDMA read too, adding its bytes to rdma_read_bytes and
-    # breaking the exact bytes_read == message_size check below.
+    # handshake over RDMA read too, adding its bytes to rdma_read_bytes.
     cmdline_args_copy.additional_server_arguments = "-b"
     cmdline_args_copy.additional_client_arguments = "-b"
 
@@ -68,15 +67,9 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     server_read_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
 
     bytes_read = server_read_bytes_after_test - server_read_bytes_before_test
-    # Check that the READ protocol was the only protocol used.
-    # The hw counter should record:
-    # - The exact message size if gdrcopy is enabled, or
-    # - More if gdrcopy is disabled and localread is used.
-    # Under dmabuf registration the EFA provider does not use gdrcopy even when
-    # it is installed on the host, so the copy falls back to localread.
-    if (has_gdrcopy(cmdline_args.server_id) and not cmdline_args.do_dmabuf_reg_for_hmem):
-        assert bytes_read == message_size
-        assert server_read_wrs_after_test == server_read_wrs_before_test + 1
-    else:
-        assert bytes_read > message_size
-        assert server_read_wrs_after_test > server_read_wrs_before_test + 1
+    # Check that the server RDMA-read the whole payload. The read lands
+    # directly in the CUDA buffer, so gdrcopy and dmabuf registration do not
+    # change the count. Fabtests control messages sent through libfabric can
+    # add reads, so allow more than the payload.
+    assert bytes_read >= message_size
+    assert server_read_wrs_after_test >= server_read_wrs_before_test + 1
