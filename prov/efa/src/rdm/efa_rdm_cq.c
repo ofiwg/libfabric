@@ -452,7 +452,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 					 "] fi_addr: %" PRIu64 " implicit AV: false\n",
 					 gid_str_cdesc, efa_ep_addr.qpn,
 					 efa_ep_addr.qkey,
-					 efa_rdm_peer_fi_addr(peer));
+					 efa_rdm_peer_av_index(peer));
 				goto out;
 			}
 		}
@@ -674,7 +674,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		EFA_WARN(FI_LOG_CQ,
 			 "Peer fi_addr: %ld implicit fi_addr %ld is requesting "
 			 "feature %d, which this EP does not support.\n",
-			 efa_rdm_peer_fi_addr(pkt_entry->peer),
+			 efa_rdm_peer_av_index(pkt_entry->peer),
 			 efa_rdm_peer_implicit_fi_addr(pkt_entry->peer),
 			 base_hdr->type);
 
@@ -791,7 +791,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? efa_rdm_peer_fi_addr(pkt_entry->ope->peer) : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? efa_rdm_peer_av_index(pkt_entry->ope->peer) : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
@@ -863,7 +863,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? efa_rdm_peer_fi_addr(pkt_entry->ope->peer) : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? efa_rdm_peer_av_index(pkt_entry->ope->peer) : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif

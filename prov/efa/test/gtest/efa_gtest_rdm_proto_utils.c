@@ -106,7 +106,7 @@ static int efa_test_proto_setup_peer(struct fid_ep *ep, struct fid_av *av,
 		return -FI_EINVAL;
 
 	ctx->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	container_of(efa_av_addr_to_entry(ctx->peer->ep->base_ep.av, efa_rdm_peer_fi_addr(ctx->peer)),
+	container_of(efa_av_addr_to_entry(ctx->peer->ep->base_ep.av, efa_rdm_peer_av_index(ctx->peer)),
 		     struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	return 0;
 }
