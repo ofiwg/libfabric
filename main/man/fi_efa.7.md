@@ -1148,9 +1148,8 @@ To prioritize the messages from a given endpoint, user can specify `fi_info->tx_
 *FI_EFA_RX_SIZE*
 : Maximum number of receive operations before the provider returns -FI_EAGAIN.
   For the `efa` fabric, the minimum is FI_EFA_INTERNAL_RX_REFILL_THRESHOLD +
-  EFA_RDM_MAX_QUEUED_COPY, where EFA_RDM_MAX_QUEUED_COPY (8) is the maximum
-  number of receive buffers held for batched device memory copies. Smaller
-  values are raised to it. The `efa-direct` fabric is unaffected.
+  FI_EFA_MAX_QUEUED_COPY. Smaller values are raised to it. The `efa-direct`
+  fabric is unaffected.
 
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 
@@ -1284,6 +1283,13 @@ Setting this environment variable to 0 can disable this feature.
 : The threshold that EFA provider will refill the internal rx pkt pool. (Default: 8).
 When the number of internal rx pkts to post is lower than this threshold,
 the refill will be skipped.
+
+*FI_EFA_MAX_QUEUED_COPY*
+: The maximum number of rx pkts whose payload copies to device memory are
+queued and done together. (Default: 8). Valid values are 1 to 8; values
+outside this range are adjusted to it. Setting it to 1 disables batching.
+Queued rx pkts are not reposted to the device, so this is part of the
+minimum rx size, see FI_EFA_RX_SIZE.
 
 *FI_EFA_USE_DATA_PATH_DIRECT*
 
