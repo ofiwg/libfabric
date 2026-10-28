@@ -327,52 +327,6 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	return 0;
 }
 
-void efa_rdm_pke_handle_ctsdata_sent(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *ope;
-	struct efa_rdm_ctsdata_hdr *data_hdr;
-
-	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
-	assert(data_hdr->seg_length > 0);
-
-	ope = pkt_entry->ope;
-	ope->bytes_sent += data_hdr->seg_length;
-	ope->window -= data_hdr->seg_length;
-	assert(ope->window >= 0);
-}
-
-void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *ope = pkt_entry->ope;
-	assert(ope);
-
-	/* An aborting txe's single completion + release are owned by the
-	 * peer-abort drain helper. Drive it here (this success completion is a
-	 * WR drain): a no-op until the txe's last WR drains, then it emits the
-	 * PEER_ERROR_PKT / writes the one completion. Never take the normal
-	 * success path (or the DC remote-ack release) for an aborting txe. */
-	if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
-		efa_rdm_txe_progress_peer_abort_if_drained(ope);
-		return;
-	}
-
-	/* if this DATA packet is used by a DC protocol, the tx entry should
-	 * be only released when both all TX ops are done and the receipt
-	 * has been received.
-	 */
-	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
-		return;
-	}
-
-	ope->bytes_acked += efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
-
-	if (ope->total_len == ope->bytes_acked)
-		efa_rdm_ope_handle_send_completed(ope);
-}
-
 void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 			      struct efa_rdm_ope *ope,
 			      char *data, size_t seg_offset,

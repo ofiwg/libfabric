@@ -246,24 +246,11 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_ope *txe,
 	return true;
 }
 
-/**
- * @brief Send the next batch of write data for a long CTS write.
- *
- * Called from the progress engine when the peer has granted more window. The
- * remaining payload is carried on the shared CTSDATA path.
- *
- * @return 0 on success, negative errno on failure
- */
-static ssize_t efa_rdm_proto_longcts_write_post_continuation(struct efa_rdm_ope *ope)
-{
-	return efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
-}
-
 EFA_RDM_PROTO_DEF(longcts_write,
 	.wants_mr = false,
 	.can_use_protocol = &efa_rdm_proto_longcts_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_write_construct_tx_pkes,
-	.post_continuation = &efa_rdm_proto_longcts_write_post_continuation,
+	.post_continuation = &efa_rdm_proto_post_ctsdata,
 	.req_pkt_type = EFA_RDM_LONGCTS_RTW_PKT,
 	.req_pkt_type_dc = EFA_RDM_DC_LONGCTS_RTW_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_longcts_write_handle_tx_pkes_posted,

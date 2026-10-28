@@ -256,4 +256,24 @@ INSTANTIATE_TEST_SUITE_P(
 		return std::string(info.param.name);
 	});
 
+TEST_F(EfaRdmMrAbortTest, ctsdata_completion_on_aborting_txe_writes_nothing)
+{
+	struct efa_test_mr_abort_state st = {};
+	struct fi_cq_data_entry entry = {};
+
+	ASSERT_NO_FATAL_FAILURE(
+		setup_txe(EFA_TEST_MR_ABORT_PKT_LONGCTS_TAGRTM, true));
+	efa_test_mr_abort_set_aborting_with_wr_in_flight();
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+
+	ASSERT_EQ(efa_test_mr_abort_complete_ctsdata(), 0);
+	efa_test_mr_abort_snapshot(&st);
+	EXPECT_TRUE(st.alive);
+	EXPECT_FALSE(st.peer_error_emitted);
+	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
+		  -FI_EAGAIN);
+	expect_cq_empty();
+}
+
 } // namespace

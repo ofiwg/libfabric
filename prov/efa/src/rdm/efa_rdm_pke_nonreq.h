@@ -186,9 +186,6 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 			      size_t seg_offset,
 			      size_t seg_size);
 
-void efa_rdm_pke_handle_ctsdata_sent(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry);
 
 /* READRSP packet related functions */
 static inline struct efa_rdm_readrsp_hdr *efa_rdm_pke_get_readrsp_hdr(struct efa_rdm_pke *pke)

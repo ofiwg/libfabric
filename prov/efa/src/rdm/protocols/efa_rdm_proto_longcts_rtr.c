@@ -131,24 +131,11 @@ err:
 	return ret;
 }
 
-/**
- * @brief Send the next batch of read-response data for a long CTS read.
- *
- * Called from the progress engine when the peer has granted more window. The
- * response data is carried on the shared CTSDATA path.
- *
- * @return 0 on success, negative errno on failure
- */
-static ssize_t efa_rdm_proto_longcts_rtr_post_continuation(struct efa_rdm_ope *ope)
-{
-	return efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
-}
-
 struct efa_rdm_proto efa_rdm_proto_longcts_rtr = {
 	.name = "longcts_rtr",
 	.can_use_protocol = &efa_rdm_proto_longcts_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_rtr_construct_tx_pkes,
-	.post_continuation = &efa_rdm_proto_longcts_rtr_post_continuation,
+	.post_continuation = &efa_rdm_proto_post_ctsdata,
 	.req_pkt_type = EFA_RDM_LONGCTS_RTR_PKT,
 	.req_pkt_type_dc = EFA_RDM_LONGCTS_RTR_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,

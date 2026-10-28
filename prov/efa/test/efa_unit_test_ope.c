@@ -6635,52 +6635,6 @@ void test_efa_rdm_txe_handle_error_no_defer_when_peer_unsupported(void **state)
 }
 
 /*
- * A CTSDATA send completion that lands on an already-aborting txe must not
- * write a (second) completion or release the txe; the completion + release
- * belong to the drain helper (run by the caller, not exercised here).
- */
-void test_efa_rdm_ctsdata_send_completion_aborting_txe_no_completion(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_ope *txe;
-	struct efa_rdm_pke *pkt_entry;
-	struct fi_cq_data_entry cq_entry;
-	size_t txe_base;
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	ep = container_of(resource->ep, struct efa_rdm_ep,
-			  base_ep.util_ep.ep_fid);
-
-	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
-	assert_non_null(txe);
-	txe->state = EFA_RDM_OPE_ERR;
-	txe->cq_entry.flags = FI_SEND | FI_MSG;
-	txe->total_len = 4096;
-	txe->bytes_acked = 4096; /* would reach total_len if not guarded */
-	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
-	/* Simulate a sibling WR still in flight so the drain helper is a no-op
-	 * here: the aborting txe must be left untouched (no completion, not
-	 * freed, nothing emitted) until its last WR drains. */
-	txe->efa_outstanding_tx_ops = 1;
-	txe_base = efa_unit_test_get_dlist_length(&ep->base_ep.ope_list);
-
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	assert_non_null(pkt_entry);
-	pkt_entry->ope = txe;
-
-	efa_rdm_pke_handle_ctsdata_send_completion(pkt_entry);
-
-	/* No completion written, txe untouched (drain owns it). */
-	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
-	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list),
-			 txe_base);
-
-	efa_rdm_pke_release_tx(pkt_entry);
-}
-
-/*
  * Every wire protocol the provider emulates, with the ope op each one runs
  * on. RTW is an emulated fi_write, RTR an emulated fi_read (the responder
  * side runs as ofi_op_read_rsp), and the RTA family the emulated atomics.

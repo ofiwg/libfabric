@@ -1285,8 +1285,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 					assert(ope->proto->post_continuation);
 					ret = ope->proto->post_continuation(ope);
 				} else
-					ret = efa_rdm_ope_post_send(
-						ope, EFA_RDM_CTSDATA_PKT);
+					ret = efa_rdm_proto_post_ctsdata(ope);
 			} else
 				ret = -FI_ECANCELED;
 

@@ -523,21 +523,6 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 	if (available_tx_pkts == 0)
 		return -FI_EAGAIN;
 
-	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
-		assert(ope->window);
-		*pkt_entry_cnt = (ope->window - 1) / ope->ep->max_data_payload_size + 1;
-		if (*pkt_entry_cnt > available_tx_pkts)
-			*pkt_entry_cnt = available_tx_pkts;
-		assert(*pkt_entry_cnt > 0 && *pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ope->ep->base_ep));
-		for (i = 0; i < *pkt_entry_cnt - 1; ++i)
-			pkt_entry_data_size_vec[i] = ope->ep->max_data_payload_size;
-
-		remainder = ope->window - (*pkt_entry_cnt - 1) * ep->max_data_payload_size;
-		assert(remainder > 0);
-		pkt_entry_data_size_vec[i] = MIN(remainder, ep->max_data_payload_size);
-		return 0;
-	}
-
 	if (efa_rdm_pkt_type_is_medium(pkt_type) || efa_rdm_pkt_type_is_runt(pkt_type)) {
 		if(efa_rdm_pkt_type_is_runt(pkt_type))
 			efa_rdm_txe_set_runt_size(ep, ope);

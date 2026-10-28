@@ -12,6 +12,7 @@
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_proto.h"
 #include "rdm/efa_rdm_protocol.h"
 
 static struct {
@@ -152,6 +153,31 @@ void efa_test_mr_abort_set_peer_error_emitted(void)
 	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
 			       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
 	txe->iov_count = 0;
+}
+
+void efa_test_mr_abort_set_aborting_with_wr_in_flight(void)
+{
+	struct efa_rdm_ope *txe = g_mr_abort.txe;
+
+	txe->state = EFA_RDM_OPE_ERR;
+	txe->total_len = 4096;
+	txe->bytes_acked = 4096;
+	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+	txe->efa_outstanding_tx_ops = 1;
+}
+
+int efa_test_mr_abort_complete_ctsdata(void)
+{
+	struct efa_rdm_ep *ep = g_mr_abort.ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (!pkt_entry)
+		return -FI_ENOMEM;
+	efa_rdm_pke_set_ope(pkt_entry, g_mr_abort.txe);
+	efa_rdm_proto_ctsdata_handle_send_completion(pkt_entry);
+	return 0;
 }
 
 /* A send WR of the given type that the device accepted, as after sendv. */
