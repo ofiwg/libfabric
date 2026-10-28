@@ -258,7 +258,15 @@ int cxip_cmdq_cp_modify(struct cxip_cmdq *cmdq, uint16_t vni,
 	struct cxi_cp *hw_cp = NULL;
 	struct cxip_lni *lni = cmdq->lni;
 
-	if (!cxip_libcxi_ops.modify_cp)
+	/* CXI_OP_CP_MODIFY was introduced by the same kernel ABI revision as
+	 * CXI_OP_TRIG_CP_ALLOC and every GA driver ships the two together,
+	 * and a transmit command queue cannot exist before its LNI's first HW
+	 * CP allocation decided trig_cp_unsupported. Treat a driver that
+	 * rejected triggered CP allocation as lacking CP modification and use
+	 * the legacy CP set path there; a pre-GA build that split the two
+	 * opcodes merely takes the legacy path as well.
+	 */
+	if (!cxip_libcxi_ops.modify_cp || !cxip_trig_cp_active(lni))
 		goto cp_set;
 
 	pthread_rwlock_wrlock(&lni->cp_lock);
