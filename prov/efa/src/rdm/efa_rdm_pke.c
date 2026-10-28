@@ -163,7 +163,7 @@ void efa_rdm_pke_reset_rnr_backoff(struct efa_rdm_pke *pkt_entry)
 	EFA_DBG(FI_LOG_EP_DATA,
 		"reset backoff timer for peer fi_addr: %" PRIu64
 		" implicit fi_addr: %" PRIu64 "\n",
-		efa_rdm_peer_fi_addr(peer),
+		efa_rdm_peer_av_index(peer),
 		efa_rdm_peer_implicit_fi_addr(peer));
 }
 

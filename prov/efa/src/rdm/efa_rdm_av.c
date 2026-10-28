@@ -1175,7 +1175,7 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 
 	pke = (struct efa_rdm_pke *) rx_entry->peer_context;
 
-	return efa_rdm_peer_fi_addr(pke->peer);
+	return efa_rdm_peer_av_index(pke->peer);
 }
 
 
