@@ -685,11 +685,11 @@ class EfaRdmProtoReadNackReqTest : public Test
 	}
 };
 
-TEST_F(EfaRdmProtoReadNackReqTest, longcts_read_nack_completion_skips_released_txe)
+TEST_F(EfaRdmProtoReadNackReqTest, longcts_read_nack_req_completes_txe_last)
 {
-	struct efa_test_proto_read_nack_completion_result res = {};
+	struct efa_test_proto_read_nack_req_result res = {};
 
-	ASSERT_EQ(efa_test_longcts_read_nack_completion_skips_released_txe(
+	ASSERT_EQ(efa_test_longcts_read_nack_req_completes_txe_last(
 			  resource.ep, resource.av, resource.cq,
 			  resource.domain, &res),
 		  0);
@@ -699,7 +699,13 @@ TEST_F(EfaRdmProtoReadNackReqTest, longcts_read_nack_completion_skips_released_t
 	EXPECT_EQ(res.payload_size, 0u);
 	EXPECT_EQ(res.hdr_type, res.expected_hdr_type);
 	EXPECT_TRUE(res.hdr_read_nack_flag);
-	EXPECT_EQ(res.cq_read_after_completion, -FI_EAGAIN);
+
+	EXPECT_EQ(res.ope_list_after_ctsdata, 1u);
+	EXPECT_EQ(res.cq_read_after_ctsdata, -FI_EAGAIN);
+
+	EXPECT_EQ(res.ope_list_after_req, 0u);
+	ASSERT_EQ(res.cq_read_after_req, 1);
+	EXPECT_TRUE(res.cq_entry_is_send);
 }
 
 class EfaRdmProtoReadNackTest : public EfaRdmProtoReadTest

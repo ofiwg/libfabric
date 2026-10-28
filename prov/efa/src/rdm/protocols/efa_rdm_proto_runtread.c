@@ -228,7 +228,7 @@ ssize_t efa_rdm_proto_runtread_handle_rtm_send_completion(
 
 	if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);
-	else if (txe->total_len == txe->bytes_acked)
+	else if (efa_rdm_ope_send_done(txe))
 		efa_rdm_ope_handle_send_completed(txe);
 
 	efa_rdm_pke_release_tx(pkt_entry);
