@@ -221,6 +221,27 @@ int cxip_if_valid_rgroup_vni(struct cxip_if *iface, unsigned int rgroup_id,
 							&vni_min, &vni_max);
 		if (!ret && vni >= vni_min && vni <= vni_max)
 			return FI_SUCCESS;
+
+		/* A kernel driver without CXI_OP_SVC_GET_VNI_RANGE rejects it
+		 * with -EINVAL and, like every service on such a driver, an
+		 * unrestricted service is enabled at creation. A driver with
+		 * the range query creates an unrestricted service disabled
+		 * until its VNI range is configured and only returns -EINVAL
+		 * from the range query while no range exists. Re-read the
+		 * service so that an existing, enabled, unrestricted service
+		 * whose range query is rejected keeps the legacy behavior of
+		 * accepting any VNI, as the provider always did before the
+		 * range query existed.
+		 */
+		if (ret == -EINVAL &&
+		    !cxil_get_svc(iface->dev, rgroup_id, &svc_desc) &&
+		    !svc_desc.restricted_vnis && svc_desc.enable) {
+			CXIP_INFO("VNI range query rejected for enabled "
+				  "unrestricted svc_id %d on %s; accepting "
+				  "VNI %d\n",
+				  rgroup_id, iface->dev->info.device_name, vni);
+			return FI_SUCCESS;
+		}
 	} else {
 		return FI_SUCCESS;
 	}
