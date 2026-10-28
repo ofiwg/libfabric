@@ -51,6 +51,10 @@ void efa_test_mr_abort_set_peer_flags(bool req_sent, bool handshake_sent,
 
 void efa_test_mr_abort_set_peer_error_emitted(void);
 
+void efa_test_mr_abort_set_aborting_with_wr_in_flight(void);
+
+int efa_test_mr_abort_complete_ctsdata(void);
+
 void *efa_test_mr_abort_forge_tx_pke(int pkt);
 
 void efa_test_mr_abort_handle_tx_error(void *pke, int err);

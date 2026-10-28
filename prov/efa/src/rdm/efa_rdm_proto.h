@@ -363,4 +363,9 @@ void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
 			    uint32_t op, uint64_t tag, uint64_t flags,
 			    uint32_t internal_flags, struct efa_rdm_proto *proto);
 
+ssize_t efa_rdm_proto_ctsdata_handle_send_completion(
+	struct efa_rdm_pke *pkt_entry);
+
+ssize_t efa_rdm_proto_post_ctsdata(struct efa_rdm_ope *ope);
+
 #endif /* _EFA_RDM_PROTO_H */

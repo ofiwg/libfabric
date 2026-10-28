@@ -186,8 +186,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Atomic write");
 		break;
 	case EFA_RDM_CTSDATA_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_ctsdata(pkt_entry, ope, data_offset, data_size);
+		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
 		break;
 	case EFA_RDM_READ_NACK_PKT:
 		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
@@ -287,7 +286,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_CTSDATA_PKT:
-		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
 		break;
 	case EFA_RDM_READ_NACK_PKT:
 		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
@@ -636,7 +635,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_cts_send_completion(pkt_entry);
 		break;
 	case EFA_RDM_CTSDATA_PKT:
-		efa_rdm_pke_handle_ctsdata_send_completion(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
 		break;
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_send_completion(pkt_entry);
