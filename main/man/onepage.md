@@ -17009,10 +17009,11 @@ the effective per-endpoint limits.
 A registered action is attached to an individual work request by passing
 an EFA specific message structure and the *FI_EFA_EXTENDED_MSG*
 operation flag to *fi_writemsg()*. Completion action is currently
-supported only on RDMA write, and only *fi_writemsg()* interprets
-*FI_EFA_EXTENDED_MSG*. The EFA struct embeds the core descriptor as its
-first member, so a pointer to the EFA struct is passed wherever the core
-descriptor is expected:
+supported only on RDMA write. Only *fi_writemsg()* and, for an RDMA
+write, *fi_wr_prepare()* (see below) interpret *FI_EFA_EXTENDED_MSG*.
+The EFA struct embeds the core descriptor as its first member, so a
+pointer to the EFA struct is passed wherever the core descriptor is
+expected:
 
 ``` c
 /* feature_bits gate which members below the provider reads. */
@@ -17062,9 +17063,10 @@ Constraints:
   *-FI_EINVAL*.
 - An action's *value* bit may only be set when its *ID* bit is also set;
   a value names no action on its own and is rejected with *-FI_EINVAL*.
-- Only *fi_writemsg()* interprets *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()*
-  and the other data transfer variants never read the EFA metadata
-  fields, so the flag has no effect there and no action is attached.
+- Of the data transfer calls, only *fi_writemsg()* interprets
+  *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()* and the other variants never
+  read the EFA metadata fields, so the flag has no effect there and no
+  action is attached.
 - The validation above does not depend on how libfabric was built. Where
   the device or the build lacks completion action support, *fi_setopt()*
   fails and the endpoint is never action enabled, so the flag is
@@ -17079,6 +17081,43 @@ Constraints:
   explicitly, and one built against an older header only sets bits whose
   members it carries, so the provider never reads past the struct it was
   given.
+
+## Action attachment with work requests (FI_WR)
+
+An endpoint that reports *FI_WR* can also attach completion actions to
+an RDMA write formatted with *fi_wr_prepare()* (see
+[`fi_wr`(3)](fi_wr.3.html)). There the operation is described by a
+*struct fi_op_rma*, which holds its *struct fi_msg_rma* ahead of the
+flags, so the action fields are carried by *struct fi_efa_op_rma*
+instead, which embeds the *struct fi_op_rma* as its first member:
+
+``` c
+struct fi_efa_op_rma {
+    struct fi_op_rma op;     /* MUST be first -- castable to fi_op_rma */
+    uint64_t feature_bits;   /* which members below are valid (FI_EFA_*) */
+    uint32_t local_id;       /* action executed at the initiator */
+    uint32_t remote_id;      /* action executed at the target */
+    uint64_t local_value;    /* value its memory write sets */
+    uint64_t remote_value;   /* value its memory write sets */
+};
+```
+
+*FI_EFA_EXTENDED_MSG* in *op.flags* declares that *attr-\>op.rma* points
+at a *struct fi_efa_op_rma*. Its *feature_bits* and the members they
+gate mean the same as in *struct fi_efa_msg_rma*, and *fi_wr_prepare()*
+validates them the same way. The actions are formatted into the work
+request, so every *fi_wr_queue_tx()* of it attaches them.
+
+- *FI_EFA_EXTENDED_MSG* applies to *FI_OP_WRITE* only; *fi_wr_prepare()*
+  returns *-FI_EBADFLAGS* for it on any other operation.
+- The action ids and values are fixed when the work request is prepared.
+  No *fi_wr_modify\_* call changes them; to attach different actions,
+  prepare a new work request.
+- *FI_EFA_EXTENDED_MSG* selects the layout of the work request, as
+  *FI_REMOTE_CQ_DATA* does. *fi_wr_modify_flags()* accepts it only on a
+  work request prepared with completion actions, and returns
+  *-FI_EINVAL* when it is passed for a work request without them or left
+  out for one with them.
 
 ## Example
 
