@@ -1342,15 +1342,16 @@ out:
 	return err;
 }
 
-int efa_test_longcts_read_nack_completion_skips_released_txe(
+int efa_test_longcts_read_nack_req_completes_txe_last(
 	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
 	struct fid_domain *domain,
-	struct efa_test_proto_read_nack_completion_result *out)
+	struct efa_test_proto_read_nack_req_result *out)
 {
 	struct efa_test_proto_ctx ctx = {0};
 	struct fi_cq_data_entry cq_entry;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
-	struct efa_rdm_pke *pke;
+	struct efa_rdm_ctsdata_hdr *data_hdr;
+	struct efa_rdm_pke *req_pke, *data_pke;
 	struct efa_rdm_ope *txe;
 	uint64_t pke_send_flags;
 	struct fi_msg msg = {0};
@@ -1375,6 +1376,7 @@ int efa_test_longcts_read_nack_completion_skips_released_txe(
 		return -FI_ENOMEM;
 	}
 	efa_rdm_txe_construct(txe, ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, 0);
+	txe->fi_flags |= FI_COMPLETION;
 	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	txe->proto = &efa_rdm_proto_longcts;
@@ -1393,24 +1395,49 @@ int efa_test_longcts_read_nack_completion_skips_released_txe(
 		err = -FI_EINVAL;
 		goto out;
 	}
-	pke = ctx.ep->send_pkt_entry_vec[0];
-	out->handler_set = pke->handle_pke ==
+	req_pke = ctx.ep->send_pkt_entry_vec[0];
+	out->handler_set = req_pke->handle_pke ==
 			   &efa_rdm_proto_longcts_handle_req_send_completion;
-	out->payload_size = pke->payload_size;
+	out->payload_size = req_pke->payload_size;
 
-	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pke);
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(req_pke);
 	out->hdr_type = rtm_hdr->type;
 	out->expected_hdr_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	out->hdr_read_nack_flag = !!(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
 
-	txe->bytes_acked = txe->total_len;
+	data_pke = efa_rdm_pke_alloc(ctx.ep, ctx.ep->efa_tx_pkt_pool,
+				     EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (!data_pke) {
+		efa_rdm_pke_release_tx(req_pke);
+		efa_rdm_txe_release(txe);
+		err = -FI_ENOMEM;
+		goto out;
+	}
+	efa_rdm_pke_set_ope(data_pke, txe);
+	data_pke->peer = ctx.peer;
+	data_hdr = efa_rdm_pke_get_ctsdata_hdr(data_pke);
+	data_hdr->type = EFA_RDM_CTSDATA_PKT;
+	data_hdr->seg_length = txe->total_len;
+
 	txe->bytes_sent = txe->total_len;
-	efa_rdm_txe_release(txe);
+	txe->efa_outstanding_tx_ops = 1;
+	efa_rdm_proto_ctsdata_handle_send_completion(data_pke);
 
-	pke->handle_pke(pke);
-
-	out->cq_read_after_completion =
+	out->ope_list_after_ctsdata = efa_test_proto_ope_list_count(ctx.ep);
+	out->cq_read_after_ctsdata =
 		efa_test_cq_read_staged_data_entry(cq, &cq_entry);
+
+	txe->efa_outstanding_tx_ops = 0;
+	req_pke->handle_pke(req_pke);
+
+	out->ope_list_after_req = efa_test_proto_ope_list_count(ctx.ep);
+	memset(&cq_entry, 0, sizeof(cq_entry));
+	out->cq_read_after_req =
+		efa_test_cq_read_staged_data_entry(cq, &cq_entry);
+	out->cq_entry_is_send = !!(cq_entry.flags & FI_SEND);
+
+	if (out->ope_list_after_req)
+		efa_rdm_txe_release(txe);
 out:
 	efa_test_proto_teardown_buf(&ctx);
 	return err;

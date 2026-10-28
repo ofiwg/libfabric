@@ -180,7 +180,7 @@ static void efa_rdm_proto_longcts_account_send_completion(
 	else if (delivery_complete_requested) {
 		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
 			efa_rdm_txe_release(txe);
-	} else if (txe->total_len == txe->bytes_acked) {
+	} else if (efa_rdm_ope_send_done(txe)) {
 		efa_rdm_ope_handle_send_completed(txe);
 	}
 }
@@ -192,22 +192,6 @@ ssize_t efa_rdm_proto_longcts_handle_req_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
-	int pkt_type;
-
-	/*
-	 * A read NACK REQ carries no data. Without delivery complete, it has
-	 * nothing to account, so release the packet without touching the txe.
-	 */
-	if (pkt_entry->payload_size == 0) {
-		assert(efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags &
-		       EFA_RDM_REQ_READ_NACK);
-		pkt_type = efa_rdm_pkt_type_of(pkt_entry);
-		if (pkt_type != efa_rdm_proto_longcts.req_pkt_type_dc &&
-		    pkt_type != efa_rdm_proto_longcts.req_pkt_type_tagged_dc) {
-			efa_rdm_pke_release_tx(pkt_entry);
-			return 0;
-		}
-	}
 
 	txe = pkt_entry->ope;
 	assert(txe);
@@ -296,7 +280,7 @@ int efa_rdm_proto_longcts_construct_req_pke(struct efa_rdm_ep *ep,
  *
  * A delivery complete txe is released once its sends have all completed and
  * the peer's RECEIPT has arrived; otherwise the ope completes once all its data
- * has been acked.
+ * has been acked and none of its packets are in flight or queued.
  */
 ssize_t efa_rdm_proto_ctsdata_handle_send_completion(
 	struct efa_rdm_pke *pkt_entry)
@@ -313,7 +297,7 @@ ssize_t efa_rdm_proto_ctsdata_handle_send_completion(
 	} else {
 		ope->bytes_acked +=
 			efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
-		if (ope->total_len == ope->bytes_acked)
+		if (efa_rdm_ope_send_done(ope))
 			efa_rdm_ope_handle_send_completed(ope);
 	}
 

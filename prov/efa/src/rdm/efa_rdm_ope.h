@@ -598,6 +598,17 @@ static inline bool efa_rdm_txe_with_remote_ack_ready_for_release(struct efa_rdm_
 }
 
 /**
+ * @brief Whether all of an ope's data is acked, none of its packets are in
+ * flight, and none of its work is queued to be sent.
+ */
+static inline bool efa_rdm_ope_send_done(struct efa_rdm_ope *ope)
+{
+	return ope->total_len == ope->bytes_acked &&
+	       ope->efa_outstanding_tx_ops == 0 &&
+	       !(ope->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS);
+}
+
+/**
  * @brief Check if a longcts rxe is ready for release.
  *
  * Used by: CTS send completion handler for longcts msg/write

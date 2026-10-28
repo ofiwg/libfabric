@@ -366,7 +366,7 @@ int efa_test_longcts_read_nack_continues_in_api_path(
 	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
 	struct fid_domain *domain, struct efa_test_proto_read_nack_result *out);
 
-struct efa_test_proto_read_nack_completion_result {
+struct efa_test_proto_read_nack_req_result {
 	ssize_t ret;
 	size_t pke_cnt;
 	int handler_set;
@@ -374,17 +374,21 @@ struct efa_test_proto_read_nack_completion_result {
 	int hdr_type;
 	int expected_hdr_type;
 	int hdr_read_nack_flag;
-	ssize_t cq_read_after_completion;
+	size_t ope_list_after_ctsdata;
+	ssize_t cq_read_after_ctsdata;
+	size_t ope_list_after_req;
+	ssize_t cq_read_after_req;
+	int cq_entry_is_send;
 };
 
 /**
- * @brief Construct a read NACK long CTS REQ, release its txe, then run the
- * REQ's send completion callback.
+ * @brief Construct a read NACK long CTS REQ, complete a CTSDATA packet that
+ * acks all the data while the REQ is in flight, then complete the REQ.
  */
-int efa_test_longcts_read_nack_completion_skips_released_txe(
+int efa_test_longcts_read_nack_req_completes_txe_last(
 	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
 	struct fid_domain *domain,
-	struct efa_test_proto_read_nack_completion_result *out);
+	struct efa_test_proto_read_nack_req_result *out);
 
 #ifdef __cplusplus
 }
