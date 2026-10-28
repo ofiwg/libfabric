@@ -604,8 +604,8 @@ static void smr_do_atomic(struct smr_cmd *cmd, void *src, struct ofi_mr *dst_mr,
 	int ret;
 
 	if (dst_mr && dst_mr->iface != FI_HMEM_SYSTEM) {
-		ret = ofi_copy_to_hmem(dst_mr->iface, dst_mr->device, tmp_dst,
-				       dst, cnt * ofi_datatype_size(datatype));
+		ret = ofi_copy_from_hmem(dst_mr->iface, dst_mr->device, tmp_dst,
+					 dst, cnt * ofi_datatype_size(datatype));
 		if (ret)
 			FI_WARN(&smr_prov, FI_LOG_EP_DATA,
 				"Error copying from device to host buffer\n");
@@ -630,7 +630,7 @@ static void smr_do_atomic(struct smr_cmd *cmd, void *src, struct ofi_mr *dst_mr,
 			"invalid atomic operation\n");
 	}
 
-	if (cpy_dst != dst) {
+	if (cpy_dst != dst && op != FI_ATOMIC_READ) {
 		ret = ofi_copy_to_hmem(dst_mr->iface, dst_mr->device, dst,
 				cpy_dst, cnt * ofi_datatype_size(datatype));
 		if (ret)
