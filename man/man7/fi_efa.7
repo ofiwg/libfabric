@@ -1303,9 +1303,7 @@ transmit queue is full.
 Maximum number of receive operations before the provider returns
 \-FI_EAGAIN.
 For the \f[CR]efa\f[R] fabric, the minimum is
-FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + EFA_RDM_MAX_QUEUED_COPY, where
-EFA_RDM_MAX_QUEUED_COPY (8) is the maximum number of receive buffers
-held for batched device memory copies.
+FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + FI_EFA_MAX_QUEUED_COPY.
 Smaller values are raised to it.
 The \f[CR]efa\-direct\f[R] fabric is unaffected.
 .SH RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
@@ -1486,6 +1484,15 @@ The threshold that EFA provider will refill the internal rx pkt pool.
 (Default: 8).
 When the number of internal rx pkts to post is lower than this
 threshold, the refill will be skipped.
+.TP
+\f[I]FI_EFA_MAX_QUEUED_COPY\f[R]
+The maximum number of rx pkts whose payload copies to device memory are
+queued and done together.
+(Default: 8).
+Valid values are 1 to 8; values outside this range are adjusted to it.
+Setting it to 1 disables batching.
+Queued rx pkts are not reposted to the device, so this is part of the
+minimum rx size, see FI_EFA_RX_SIZE.
 .TP
 \f[I]FI_EFA_USE_DATA_PATH_DIRECT\f[R]
 Use the direct data path implementation that bypasses rdma\-core on data
