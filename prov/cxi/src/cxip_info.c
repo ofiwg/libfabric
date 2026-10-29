@@ -562,6 +562,7 @@ static int cxip_env_validate_device_name(const char *device_name)
 {
 	const char *device_token;
 	char *device_name_copy;
+	char *saveptr;
 	int ret = FI_SUCCESS;
 
 	device_name_copy = malloc(strlen(device_name) + 1);
@@ -570,14 +571,14 @@ static int cxip_env_validate_device_name(const char *device_name)
 
 	strcpy(device_name_copy, device_name);
 
-	device_token = strtok(device_name_copy, ",");
+	device_token = strtok_r(device_name_copy, ",", &saveptr);
 	while (device_token != NULL) {
 		if (!cxip_env_validate_device_token(device_token)) {
 			ret = -FI_EINVAL;
 			break;
 		}
 
-		device_token = strtok(NULL, ",");
+		device_token = strtok_r(NULL, ",", &saveptr);
 	}
 
 	free(device_name_copy);
