@@ -258,8 +258,7 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 
 	offset = 0;
 	for (i = 0; i < iov_count; ++i) {
-		/* Get hmem_iface from MR */
-		efa_mr = (struct efa_mr*) ofi_mr_map_get(&pkt_entry->ep->base_ep.util_ep.domain->mr_map, (rta_hdr->rma_iov + i)->key);
+		efa_mr = (struct efa_mr *) desc[i];
 		hmem_iface = efa_mr->iface;
 
 		if (hmem_iface == FI_HMEM_SYSTEM) {
@@ -406,7 +405,6 @@ int efa_rdm_fetch_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *da
  */
 int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct efa_mr *efa_mr;
 	char *data;
@@ -415,8 +413,6 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	size_t offset, dtsize;
 	ssize_t err;
 	enum fi_hmem_iface hmem_iface;
-
-	ep = pkt_entry->ep;
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic_fetch);
 	if(OFI_UNLIKELY(!rxe)) {
@@ -447,7 +443,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {
-		efa_mr = (struct efa_mr*) ofi_mr_map_get(&ep->base_ep.util_ep.domain->mr_map, (efa_rdm_pke_get_rta_hdr(pkt_entry)->rma_iov + i)->key);
+		efa_mr = (struct efa_mr *) rxe->desc[i];
 		hmem_iface = efa_mr->iface;
 		if (hmem_iface == FI_HMEM_SYSTEM) {
 			ofi_atomic_readwrite_handlers[op][dt](rxe->iov[i].iov_base,
@@ -589,7 +585,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	cmp_data = src_data + rxe->total_len;
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {
-		efa_mr = (struct efa_mr*) ofi_mr_map_get(&ep->base_ep.util_ep.domain->mr_map, (efa_rdm_pke_get_rta_hdr(pkt_entry)->rma_iov + i)->key);
+		efa_mr = (struct efa_mr *) rxe->desc[i];
 		hmem_iface = efa_mr->iface;
 
 		if (hmem_iface == FI_HMEM_SYSTEM) {

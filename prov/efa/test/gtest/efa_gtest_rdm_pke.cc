@@ -5,14 +5,18 @@
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_rdm_pke_utils.h"
+#include <cstring>
 #include <gtest/gtest.h>
 #include <rdma/fi_errno.h>
 
+using testing::_;
+using testing::Invoke;
+using testing::NotNull;
+using testing::Range;
 using testing::Return;
 using testing::StrictMock;
 using testing::Test;
 using testing::WithParamInterface;
-using testing::Range;
 
 class EfaRdmPkeTest : public Test
 {
@@ -95,6 +99,23 @@ class EfaRdmPkeRtaTest : public Test
 		EXPECT_EQ(res.unexp_pool_used, 0u);
 		EXPECT_EQ(res.outstanding_tx_ops, 0u);
 		EXPECT_EQ(res.peer_outstanding_tx_ops, 0u);
+	}
+
+	void expect_hmem_copies()
+	{
+		EFA_EXPECT_CALL(mock_efa, efa_copy_from_hmem, NotNull(), _, _,
+				1u)
+			.WillOnce(Invoke([](void *, void *dest, const void *src,
+					    size_t size) {
+				std::memcpy(dest, src, size);
+				return 0;
+			}));
+		EFA_EXPECT_CALL(mock_efa, efa_copy_to_hmem, NotNull(), _, _, 1u)
+			.WillOnce(Invoke([](void *, void *dest, const void *src,
+					    size_t size) {
+				std::memcpy(dest, src, size);
+				return 0;
+			}));
 	}
 };
 
@@ -201,3 +222,49 @@ TEST_F(EfaRdmPkeRtaTest, multi_iov_write_is_all_or_nothing)
 	EXPECT_EQ(res.target[1], 4);
 	expect_clean(res);
 }
+
+class EfaRdmPkeRtaVerifiedDescTest :
+	public EfaRdmPkeRtaTest,
+	public WithParamInterface<enum fi_op>
+{
+};
+
+TEST_P(EfaRdmPkeRtaVerifiedDescTest, responder_uses_verified_mr_desc)
+{
+	enum fi_op op = GetParam();
+	struct efa_test_rta_responder_result res = {};
+
+	expect_hmem_copies();
+	if (op == FI_ATOMIC_WRITE)
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+	else
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_rta_responder_uses_verified_mr_desc(
+			  resource.ep, resource.domain, peer_addr, op, &res),
+		  0);
+	EXPECT_EQ(res.registered_iface, FI_HMEM_SYSTEM);
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.target[0], op == FI_SUM ? 3 : 2);
+	EXPECT_EQ(res.target[1], 4);
+	EXPECT_EQ(res.response_valid, op != FI_ATOMIC_WRITE);
+	if (op != FI_ATOMIC_WRITE) {
+		EXPECT_EQ(res.response, 1);
+		EXPECT_EQ(res.response_recv_id, EFA_TEST_RTA_RECV_ID);
+	}
+	EXPECT_EQ(res.eq_read_ret, -FI_EAGAIN);
+	expect_clean(res);
+}
+
+INSTANTIATE_TEST_SUITE_P(VerifiedMrDesc, EfaRdmPkeRtaVerifiedDescTest,
+			 testing::Values(FI_ATOMIC_WRITE, FI_SUM, FI_CSWAP),
+			 [](const testing::TestParamInfo<enum fi_op> &info) {
+				 switch (info.param) {
+				 case FI_ATOMIC_WRITE:
+					 return "write";
+				 case FI_SUM:
+					 return "fetch";
+				 default:
+					 return "compare";
+				 }
+			 });

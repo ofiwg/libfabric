@@ -161,14 +161,18 @@ enum efa_test_rta_path {
 	EFA_TEST_RTA_COMPARE,
 };
 
+#define EFA_TEST_RTA_RECV_ID 0x1234u
+
 struct efa_test_rta_responder_result {
 	ssize_t ret;
 	ssize_t eq_read_ret;
 	int eq_err;
 	int eq_prov_errno;
+	int registered_iface;
 	int response_valid;
 	uint8_t target[2];
 	uint8_t response;
+	uint32_t response_recv_id;
 	size_t ope_count;
 	size_t tx_pkt_pool_used;
 	size_t rxe_pool_used;
@@ -183,6 +187,9 @@ int efa_test_rta_responder(struct fid_ep *ep, struct fid_domain *domain,
 			   enum fi_op atomic_op, uint64_t mr_access,
 			   int invalid_key, size_t iov_count,
 			   struct efa_test_rta_responder_result *out);
+int efa_test_rta_responder_uses_verified_mr_desc(
+	struct fid_ep *ep, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum fi_op atomic_op, struct efa_test_rta_responder_result *out);
 int efa_test_rta_rma_addr_prov_errno(void);
 
 /* --- TX sent / send-completion handler bridge --- */
