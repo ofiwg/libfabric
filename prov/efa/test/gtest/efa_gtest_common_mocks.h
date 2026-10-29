@@ -170,6 +170,12 @@ struct dlist_entry;
 	  (struct efa_rdm_pke * pkt_entry, void *local_buf, size_t len,        \
 	   void *desc, uint64_t remote_buf, size_t remote_key),                \
 	  (pkt_entry, local_buf, len, desc, remote_buf, remote_key))           \
+	X(int, efa_copy_from_hmem,                                             \
+	  (void *desc, void *dest, const void *src, size_t size),              \
+	  (desc, dest, src, size))                                             \
+	X(int, efa_copy_to_hmem,                                               \
+	  (void *desc, void *dest, const void *src, size_t size),              \
+	  (desc, dest, src, size))                                             \
 	X(int, ibv_modify_qp,                                                  \
 	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
 	  (qp, attr, attr_mask))                                               \

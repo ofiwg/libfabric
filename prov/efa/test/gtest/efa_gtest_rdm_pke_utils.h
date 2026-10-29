@@ -290,6 +290,29 @@ size_t efa_test_get_max_queued_copy(void);
 void efa_test_set_max_queued_copy(size_t value);
 size_t efa_test_get_internal_rx_refill_threshold(void);
 
+#define EFA_TEST_RTA_RECV_ID 0x1234u
+
+struct efa_test_rta_responder_result {
+	ssize_t ret;
+	ssize_t eq_read_ret;
+	int registered_iface;
+	int response_valid;
+	uint8_t target;
+	uint8_t response;
+	uint32_t response_recv_id;
+	size_t ope_count;
+	size_t tx_pkt_pool_used;
+	size_t rxe_pool_used;
+	size_t atomrsp_pool_used;
+	size_t unexp_pool_used;
+	size_t outstanding_tx_ops;
+	size_t peer_outstanding_tx_ops;
+};
+
+int efa_test_rta_responder_uses_verified_mr_desc(
+	struct fid_ep *ep, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum fi_op op, struct efa_test_rta_responder_result *out);
+
 #ifdef __cplusplus
 }
 #endif
