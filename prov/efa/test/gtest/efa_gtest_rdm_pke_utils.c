@@ -8,6 +8,7 @@
 #include "efa_gtest_common_helpers.h"
 #include "ofi_mem.h"
 #include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_cmd.h"
@@ -627,15 +628,17 @@ efa_test_rta_fill_resource_state(struct efa_rdm_ep *ep,
 	out->peer_outstanding_tx_ops = peer->efa_outstanding_tx_ops;
 }
 
-int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
-			   fi_addr_t peer_addr, enum efa_test_rta_path path,
-			   enum fi_op atomic_op, uint64_t mr_access,
-			   int invalid_key, size_t iov_count,
-			   struct efa_test_rta_responder_result *out)
+static int efa_test_rta_responder_impl(
+	struct fid_ep *ep_fid, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum efa_test_rta_path path, enum fi_op atomic_op, uint64_t mr_access,
+	int invalid_key, size_t iov_count, int use_verified_desc,
+	struct efa_test_rta_responder_result *out)
 {
 	struct efa_rdm_ep *ep =
 		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	struct efa_rdm_mr verified_mr = {0};
+	struct efa_mr *registered_mr;
 	struct efa_rdm_pke *request = NULL;
 	struct efa_rdm_pke *response;
 	struct efa_rdm_rta_hdr *rta_hdr;
@@ -649,6 +652,7 @@ int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
 	size_t hdr_size;
 	size_t payload_size;
 	size_t unexp_pool_used_before;
+	void *saved_mem_desc = NULL;
 	int pkt_type;
 	int close_ret;
 	int ret;
@@ -680,6 +684,14 @@ int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
 	if (ret)
 		return ret;
 
+	registered_mr = container_of(mr, struct efa_mr, mr_fid);
+	out->registered_iface = registered_mr->iface;
+	if (use_verified_desc) {
+		saved_mem_desc = registered_mr->mr_fid.mem_desc;
+		verified_mr.efa_mr.iface = FI_HMEM_CUDA;
+		registered_mr->mr_fid.mem_desc = &verified_mr.efa_mr;
+	}
+
 	unexp_pool_used_before =
 		efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool);
 	request = efa_rdm_pke_alloc(ep, ep->rx_unexp_pkt_pool,
@@ -705,9 +717,9 @@ int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
 	rta_hdr->atomic_datatype = FI_UINT8;
 	rta_hdr->atomic_op = atomic_op;
 	if (path == EFA_TEST_RTA_DC_WRITE)
-		rta_hdr->send_id = 0x1234;
+		rta_hdr->send_id = EFA_TEST_RTA_RECV_ID;
 	else
-		rta_hdr->recv_id = 0x1234;
+		rta_hdr->recv_id = EFA_TEST_RTA_RECV_ID;
 	for (i = 0; i < iov_count; ++i) {
 		rta_hdr->rma_iov[i].addr = (uintptr_t) &target[i];
 		rta_hdr->rma_iov[i].len = 1;
@@ -742,6 +754,7 @@ int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
 			atomrsp->hdr.type == EFA_RDM_ATOMRSP_PKT &&
 			atomrsp->hdr.seg_length == iov_count;
 		out->response = atomrsp->data[0];
+		out->response_recv_id = atomrsp->hdr.recv_id;
 		efa_rdm_pke_handle_send_completion(response);
 	}
 
@@ -758,10 +771,48 @@ int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
 out:
 	if (request)
 		efa_rdm_pke_release_rx(request);
+	if (use_verified_desc)
+		registered_mr->mr_fid.mem_desc = saved_mem_desc;
 	close_ret = fi_close(&mr->fid);
 	if (!ret && close_ret)
 		ret = close_ret;
 	return ret;
+}
+
+int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
+			   fi_addr_t peer_addr, enum efa_test_rta_path path,
+			   enum fi_op atomic_op, uint64_t mr_access,
+			   int invalid_key, size_t iov_count,
+			   struct efa_test_rta_responder_result *out)
+{
+	return efa_test_rta_responder_impl(ep_fid, domain, peer_addr, path,
+					   atomic_op, mr_access, invalid_key,
+					   iov_count, 0, out);
+}
+
+int efa_test_rta_responder_uses_verified_mr_desc(
+	struct fid_ep *ep, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum fi_op atomic_op, struct efa_test_rta_responder_result *out)
+{
+	enum efa_test_rta_path path;
+
+	switch (atomic_op) {
+	case FI_ATOMIC_WRITE:
+		path = EFA_TEST_RTA_WRITE;
+		break;
+	case FI_SUM:
+		path = EFA_TEST_RTA_FETCH;
+		break;
+	case FI_CSWAP:
+		path = EFA_TEST_RTA_COMPARE;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	return efa_test_rta_responder_impl(
+		ep, domain, peer_addr, path, atomic_op,
+		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 1, 1, out);
 }
 
 int efa_test_rta_rma_addr_prov_errno(void)
