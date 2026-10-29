@@ -427,10 +427,18 @@ static int wait_for_comp(struct fid_cq *cq, struct fid_eq *eq, int num_completio
 			continue;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			struct fi_cq_err_entry err_entry = {0};
-			fi_cq_readerr(cq, &err_entry, 0);
+			ret = fi_cq_readerr(cq, &err_entry, 0);
 			fprintf(stderr, "CQ read error: %s\n",
 				fi_cq_strerror(cq, err_entry.prov_errno,
 					       err_entry.err_data, NULL, 0));
+			/*
+			 * An error completion still retires its operation,
+			 * e.g. a send to a receiver endpoint that has been
+			 * recycled. Count it so the caller does not mistake
+			 * the lost operation for a stalled one.
+			 */
+			if (ret > 0)
+				completed++;
 		} else if (timeout > 0) {
 			/* Check EQ for EFA internal packet errors */
 			struct fi_eq_err_entry eq_err = {0};
@@ -909,7 +917,17 @@ static void *run_receiver_worker(void *arg)
 		ops_posted_in_this_cycle++;
 
 		if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
-			if (ft_random_get_bool(&random_data)) {
+			/*
+			 * Always wait in the last cycle. Its endpoint is
+			 * not closed until every worker is done, and nothing
+			 * progresses it in the meantime, so it never posts
+			 * receive buffers to the device. Sends to it keep
+			 * getting RNR and never complete, and the sender stalls
+			 * once they fill its TX queue (2048 entries on some
+			 * EFA devices).
+			 */
+			if (ops_posted == total_ops ||
+			    ft_random_get_bool(&random_data)) {
 				printf("Receiver %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
