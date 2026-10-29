@@ -25,6 +25,7 @@ int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma
 
 	ofi_genlock_lock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 	for (i = 0; i < count; i++) {
+		context = NULL;
 		ret = ofi_mr_map_verify(&efa_rdm_ep_domain(ep)->util_domain.mr_map,
 					(uintptr_t *)(&rma[i].addr),
 					rma[i].len, rma[i].key, flags,
