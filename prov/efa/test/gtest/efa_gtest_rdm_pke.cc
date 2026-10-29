@@ -6,10 +6,14 @@
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_rdm_pke_utils.h"
 #include <algorithm>
+#include <cstring>
 #include <gtest/gtest.h>
+#include <rdma/fi_errno.h>
 #include <string>
 
 using testing::_;
+using testing::Invoke;
+using testing::NotNull;
 using testing::Range;
 using testing::Return;
 using testing::StrictMock;
@@ -234,4 +238,104 @@ INSTANTIATE_TEST_SUITE_P(
 	, EfaRdmPkeQueuedCopyTest, Values((size_t) 1, (size_t) 4),
 	[](const testing::TestParamInfo<size_t> &info) {
 		return "max_queued_copy_" + std::to_string(info.param);
+	});
+
+class EfaRdmPkeRtaTest : public TestWithParam<enum fi_op>
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
+
+	void SetUp() override
+	{
+		struct fi_info *hints;
+
+		memset(&resource, 0, sizeof(resource));
+		hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->caps |= FI_ATOMIC;
+		efa_test_resource_construct(&resource, hints);
+		ASSERT_NE(resource.ep, nullptr);
+		ASSERT_EQ(efa_test_av_insert_self(
+				  resource.ep, resource.av, &peer_addr),
+			  1);
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+
+	void expect_hmem_copies()
+	{
+		EFA_EXPECT_CALL(mock_efa, efa_copy_from_hmem, NotNull(), _, _,
+				1u)
+			.WillOnce(Invoke([](void *, void *dest, const void *src,
+					    size_t size) {
+				std::memcpy(dest, src, size);
+				return 0;
+			}));
+		EFA_EXPECT_CALL(mock_efa, efa_copy_to_hmem, NotNull(), _, _, 1u)
+			.WillOnce(Invoke([](void *, void *dest, const void *src,
+					    size_t size) {
+				std::memcpy(dest, src, size);
+				return 0;
+			}));
+	}
+
+	void expect_clean(const struct efa_test_rta_responder_result &res)
+	{
+		EXPECT_EQ(res.ope_count, 0u);
+		EXPECT_EQ(res.tx_pkt_pool_used, 0u);
+		EXPECT_EQ(res.rxe_pool_used, 0u);
+		EXPECT_EQ(res.atomrsp_pool_used, 0u);
+		EXPECT_EQ(res.unexp_pool_used, 0u);
+		EXPECT_EQ(res.outstanding_tx_ops, 0u);
+		EXPECT_EQ(res.peer_outstanding_tx_ops, 0u);
+	}
+};
+
+TEST_P(EfaRdmPkeRtaTest, responder_uses_verified_mr_desc)
+{
+	enum fi_op op = GetParam();
+	struct efa_test_rta_responder_result res = {};
+
+	expect_hmem_copies();
+	if (op == FI_ATOMIC_WRITE)
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+	else
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+			.WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_rta_responder_uses_verified_mr_desc(
+			  resource.ep, resource.domain, peer_addr, op, &res),
+		  0);
+	EXPECT_EQ(res.registered_iface, FI_HMEM_SYSTEM);
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.target, op == FI_SUM ? 3 : 2);
+	EXPECT_EQ(res.response_valid, op != FI_ATOMIC_WRITE);
+	if (op != FI_ATOMIC_WRITE) {
+		EXPECT_EQ(res.response, 1);
+		EXPECT_EQ(res.response_recv_id, EFA_TEST_RTA_RECV_ID);
+	}
+	EXPECT_EQ(res.eq_read_ret, -FI_EAGAIN);
+	expect_clean(res);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmPkeRtaTest,
+	Values(FI_ATOMIC_WRITE, FI_SUM, FI_CSWAP),
+	[](const testing::TestParamInfo<enum fi_op> &info) {
+		switch (info.param) {
+		case FI_ATOMIC_WRITE:
+			return "write";
+		case FI_SUM:
+			return "fetch";
+		default:
+			return "compare";
+		}
 	});

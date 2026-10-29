@@ -1353,3 +1353,175 @@ int efa_test_av_remove_releases_unexp_pkt(
 		dlist_empty(&srx->unspec_unexp_msg_queue);
 	return 0;
 }
+
+static ssize_t efa_test_rta_process_request(struct efa_rdm_pke *request,
+					    enum fi_op op)
+{
+	switch (op) {
+	case FI_ATOMIC_WRITE:
+		return efa_rdm_pke_proc_write_rta(request);
+	case FI_SUM:
+		return efa_rdm_pke_proc_fetch_rta(request);
+	case FI_CSWAP:
+		return efa_rdm_pke_proc_compare_rta(request);
+	default:
+		return -FI_EINVAL;
+	}
+}
+
+static size_t efa_test_bufpool_used_count(struct ofi_bufpool *pool)
+{
+	return pool->entry_cnt - efa_test_bufpool_free_count(pool);
+}
+
+static void efa_test_rta_fill_resource_state(
+	struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
+	struct efa_test_rta_responder_result *out)
+{
+	out->ope_count = efa_test_dlist_count(&ep->base_ep.ope_list);
+	out->tx_pkt_pool_used =
+		efa_test_bufpool_used_count(ep->efa_tx_pkt_pool);
+	out->rxe_pool_used =
+		efa_test_bufpool_used_count(ep->base_ep.rxe_pool);
+	out->atomrsp_pool_used =
+		efa_test_bufpool_used_count(ep->rx_atomrsp_pool);
+	out->unexp_pool_used =
+		efa_test_ep_unexp_pool_outstanding(&ep->base_ep.util_ep.ep_fid);
+	out->outstanding_tx_ops = ep->efa_outstanding_tx_ops;
+	out->peer_outstanding_tx_ops = peer->efa_outstanding_tx_ops;
+}
+
+static int efa_test_rta_responder(
+	struct fid_ep *ep_fid, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum fi_op op, struct efa_test_rta_responder_result *out)
+{
+	struct efa_rdm_ep *ep = container_of(
+		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer =
+		efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	struct efa_rdm_mr verified_mr = {0};
+	struct efa_mr *registered_mr;
+	struct efa_rdm_pke *request = NULL;
+	struct efa_rdm_pke *response;
+	struct efa_rdm_rta_hdr *rta_hdr;
+	struct efa_rdm_atomrsp_pkt *atomrsp;
+	struct fi_eq_err_entry eq_err = {0};
+	struct fid_mr *mr = NULL;
+	uint8_t target[16] = {1};
+	void *saved_mem_desc;
+	char *data;
+	size_t hdr_size;
+	size_t data_size;
+	size_t unexp_pool_used_before;
+	int pkt_type;
+	int close_ret;
+	int ret;
+
+	memset(out, 0, sizeof(*out));
+	if (!peer)
+		return -FI_EINVAL;
+
+	switch (op) {
+	case FI_ATOMIC_WRITE:
+		pkt_type = EFA_RDM_WRITE_RTA_PKT;
+		data_size = 1;
+		break;
+	case FI_SUM:
+		pkt_type = EFA_RDM_FETCH_RTA_PKT;
+		data_size = 1;
+		break;
+	case FI_CSWAP:
+		pkt_type = EFA_RDM_COMPARE_RTA_PKT;
+		data_size = 2;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	ret = fi_mr_reg(domain, target, sizeof(target),
+			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE,
+			0, 0, 0, &mr, NULL);
+	if (ret)
+		return ret;
+
+	registered_mr = container_of(mr, struct efa_mr, mr_fid);
+	out->registered_iface = registered_mr->iface;
+	saved_mem_desc = registered_mr->mr_fid.mem_desc;
+	verified_mr.efa_mr.iface = FI_HMEM_CUDA;
+	registered_mr->mr_fid.mem_desc = &verified_mr.efa_mr;
+
+	unexp_pool_used_before =
+		efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool);
+	request = efa_rdm_pke_alloc(
+		ep, ep->rx_unexp_pkt_pool, EFA_RDM_PKE_FROM_UNEXP_POOL);
+	if (!request) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	request->peer = peer;
+
+	rta_hdr = (struct efa_rdm_rta_hdr *) request->wiredata;
+	memset(rta_hdr, 0,
+	       sizeof(*rta_hdr) + sizeof(struct efa_rma_iov) + data_size);
+	rta_hdr->type = pkt_type;
+	rta_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	rta_hdr->flags = EFA_RDM_REQ_ATOMIC;
+	rta_hdr->rma_iov_count = 1;
+	rta_hdr->atomic_datatype = FI_UINT8;
+	rta_hdr->atomic_op = op;
+	rta_hdr->recv_id = EFA_TEST_RTA_RECV_ID;
+	rta_hdr->rma_iov[0].addr = (uintptr_t) target;
+	rta_hdr->rma_iov[0].len = 1;
+	rta_hdr->rma_iov[0].key = fi_mr_key(mr);
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(request);
+	data = request->wiredata + hdr_size;
+	data[0] = 2;
+	if (op == FI_CSWAP)
+		data[1] = 1;
+	request->pkt_size = hdr_size + data_size;
+
+	out->ret = efa_test_rta_process_request(request, op);
+	if (efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool) ==
+	    unexp_pool_used_before)
+		request = NULL;
+
+	if (!out->ret && op != FI_ATOMIC_WRITE) {
+		if (ep->send_pkt_entry_vec_size != 1 ||
+		    !ep->send_pkt_entry_vec[0]) {
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
+		response = ep->send_pkt_entry_vec[0];
+		atomrsp = (struct efa_rdm_atomrsp_pkt *) response->wiredata;
+		out->response_valid =
+			atomrsp->hdr.type == EFA_RDM_ATOMRSP_PKT &&
+			atomrsp->hdr.seg_length == 1;
+		out->response = atomrsp->data[0];
+		out->response_recv_id = atomrsp->hdr.recv_id;
+		efa_rdm_pke_handle_send_completion(response);
+	}
+
+	out->target = target[0];
+	out->eq_read_ret = fi_eq_readerr(
+		&ep->base_ep.util_ep.eq->eq_fid, &eq_err, 0);
+	ret = 0;
+
+out:
+	if (request)
+		efa_rdm_pke_release_rx(request);
+	registered_mr->mr_fid.mem_desc = saved_mem_desc;
+	close_ret = fi_close(&mr->fid);
+	if (!ret && close_ret)
+		ret = close_ret;
+	efa_test_rta_fill_resource_state(ep, peer, out);
+	return ret;
+}
+
+int efa_test_rta_responder_uses_verified_mr_desc(
+	struct fid_ep *ep, struct fid_domain *domain, fi_addr_t peer_addr,
+	enum fi_op op, struct efa_test_rta_responder_result *out)
+{
+	return efa_test_rta_responder(ep, domain, peer_addr, op, out);
+}
