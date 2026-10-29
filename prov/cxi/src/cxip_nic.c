@@ -16,6 +16,7 @@ static int cxip_nic_get_ss_env_get_vni(void)
 {
 	char *vni_str;
 	char *vni_str_dup;
+	char *saveptr;
 	char *token;
 	int vni = -FI_EINVAL;
 
@@ -32,7 +33,7 @@ static int cxip_nic_get_ss_env_get_vni(void)
 	/* Index/token zero is the per job-step VNI. Only use this value. Index
 	 * one is the inter-job-step VNI. Ignore this one.
 	 */
-	token = strtok(vni_str_dup, ",");
+	token = strtok_r(vni_str_dup, ",", &saveptr);
 	if (token)
 		vni = (uint16_t)atoi(token);
 	else
@@ -50,6 +51,7 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 	char *svc_id_str_dup;
 	char *dev_str_dup;
 	int device_index;
+	char *saveptr;
 	char *token;
 	bool found;
 	int svc_id;
@@ -72,7 +74,7 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 
 	found = false;
 	device_index = 0;
-	token = strtok(dev_str_dup, ",");
+	token = strtok_r(dev_str_dup, ",", &saveptr);
 	while (token != NULL) {
 		if (strcmp(token, nic_if->info->device_name) == 0) {
 			found = true;
@@ -80,7 +82,7 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 		}
 
 		device_index++;
-		token = strtok(NULL, ",");
+		token = strtok_r(NULL, ",", &saveptr);
 	}
 
 	free(dev_str_dup);
@@ -96,7 +98,7 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 		return -FI_ENOMEM;
 
 	found = false;
-	token = strtok(svc_id_str_dup, ",");
+	token = strtok_r(svc_id_str_dup, ",", &saveptr);
 	while (token != NULL) {
 		if (device_index == 0) {
 			svc_id = atoi(token);
@@ -105,7 +107,7 @@ static int cxip_gen_auth_key_ss_env_get_svc_id(struct cxip_if *nic_if)
 		}
 
 		device_index--;
-		token = strtok(NULL, ",");
+		token = strtok_r(NULL, ",", &saveptr);
 	}
 
 	free(svc_id_str_dup);
