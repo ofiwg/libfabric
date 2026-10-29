@@ -267,47 +267,70 @@ work request action attachment (data path).
 
 ## Action registration (control path)
 
-Memory action registration is exposed as a domain ops table obtained with
-`fi_open_ops()` using the name *FI_EFA_MEM_COMP_ACTION_OPS*, defined in
+Completion action registration is exposed as a domain ops table obtained with
+`fi_open_ops()` using the name *FI_EFA_COMP_ACTION_OPS*, defined in
 *rdma/fi_ext_efa.h*:
 
 ```c
-struct fi_efa_ops_mem_comp_action *action_ops;
-fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&action_ops, NULL);
+struct fi_efa_ops_comp_action *action_ops;
+fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0, (void **)&action_ops, NULL);
 
-struct fi_efa_ops_mem_comp_action {
+struct fi_efa_ops_comp_action {
 	int (*create_mem_comp_action)(struct fid_domain *domain,
 				      struct fi_efa_mem_comp_action_attr *attr,
 				      struct fid_efa_comp_action **action);
-	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
-					  uint32_t *max_mem_comp_actions);
+	int (*query_max_comp_actions)(struct fid_domain *domain,
+				      uint32_t *max_comp_actions);
+	int (*query_comp_action_supp_ops)(struct fid_domain *domain,
+					  uint64_t *supp_ops);
 };
 ```
 
 *create_mem_comp_action*
 : Registers a memory completion action: a target region of *mem_size* bytes
   starting at *location*, which is either host memory (a virtual address) or
-  accelerator (XPU) memory (a dmabuf `fd`/`offset`). *op_mem_size* is the width
-  of the device's write. A region larger than one write is not supported yet,
-  so *mem_size* must equal *op_mem_size* and the target is effectively a scalar
-  at *location*. Returns a *struct
+  accelerator (XPU) memory (a dmabuf `fd`/`offset`). *mem_modify_size* is the
+  width of the device's write. A region larger than one write is not supported
+  yet, so *mem_size* must equal *mem_modify_size* and the target is effectively a
+  scalar at *location*. Returns a *struct
   fid_efa_comp_action* handle; release it with *fi_close(&action->fid)*, after
   which the target memory is the application's to free. The action id a work
   request names the action by is read with *fid_efa_comp_action_get_id()*; for
   an action executed at the target (a remote action) that id must be
   communicated out of band from the target to the initiator.
 
-*query_max_mem_comp_actions*
-: Reports how many memory completion actions the domain can have registered at
-  once. A value of 0 means the device does not support them and
+*query_max_comp_actions*
+: Reports how many completion actions the domain can have registered at once.
+  A value of 0 means the device does not support them and
   *create_mem_comp_action* fails.
+
+*query_comp_action_supp_ops*
+: Reports which operations the device can trigger a completion action on, as
+  a bitwise OR of:
+
+	FI_EFA_COMP_ACTION_OP_WRITE
+		A local action attached to an RDMA write, executed when the write
+		completes at the initiator.
+
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE
+		A remote action attached to an RDMA write, executed when the write
+		completes at the target.
+
+	FI_EFA_COMP_ACTION_OP_REMOTE_WRITE_CQ_DATA
+		A remote action attached to an RDMA write that carries
+		*FI_REMOTE_CQ_DATA*.
+
+  A value of 0 means the device does not support completion actions. An
+  action attached to a write these operations do not cover is rejected; see
+  the data path rules below. New bits may be added later, for operations
+  completion actions can be attached to then.
 
 *create_mem_comp_action* rejects the following with *-FI_EINVAL*: a non-zero
 *comp_mask*, *flags* or *reserved* (all reserved to be zero today, so they are
-rejected rather than silently ignored), an *op_mem_size* other than 1, 2 or 4,
-a *mem_size* that is not a non-zero multiple of *op_mem_size*, a VA *location*
-not aligned to *op_mem_size*, and an *op* outside
-*enum fi_efa_mem_comp_action_op*. A *mem_size* larger than *op_mem_size* is
+rejected rather than silently ignored), a *mem_modify_size* other than 1, 2 or
+4, a *mem_size* that is not a non-zero multiple of *mem_modify_size*, a VA
+*location* not aligned to *mem_modify_size*, and a *mem_modify_type* outside
+*enum fi_efa_mem_modify_type*. A *mem_size* larger than *mem_modify_size* is
 rejected with *-FI_EOPNOTSUPP*: selecting where in a larger region a work
 request writes would be a new data-path field and feature bit, not a change to
 this interface.
@@ -317,22 +340,22 @@ The control path uses the following types, all defined in *rdma/fi_ext_efa.h*.
 section below.
 
 ```c
-/* Operation a memory completion action performs. Mirrors efadv_comp_op:
- * SET_INITIATOR_VAL writes (sets, does not accumulate) a value the initiator
- * supplies per work request. */
-enum fi_efa_mem_comp_action_op {
+/* How a memory completion action modifies its target. Mirrors efadv
+ * comp_mem_modify_type: SET_INITIATOR_VAL writes (sets, does not accumulate) a
+ * value the initiator supplies per work request. */
+enum fi_efa_mem_modify_type {
 	FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL = 0,
 };
 
 /* Attributes for create_mem_comp_action. comp_mask versions this struct. */
 struct fi_efa_mem_comp_action_attr {
 	uint64_t                       comp_mask;
-	uint32_t                       flags;       /* 0 today */
-	uint32_t                       op_mem_size; /* 1, 2 or 4 */
-	uint64_t                       mem_size;    /* == op_mem_size today */
-	struct fi_efa_memory_location  location;    /* VA or dmabuf */
-	enum fi_efa_mem_comp_action_op op;
-	uint8_t                        reserved[4]; /* must be 0 */
+	uint32_t                       flags;           /* 0 today */
+	uint32_t                       mem_modify_size; /* 1, 2 or 4 */
+	uint64_t                       mem_size;        /* == mem_modify_size today */
+	struct fi_efa_memory_location  location;        /* VA or dmabuf */
+	enum fi_efa_mem_modify_type    mem_modify_type;
+	uint8_t                        reserved[4];     /* must be 0 */
 };
 
 /* Action handle (a fid; fi_close() releases it). */
@@ -419,8 +442,8 @@ leaving what this flag means untouched.
 
 *FI_EFA_LOCAL_ACTION_VALUE* / *FI_EFA_REMOTE_ACTION_VALUE*
 : Supply the value that action's memory write sets, truncated to the action's
-  *op_mem_size*. An action may be attached without a value (leave the bit unset),
-  which the device treats as its default operand.
+  *mem_modify_size*. An action may be attached without a value (leave the bit
+  unset), which the device treats as its default operand.
 
 Constraints:
 
@@ -432,11 +455,17 @@ Constraints:
   *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()* and the other variants never read the
   EFA metadata fields, so the flag has no effect there and no action is
   attached.
-- The validation above does not depend on how libfabric was built. Where the
-  device or the build lacks completion action support, *fi_setopt()* fails
-  and the endpoint is never action enabled, so the flag is rejected with
-  *-FI_EINVAL* by the rule above.
+- Where the device lacks completion action support, *fi_setopt()* fails and
+  the endpoint is never action enabled, so the flag is rejected with
+  *-FI_EINVAL* by the rule above. A libfabric built without completion action
+  support rejects *FI_EFA_EXTENDED_MSG* itself, with *-FI_EOPNOTSUPP*.
 - Local and remote actions are independent: attach either or both.
+- The device decides which completions can trigger an action, as
+  *query_comp_action_supp_ops()* reports. A local action fires on the write's
+  completion at the initiator, a remote one on its completion at the target,
+  with or without *FI_REMOTE_CQ_DATA*. An action the device cannot trigger for
+  the write it is attached to is rejected with *-FI_EOPNOTSUPP*, and the write
+  is not posted.
 - *feature_bits* beyond the four bits defined above are rejected with
   *-FI_EOPNOTSUPP*. This is how the descriptor stays compatible across versions,
   and it is why the gated members are append-only: a new bit only ever gates a
@@ -488,18 +517,18 @@ Target: register a memory action over a one entry host semaphore and send its id
 to the initiator out of band.
 
 ```c
-struct fi_efa_ops_mem_comp_action *ops;
+struct fi_efa_ops_comp_action *ops;
 struct fid_efa_comp_action *action;
 uint32_t sem = 0;
 
-fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
+fi_open_ops(&domain->fid, FI_EFA_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
 
 struct fi_efa_mem_comp_action_attr attr = {
-	.op          = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
-	.location    = { .type = FI_EFA_MEMORY_LOCATION_VA,
-			 .ptr  = (uint8_t *)&sem },
-	.op_mem_size = sizeof(sem),
-	.mem_size    = sizeof(sem),
+	.mem_modify_type = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
+	.location        = { .type = FI_EFA_MEMORY_LOCATION_VA,
+			     .ptr  = (uint8_t *)&sem },
+	.mem_modify_size = sizeof(sem),
+	.mem_size        = sizeof(sem),
 };
 ops->create_mem_comp_action(domain, &attr, &action);
 /* send fid_efa_comp_action_get_id(action) to the initiator out of band */
@@ -812,6 +841,7 @@ struct fi_efa_wq_attr {
     uint32_t *doorbell;
     uint32_t max_batch;
     uint16_t caps;
+    uint16_t wqe_blocks;
     uint16_t comp_action_with_data_block_offset;
 };
 ```
@@ -840,9 +870,13 @@ struct fi_efa_wq_attr {
 		When set, the associated completion queue is guaranteed
 		to return 64-bit request IDs as well.
 
-	FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA
-		Work queue entries carry a completion action block, so a
-		request posted to this queue may name a registered memory
+*wqe_blocks*
+:	Only filled in when the application uses API version 2.8 or later.
+	Feature blocks the entries of the queue carry, a bitwise OR of:
+
+	FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA
+		Each entry carries a completion action block, so a request
+		posted to this queue may name a registered memory
 		completion action. Set only on a send queue, and only when
 		the endpoint was opened with completion actions enabled.
 		Where the block sits inside an entry is reported in
@@ -854,8 +888,8 @@ struct fi_efa_wq_attr {
 	offset of the completion action block within a send queue entry, for a
 	caller that builds its own entries and attaches a completion action to
 	one: where the block sits inside the entry is the device's to report.
-	Set only for a send queue whose *caps* carry
-	FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA, 0 otherwise.
+	Set only for a send queue whose *wqe_blocks* carry
+	FI_EFA_WQE_BLOCK_COMP_ACTION_WITH_DATA, 0 otherwise.
 
 #### Return value
 **query_qp_wqs()** returns 0 on success, or the value of errno on failure
