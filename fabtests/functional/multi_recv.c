@@ -36,11 +36,13 @@
 #include <rdma/fi_cm.h>
 
 #include <shared.h>
+#include <hmem.h>
 
 
 #define MAX_XFER_SIZE (1 << 20)
 
 static struct fid_mr *mr_multi_recv;
+static void *mr_multi_recv_desc;
 struct fi_context2 ctx_multi_recv[2];
 static int use_recvmsg, comp_per_buf;
 
@@ -57,7 +59,7 @@ static int repost_recv(int iteration)
 		msg_iov.iov_base = buf_addr;
 		msg_iov.iov_len = rx_size / 2;
 		msg.msg_iov = &msg_iov;
-		msg.desc = fi_mr_desc(mr_multi_recv);
+		msg.desc = &mr_multi_recv_desc;
 		msg.iov_count = 1;
 		msg.addr = 0;
 		msg.data = NO_CQ_DATA;
@@ -69,7 +71,7 @@ static int repost_recv(int iteration)
 		}
 	} else {
 		ret = fi_recv(ep, buf_addr, rx_size / 2,
-			      fi_mr_desc(mr_multi_recv), 0,
+			      mr_multi_recv_desc, 0,
 			      &ctx_multi_recv[iteration]);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -190,12 +192,13 @@ static int run_test(void)
 static void free_res(void)
 {
 	FT_CLOSE_FID(mr_multi_recv);
+	FT_CLOSE_FID(mr);
 	if (tx_buf) {
-		free(tx_buf);
+		(void) ft_hmem_free(opts.iface, tx_buf);
 		tx_buf = NULL;
 	}
 	if (rx_buf) {
-		free(rx_buf);
+		(void) ft_hmem_free(opts.iface, rx_buf);
 		rx_buf = NULL;
 	}
 }
@@ -211,43 +214,44 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	tx_buf = malloc(tx_size);
-	if (!tx_buf) {
-		fprintf(stderr, "Cannot allocate tx_buf\n");
-		return -1;
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = ft_hmem_alloc_host(opts.iface, &dev_host_buf, tx_size);
+		if (ret) {
+			FT_PRINTERR("ft_hmem_alloc_host", ret);
+			return ret;
+		}
 	}
 
-	ret = fi_mr_reg(domain, tx_buf, tx_size, FI_SEND,
-			0, FT_MR_KEY, 0, &mr, NULL);
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &tx_buf,
+			    tx_size);
 	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("ft_hmem_alloc", ret);
 		return ret;
 	}
 
-	/* We only ues the common code to send messages, so
+	/* We only use the common code to send messages, so
 	 * set mr_desc to the tx buffer's region.
 	 */
-	mr_desc = fi_mr_desc(mr);
+	ret = ft_reg_mr(fi, tx_buf, tx_size, FI_SEND, FT_MR_KEY, opts.iface,
+			opts.device, &mr, &mr_desc);
+	if (ret)
+		return ret;
 
 	//Each multi recv buffer will be able to hold at least 2 and
 	//up to 64 messages, allowing proper testing of multi recv
 	//completions and reposting
 	rx_size = MIN(tx_size * 128, MAX_XFER_SIZE * 4);
 	comp_per_buf = rx_size / 2 / opts.transfer_size;
-	rx_buf = malloc(rx_size);
-	if (!rx_buf) {
-		fprintf(stderr, "Cannot allocate rx_buf\n");
-		return -1;
-	}
-
-	ret = fi_mr_reg(domain, rx_buf, rx_size, FI_RECV, 0, FT_MR_KEY + 1, 0,
-			&mr_multi_recv, NULL);
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &rx_buf,
+			    rx_size);
 	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("ft_hmem_alloc", ret);
 		return ret;
 	}
 
-	return 0;
+	return ft_reg_mr(fi, rx_buf, rx_size, FI_RECV, FT_MR_KEY + 1,
+			 opts.iface, opts.device, &mr_multi_recv,
+			 &mr_multi_recv_desc);
 }
 
 static int run(void)
