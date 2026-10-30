@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,11 +40,11 @@
 #include "rxd.h"
 
 struct rxd_env rxd_env = {
-	.spin_count	= 1000,
-	.retry		= 1,
-	.max_peers	= 1024,
-	.max_unacked	= 128,
-	.rescan		= -1,
+	.retry = 1,
+	.max_peers = 1024,
+	.max_unacked = 128,
+	.rescan = -1,
+	.cq_batch_sz = 16,
 };
 
 char *rxd_pkt_type_str[] = {
@@ -52,11 +53,11 @@ char *rxd_pkt_type_str[] = {
 
 static void rxd_init_env(void)
 {
-	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);
 	fi_param_get_bool(&rxd_prov, "retry", &rxd_env.retry);
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
 	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
 	fi_param_get_bool(&rxd_prov, "rescan", &rxd_env.rescan);
+	fi_param_get_int(&rxd_prov, "cq_batch_sz", &rxd_env.cq_batch_sz);
 }
 
 void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
@@ -145,8 +146,6 @@ struct fi_provider rxd_prov = {
 
 RXD_INI
 {
-	fi_param_define(&rxd_prov, "spin_count", FI_PARAM_INT,
-			"Number of iterations to receive packets (0 - infinite)");
 	fi_param_define(&rxd_prov, "retry", FI_PARAM_BOOL,
 			"Toggle packet retrying (default: yes)");
 	fi_param_define(&rxd_prov, "max_peers", FI_PARAM_INT,
@@ -157,6 +156,8 @@ RXD_INI
 			"Force or disable rescanning for network interface changes. "
 			"Setting this to true will force rescanning on each fi_getinfo() invocation; "
 			"setting it to false will disable rescanning. (default: unset)");
+	fi_param_define(&rxd_prov, "cq_batch_sz", FI_PARAM_INT,
+			"Number of CQ entries to read per polling iteration (default: 16)");
 
 	rxd_init_env();
 
