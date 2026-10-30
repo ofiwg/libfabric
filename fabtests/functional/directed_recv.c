@@ -236,9 +236,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "vUh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "vUh" CS_OPTS INFO_OPTS API_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
@@ -257,6 +260,7 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-o <op>", "msg (default) or tagged");
 			FT_PRINT_OPTS_USAGE("-v", "enable data verification");
 			FT_PRINT_OPTS_USAGE("-U", "transmit with FI_DELIVERY_COMPLETE");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
