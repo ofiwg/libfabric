@@ -31,6 +31,8 @@
 /**
  * @brief initialize a EFA_RDM_EAGER_RTW packet
  *
+ * The packet completes through the eager write send completion handler.
+ *
  * @param[in,out]	pkt_entry	packet entry to be initialized
  * @param[in]		txe		TX entry that has RMA write information
  *
@@ -48,13 +50,16 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
+	pkt_entry->handle_pke =
+		&efa_rdm_proto_eager_write_handle_rtw_send_completion;
 	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
  * @brief initialize a EFA_RDM_DC_EAGER_RTW_PKT packet
  *
- * DC means delivery complete
+ * DC means delivery complete. The packet completes through the eager write
+ * send completion handler.
  *
  * @param[in,out]	pkt_entry	packet entry to be initialized
  * @param[in]		txe		TX entry that has RMA write information
@@ -74,6 +79,8 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	dc_eager_rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
+	pkt_entry->handle_pke =
+		&efa_rdm_proto_eager_write_handle_rtw_send_completion;
 	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
 					  dc_eager_rtw_hdr->rma_iov);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
@@ -259,10 +266,11 @@ EFA_RDM_PROTO_DEF(eager_write,
  * @brief Handle the send completion of an eager RTW packet.
  *
  * A transmit complete write is done once the device reports the send, so it
- * reports the completion and releases the TXE here. A delivery complete write
- * must also wait for the peer's RECEIPT, so it only releases the TXE here if
- * that RECEIPT already arrived; otherwise efa_rdm_pke_handle_receipt_recv()
- * reports the completion and releases it.
+ * reports the completion (if the TXE asks for one) and releases the TXE here.
+ * A delivery complete write must also wait for the peer's RECEIPT, so it only
+ * releases the TXE here if that RECEIPT already arrived; otherwise
+ * efa_rdm_pke_handle_receipt_recv() reports the completion and releases it.
+ * The zero byte write sent to trigger a peer's handshake also uses this handler.
  */
 ssize_t efa_rdm_proto_eager_write_handle_rtw_send_completion(
 	struct efa_rdm_pke *pkt_entry)
@@ -287,8 +295,8 @@ ssize_t efa_rdm_proto_eager_write_handle_rtw_send_completion(
 /**
  * @brief Construct the TX packet entry for the eager write protocol.
  *
- * Allocates a single RTW packet entry, writes the remote memory region and
- * payload into it, and sets the per-packet send completion callback. On
+ * Allocates a single RTW packet entry and has the packet init write the remote
+ * memory region, the payload and the send completion callback into it. On
  * success ep->send_pkt_entry_vec[0] holds the packet entry.
  *
  * @return 0 on success, negative errno on failure
@@ -317,8 +325,6 @@ int efa_rdm_proto_eager_write_construct_tx_pkes(struct efa_rdm_ep *ep,
 
 	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
-	pkt_entry->handle_pke =
-		&efa_rdm_proto_eager_write_handle_rtw_send_completion;
 
 	if (txe->req_pkt_type == efa_rdm_proto_eager_write.req_pkt_type_dc)
 		ret = efa_rdm_proto_eager_write_init_dc_rtw(pkt_entry, txe);
