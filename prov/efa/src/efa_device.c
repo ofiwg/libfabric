@@ -15,6 +15,9 @@
 
 #include <alloca.h>
 #include <errno.h>
+#ifndef _WIN32
+#include <sys/random.h>
+#endif
 
 #include <rdma/fi_errno.h>
 #include <infiniband/verbs.h>
@@ -333,6 +336,53 @@ int g_efa_selected_device_cnt = 0;
  */
 union ibv_gid *g_efa_ibv_gid_list = NULL;
 int g_efa_ibv_gid_cnt = 0;
+
+
+/**
+ * @brief Fill a buffer with random bytes
+ *
+ * @param[in]	device	efa device
+ * @param[out]	buf	buffer to fill
+ * @param[in]	len	number of bytes to fill
+ * @return	0 on success, -FI_EIO on failure
+ */
+#ifdef _WIN32
+int efa_device_read_random(struct efa_device *device, void *buf, size_t len)
+{
+	unsigned int val;
+	size_t chunk;
+	char *p = buf;
+	/*
+	 * rand_s() only returns 32 bits per call, so fill the buffer in 4-byte
+	 * chunks (one call for a 32-bit QKEY, two for a 64-bit MR key).
+	 */
+	while (len) {
+		if (rand_s(&val))
+			return -FI_EIO;
+		chunk = MIN(len, sizeof(val));
+		memcpy(p, &val, chunk);
+		p += chunk;
+		len -= chunk;
+	}
+
+	return 0;
+}
+#else
+int efa_device_read_random(struct efa_device *device, void *buf, size_t len)
+{
+	if (getrandom(buf, len, GRND_NONBLOCK) == (ssize_t) len)
+		return 0;
+
+	if (errno != EAGAIN && errno != ENOSYS)
+		return -FI_EIO;
+
+	if (device->urandom_fd >= 0 &&
+	    read(device->urandom_fd, buf, len) == (ssize_t) len)
+		return 0;
+
+	return -FI_EIO;
+}
+#endif
 
 
 /**
