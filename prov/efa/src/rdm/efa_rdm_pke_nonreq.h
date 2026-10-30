@@ -243,7 +243,7 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 				   int read_id,
 				   size_t seg_size);
 
-void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry);
 
 /* EOR packet related functions */
 static inline

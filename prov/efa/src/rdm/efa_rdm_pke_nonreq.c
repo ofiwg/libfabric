@@ -508,6 +508,7 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
 	rma_context_pkt->desc = desc;
 	rma_context_pkt->remote_buf = remote_buf;
 	rma_context_pkt->remote_key = remote_key;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_rma_completion;
 }
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
@@ -528,6 +529,7 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
 	ctx_pkt->read_id = read_id;
 	ctx_pkt->seg_size = seg_size;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_rma_completion;
 }
 
 static
@@ -632,18 +634,17 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 }
 
 /**
- * @brief Handle a single RMA completion (read or write)
+ * @brief Handle the completion of a device RDMA read or write
  *
- * RMA Completion can either be caused by the completion of an RDMA Read,
- * an emulated RDMA Write, or a true RDMA Write.
+ * The packet is never sent; it only serves as the context of the RDMA
+ * operation. This handler updates the progress of the operation that owns the
+ * packet, finishes that operation once all of its data has been transferred,
+ * and releases the packet.
  *
- * Note that if true RDMA Read/Write was used, the packet here was not sent over
- * but only used as the context for the request.
- *
- * @param ep[in,out]			Endpoint
- * @param context_pkt_entry[in,out]	The "Packet" which serves as context
+ * @param[in,out]	context_pkt_entry	RMA context packet
+ * @return		0; the packet is always released
  */
-void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
+ssize_t efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 {
 	struct efa_rdm_ope *txe = NULL;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
@@ -654,7 +655,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 	if (!context_pkt_entry->peer && !(context_pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
 		EFA_WARN(FI_LOG_CQ, "ignoring rma completion of a packet to a removed peer.\n");
 		efa_rdm_pke_release_tx(context_pkt_entry);
-		return;
+		return 0;
 	}
 
 	if (OFI_UNLIKELY(context_pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) &&
@@ -685,6 +686,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 	}
 
 	efa_rdm_pke_release_tx(context_pkt_entry);
+	return 0;
 }
 
 /*  EOR packet related functions */
