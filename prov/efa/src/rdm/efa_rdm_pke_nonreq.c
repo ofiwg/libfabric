@@ -219,6 +219,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 
 	pkt_entry->peer = ope->peer;
 	efa_rdm_pke_set_ope(pkt_entry, (void *)ope);
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_cts_send_completion;
 	return 0;
 }
 
@@ -244,11 +245,12 @@ void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry)
  *    which checks recv completed and ops == 0.
  *
  * In both cases, the ope is released either here or in
- * efa_rdm_ope_handle_recv_completed(), whichever happens last.
+ * efa_rdm_ope_handle_recv_completed(), whichever happens last. If the ope is
+ * being aborted by the peer, its release is left to the peer-abort drain.
  *
  * @param[in] pkt_entry the CTS packet entry whose send completed
  */
-void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 
@@ -257,10 +259,7 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
 		efa_rdm_rxe_release_peer_abort_if_drained(ope);
-		return;
-	}
-
-	if (ope->type == EFA_RDM_RXE) {
+	} else if (ope->type == EFA_RDM_RXE) {
 		if (efa_rdm_rxe_cts_ready_for_release(ope))
 			efa_rdm_rxe_release(ope);
 	} else {
@@ -268,6 +267,9 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 		if (efa_rdm_txe_emulated_read_ready_for_release(ope))
 			efa_rdm_txe_release(ope);
 	}
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /* CTSDATA pakcet related functions */
@@ -392,6 +394,7 @@ int efa_rdm_pke_init_readrsp(struct efa_rdm_pke *pkt_entry,
 	readrsp_hdr->seg_length = MIN(rxe->ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr),
 				      rxe->total_len);
 	pkt_entry->peer = rxe->peer;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_readrsp_send_completion;
 	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, rxe,
 						sizeof(struct efa_rdm_readrsp_hdr),	/* payload offset */
 						0,					/* segment offset */
@@ -419,7 +422,7 @@ void efa_rdm_pke_handle_readrsp_sent(struct efa_rdm_pke *pkt_entry)
 	}
 }
 
-void efa_rdm_pke_handle_readrsp_send_completion(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_handle_readrsp_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_readrsp_hdr *readrsp_hdr;
@@ -431,6 +434,9 @@ void efa_rdm_pke_handle_readrsp_send_completion(struct efa_rdm_pke *pkt_entry)
 	rxe->bytes_acked += readrsp_hdr->seg_length;
 	if (rxe->total_len == rxe->bytes_acked)
 		efa_rdm_ope_handle_send_completed(rxe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
@@ -677,10 +683,11 @@ int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe)
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_eor_hdr);
 	pkt_entry->peer = rxe->peer;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_eor_send_completion;
 	return 0;
 }
 
-void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -692,6 +699,9 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 	} else {
 		rxe->internal_flags &= ~EFA_RDM_RXE_ACK_IN_FLIGHT;
 	}
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /*  Read NACK packet related functions */
@@ -710,6 +720,18 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_read_nack_hdr);
 	pkt_entry->peer = rxe->peer;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_read_nack_send_completion;
+	return 0;
+}
+
+/**
+ * @brief Handle the send completion of a READ_NACK packet.
+ *
+ * The receiver has nothing left to do for the NACK itself once it is sent.
+ */
+ssize_t efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	efa_rdm_pke_release_tx(pkt_entry);
 	return 0;
 }
 
@@ -832,9 +854,27 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_peer_error_send_completion;
 	return efa_rdm_pke_init_peer_error(pkt_entry, ope->msg_id, op_id,
 					   ope->type,
 					   ope->peer_error_prov_errno, connid);
+}
+
+/**
+ * @brief Handle the send completion of a PEER_ERROR packet.
+ *
+ * The ope that sent it is released once all of its outstanding sends drain.
+ */
+ssize_t efa_rdm_pke_handle_peer_error_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	assert(pkt_entry->ope);
+	if (pkt_entry->ope->type == EFA_RDM_RXE)
+		efa_rdm_rxe_release_peer_abort_if_drained(pkt_entry->ope);
+	else
+		efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**
@@ -1058,11 +1098,12 @@ int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_receipt_hdr);
 	pkt_entry->peer = rxe->peer;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_receipt_send_completion;
 
 	return 0;
 }
 
-void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -1080,6 +1121,9 @@ void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry)
 	 */
 	if (rxe->efa_outstanding_tx_ops == 0)
 		efa_rdm_rxe_release(rxe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
@@ -1110,10 +1154,11 @@ int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 	/* rxe->atomrsp_data was filled in efa_rdm_pke_handle_req_recv() */
 	memcpy(atomrsp_pkt->data, rxe->atomrsp_data, atomrsp_hdr->seg_length);
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_atomrsp_hdr) + atomrsp_hdr->seg_length;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_atomrsp_send_completion;
 	return 0;
 }
 
-void efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry)
+ssize_t efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -1122,6 +1167,7 @@ void efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_pke_release_tx(pkt_entry);
 	assert(rxe->efa_outstanding_tx_ops == 0);
 	efa_rdm_rxe_release(rxe);
+	return 0;
 }
 
 void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)

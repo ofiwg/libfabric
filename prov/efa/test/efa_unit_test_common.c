@@ -515,8 +515,8 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 }
 
 /**
- * @brief Set the handle_pke function for a TX packet after a protocol
- * 	      is moved to the refactored code path
+ * @brief Set the send completion handler for a hand-built TX packet, the
+ * 	      same one the packet's protocol or init function would set
  */
 void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
 	struct efa_rdm_base_hdr *base_hdr;
@@ -553,6 +553,27 @@ void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
 			break;
 		case EFA_RDM_CTSDATA_PKT:
 			pkt_entry->handle_pke = &efa_rdm_proto_ctsdata_handle_send_completion;
+			break;
+		case EFA_RDM_CTS_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_cts_send_completion;
+			break;
+		case EFA_RDM_READRSP_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_readrsp_send_completion;
+			break;
+		case EFA_RDM_EOR_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_eor_send_completion;
+			break;
+		case EFA_RDM_ATOMRSP_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_atomrsp_send_completion;
+			break;
+		case EFA_RDM_RECEIPT_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_receipt_send_completion;
+			break;
+		case EFA_RDM_READ_NACK_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_read_nack_send_completion;
+			break;
+		case EFA_RDM_PEER_ERROR_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_peer_error_send_completion;
 			break;
 		default:
 			pkt_entry->handle_pke = NULL;
