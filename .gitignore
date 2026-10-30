@@ -109,3 +109,14 @@ prov/efa/docs/doxygen/latex
 # EFA test binaries (build outputs)
 prov/efa/test/gtest/efa_gtest
 prov/efa/test/efa_unit_test
+
+# CMake build trees and local presets
+/build/
+/cmake-build-*/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+!cmake/config.h.in
