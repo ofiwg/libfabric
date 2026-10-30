@@ -91,6 +91,26 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->pkt_size += sizeof(struct efa_rdm_handshake_opt_hmem_cap_hdr);
 
 	pkt_entry->peer = peer;
+	pkt_entry->handle_pke = &efa_rdm_pke_handle_handshake_send_completion;
+	return 0;
+}
+
+/**
+ * @brief Handle the send completion of a HANDSHAKE packet.
+ *
+ * The internal txe that carried the handshake has no further work, so it is
+ * released along with the packet.
+ */
+ssize_t efa_rdm_pke_handle_handshake_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
+	efa_rdm_tracepoint(handshake_send_completion,
+			   (size_t) pkt_entry, pkt_entry->pkt_size,
+			   pkt_entry->ope->msg_id,
+			   (size_t) pkt_entry->ope->cq_entry.op_context,
+			   pkt_entry->ope->total_len);
+	efa_rdm_txe_release(pkt_entry->ope);
+	efa_rdm_pke_release_tx(pkt_entry);
 	return 0;
 }
 

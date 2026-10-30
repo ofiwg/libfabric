@@ -149,6 +149,8 @@ struct efa_rdm_handshake_opt_hmem_cap_hdr *efa_rdm_pke_get_handshake_opt_hmem_ca
 ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_peer *peer);
 
+ssize_t efa_rdm_pke_handle_handshake_send_completion(struct efa_rdm_pke *pkt_entry);
+
 void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry);
 
 /* CTS packet related functions */

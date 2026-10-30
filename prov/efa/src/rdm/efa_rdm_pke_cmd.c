@@ -596,13 +596,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Start handling pkts with hdrs */
 	switch (efa_rdm_pkt_type_of(pkt_entry)) {
 	case EFA_RDM_HANDSHAKE_PKT:
-		efa_rdm_pke_assert_ope_valid(pkt_entry);
-		efa_rdm_tracepoint(handshake_send_completion,
-				   (size_t) pkt_entry, pkt_entry->pkt_size,
-				   pkt_entry->ope->msg_id,
-				   (size_t) pkt_entry->ope->cq_entry.op_context,
-				   pkt_entry->ope->total_len);
-		efa_rdm_txe_release(pkt_entry->ope);
+		EFA_RDM_PKT_TYPE_MOVED("HANDSHAKE");
 		break;
 	case EFA_RDM_CTS_PKT:
 		EFA_RDM_PKT_TYPE_MOVED("CTS");
@@ -650,7 +644,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
-		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
