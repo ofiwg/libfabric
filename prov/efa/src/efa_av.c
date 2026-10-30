@@ -13,12 +13,12 @@
 #include "efa_av.h"
 
 
-struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
-					       fi_addr_t fi_addr)
+struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
+					   fi_addr_t index)
 {
-	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL))
+	if (OFI_UNLIKELY(index == FI_ADDR_UNSPEC || index == FI_ADDR_NOTAVAIL))
 		return NULL;
-	return efa_av_array_at(entry_map, fi_addr);
+	return efa_av_array_at(entry_table, index);
 }
 
 
@@ -30,7 +30,7 @@ struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
  */
 struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
 {
-	return efa_av_addr_to_entry_impl(av->addr_to_entry_map, fi_addr);
+	return efa_av_index_to_entry(av->entry_table, fi_addr);
 }
 
 
@@ -189,7 +189,7 @@ int efa_av_entry_base_construct(struct efa_av *av, struct efa_av_entry *entry,
 	entry->fi_addr = fi_addr;
 	entry->ah = ah;
 
-	err = efa_av_array_insert(av->addr_to_entry_map, fi_addr, entry);
+	err = efa_av_array_insert(av->entry_table, fi_addr, entry);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "Failed to insert entry for fi_addr %" PRIu64
 			" into array: %s\n", fi_addr, fi_strerror(-err));
@@ -267,7 +267,7 @@ void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry
 {
 	efa_av_reverse_av_remove(av->cur_reverse_av, entry);
 	efa_ah_release(av->domain, entry->ah);
-	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+	efa_av_entry_remove_from_util_av(av->entry_table, &av->util_av,
 					 entry, fi_addr);
 }
 
@@ -585,7 +585,7 @@ static int efa_av_close(struct fid *fid)
 	 * reused (ahn, qpn) would be missed if we iterated the reverse AV here and
 	 * would leak its AH.
 	 */
-	efa_av_array_iter(av->addr_to_entry_map, av,
+	efa_av_array_iter(av->entry_table, av,
 			  efa_av_destruct_release_entry);
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
@@ -594,7 +594,7 @@ static int efa_av_close(struct fid *fid)
 	if (OFI_UNLIKELY(err))
 		EFA_WARN(FI_LOG_AV, "Failed to close util av: %s\n", fi_strerror(-err));
 
-	efa_av_array_destroy(av->addr_to_entry_map);
+	efa_av_array_destroy(av->entry_table);
 	efa_av_array_destroy(av->cur_reverse_av);
 
 	free(av);
@@ -658,20 +658,20 @@ int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
 {
 	int ret;
 
-	ret = efa_av_array_init(&av->addr_to_entry_map);
+	ret = efa_av_array_init(&av->entry_table);
 	if (ret)
 		return ret;
 
 	ret = efa_av_reverse_av_init(&av->cur_reverse_av);
 	if (ret) {
-		efa_av_array_destroy(av->addr_to_entry_map);
+		efa_av_array_destroy(av->entry_table);
 		return ret;
 	}
 
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context, entry_size);
 	if (ret) {
 		efa_av_array_destroy(av->cur_reverse_av);
-		efa_av_array_destroy(av->addr_to_entry_map);
+		efa_av_array_destroy(av->entry_table);
 		return ret;
 	}
 

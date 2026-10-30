@@ -31,7 +31,8 @@ struct efa_rdm_av {
 	/* implicit AV is used when receiving messages from peers not explicitly
 	 * inserted by the application */
 	struct util_av util_av_implicit;
-	struct efa_av_array *addr_to_entry_map_implicit;
+	/* efa_av_entry of each util_av_implicit index */
+	struct efa_av_array *entry_table_implicit;
 	struct efa_av_array *cur_reverse_av_implicit;
 	struct efa_prv_reverse_av *prv_reverse_av_implicit;
 
