@@ -4,9 +4,11 @@
 #ifndef EFA_AV_H
 #define EFA_AV_H
 
+#include <stdbool.h>
 #include <infiniband/verbs.h>
 #include "efa_ah.h"
 #include "efa_av_array.h"
+#include "efa_env.h"
 #include "efa_thread_annotations.h"
 
 /*
@@ -136,7 +138,8 @@ struct efa_av {
 	 * efa_av_entry. */
 	struct efa_av_array *cur_reverse_av;
 	struct util_av util_av;
-	struct efa_av_array *addr_to_entry_map;
+	/* efa_av_entry of each util_av index */
+	struct efa_av_array *entry_table;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -146,7 +149,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
  * @brief shared fi_av_open attr prologue for the base and RDM open paths
  *
  * Validates and normalizes @p attr (name/flags rejection, count clamping to
- * EFA_MIN_AV_SIZE, FI_AV_MAP deprecation, forcing FI_AV_TABLE, universe_size
+ * EFA_MIN_AV_SIZE, setting up util_av as FI_AV_TABLE for both AV types, universe_size
  * handling) and resolves the owning efa_domain. The calloc and init bodies
  * stay in the respective open functions.
  */
@@ -154,10 +157,105 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 			     struct fi_av_attr *attr,
 			     struct efa_domain **efa_domain_out);
 
-struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
+struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
+					   fi_addr_t index);
 
-struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
-					       fi_addr_t fi_addr);
+/*
+ * FI_AV_MAP: the fi_addr handed to the application is the address of the
+ * efa_av_entry, so turning an fi_addr into its entry needs no lookup. The
+ * entry's fi_addr field always stays the util_av index, which keys the
+ * internal arrays (forward map, peer maps), for both AV types.
+ */
+static inline bool efa_av_is_map(const struct efa_av *av)
+{
+	return av->type == FI_AV_MAP;
+}
+
+/**
+ * @brief find the efa_av_entry using fi_addr in the explicit AV
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	fi_addr	fi_addr of the AV entry, as the application sees it
+ */
+bool efa_av_map_entry_is_valid(struct efa_av *av, const struct efa_av_entry *entry);
+
+static inline struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_av_entry *entry;
+
+	if (!efa_av_is_map(av))
+		return efa_av_index_to_entry(av->entry_table, fi_addr);
+
+	if (fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL)
+		return NULL;
+	entry = (struct efa_av_entry *) (uintptr_t) fi_addr;
+	/* Using a removed fi_addr in a data transfer is an application error
+	 * (fi_av(3)); checking it on every operation would cost the lookup that
+	 * FI_AV_MAP saves, so only strict mode does. */
+	if (OFI_UNLIKELY(efa_env.strict_mode) && !efa_av_map_entry_is_valid(av, entry))
+		return NULL;
+	return entry;
+}
+
+/**
+ * @brief like efa_av_addr_to_entry(), but always rejects a removed FI_AV_MAP
+ * fi_addr; for fi_av_remove() and fi_av_lookup(), which must return
+ * -FI_EINVAL for it
+ */
+static inline struct efa_av_entry *efa_av_addr_to_entry_checked(struct efa_av *av,
+								fi_addr_t fi_addr)
+{
+	struct efa_av_entry *entry = efa_av_addr_to_entry(av, fi_addr);
+
+	if (entry && efa_av_is_map(av) && !efa_av_map_entry_is_valid(av, entry))
+		return NULL;
+	return entry;
+}
+
+/**
+ * @brief the fi_addr the application sees for an explicit AV entry
+ *
+ * An entry that is not in the explicit AV (an implicit entry) has no
+ * application fi_addr: FI_ADDR_NOTAVAIL is returned for both AV types.
+ */
+static inline fi_addr_t efa_av_entry_to_fi_addr(const struct efa_av *av,
+						const struct efa_av_entry *entry)
+{
+	if (efa_av_is_map(av) && entry->fi_addr != FI_ADDR_NOTAVAIL)
+		return (fi_addr_t) (uintptr_t) entry;
+	return entry->fi_addr;
+}
+
+/**
+ * @brief the application fi_addr of a util_av index of the explicit AV
+ *
+ * The reverse AV, the peer maps, shm and util_srx all identify a peer by
+ * its util_av index, so a source reported to the application starts as an
+ * index. With FI_AV_MAP the application fi_addr is the entry's address,
+ * so the entry has to be looked up from the index to report it.
+ */
+static inline fi_addr_t efa_av_index_to_fi_addr(struct efa_av *av, fi_addr_t index)
+{
+	struct efa_av_entry *entry;
+
+	if (!efa_av_is_map(av) || index == FI_ADDR_NOTAVAIL)
+		return index;
+	entry = efa_av_index_to_entry(av->entry_table, index);
+	return entry ? (fi_addr_t) (uintptr_t) entry : FI_ADDR_NOTAVAIL;
+}
+
+/**
+ * @brief the util_av index of an application fi_addr
+ */
+static inline fi_addr_t efa_av_fi_addr_to_index(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_av_entry *entry;
+
+	if (!efa_av_is_map(av) || fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL)
+		return fi_addr;
+	entry = efa_av_addr_to_entry(av, fi_addr);
+	return entry ? entry->fi_addr : FI_ADDR_NOTAVAIL;
+}
 
 int efa_av_is_valid_address(struct efa_ep_addr *addr);
 

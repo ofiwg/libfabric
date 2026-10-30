@@ -13,24 +13,32 @@
 #include "efa_av.h"
 
 
-struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
-					       fi_addr_t fi_addr)
+struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
+					   fi_addr_t index)
 {
-	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL))
+	if (OFI_UNLIKELY(index == FI_ADDR_UNSPEC || index == FI_ADDR_NOTAVAIL))
 		return NULL;
-	return efa_av_array_at(entry_map, fi_addr);
+	return efa_av_array_at(entry_table, index);
 }
 
 
 /**
- * @brief find the efa_av_entry using fi_addr in the explicit AV
+ * @brief whether an FI_AV_MAP entry is still in the AV
  *
- * @param[in]	av	efa address vector
- * @param[in]	fi_addr	fi_addr of the AV entry
+ * An FI_AV_MAP fi_addr points into util_av's indexed buffer pool, whose
+ * memory stays mapped until the AV is closed, and a buffer keeps its index
+ * for its lifetime. So a removed fi_addr can be checked without reading the
+ * entry: it is valid if its index is allocated and the entry table still
+ * holds this entry at that index.
  */
-struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+bool efa_av_map_entry_is_valid(struct efa_av *av, const struct efa_av_entry *entry)
 {
-	return efa_av_addr_to_entry_impl(av->addr_to_entry_map, fi_addr);
+	struct util_av_entry *util_entry =
+		container_of((void *) entry, struct util_av_entry, data);
+	size_t index = ofi_buf_index(util_entry);
+
+	return ofi_bufpool_ibuf_is_valid(av->util_av.av_entry_pool, index) &&
+	       efa_av_index_to_entry(av->entry_table, index) == entry;
 }
 
 
@@ -50,7 +58,8 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	cur_entry = efa_av_array_at(av->cur_reverse_av,
 				    efa_av_reverse_av_key(ahn, qpn));
 
-	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->fi_addr : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? efa_av_entry_to_fi_addr(av, cur_entry)
+					  : FI_ADDR_NOTAVAIL;
 }
 
 
@@ -185,11 +194,11 @@ int efa_av_entry_base_construct(struct efa_av *av, struct efa_av_entry *entry,
 {
 	int err;
 
-	assert(av->type == FI_AV_TABLE);
+	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
 	entry->fi_addr = fi_addr;
 	entry->ah = ah;
 
-	err = efa_av_array_insert(av->addr_to_entry_map, fi_addr, entry);
+	err = efa_av_array_insert(av->entry_table, fi_addr, entry);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "Failed to insert entry for fi_addr %" PRIu64
 			" into array: %s\n", fi_addr, fi_strerror(-err));
@@ -267,7 +276,7 @@ void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry
 {
 	efa_av_reverse_av_remove(av->cur_reverse_av, entry);
 	efa_ah_release(av->domain, entry->ah);
-	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+	efa_av_entry_remove_from_util_av(av->entry_table, &av->util_av,
 					 entry, fi_addr);
 }
 
@@ -339,7 +348,8 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 			 "Found existing AV entry pointing to this "
 			 "address! fi_addr: %" PRId64 "\n",
 			 efa_fiaddr);
-		*fi_addr = efa_fiaddr;
+		*fi_addr = efa_av_entry_to_fi_addr(
+			av, efa_av_index_to_entry(av->entry_table, efa_fiaddr));
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return 0;
 	}
@@ -358,7 +368,7 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = new_fi_addr;
+	*fi_addr = efa_av_entry_to_fi_addr(av, entry);
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
@@ -433,14 +443,13 @@ int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_av_entry *entry = NULL;
 
-	if (av->type != FI_AV_TABLE)
-		return -FI_EINVAL;
+	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
 
 	if (fi_addr == FI_ADDR_NOTAVAIL)
 		return -FI_EINVAL;
 
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	entry = efa_av_addr_to_entry(av, fi_addr);
+	entry = efa_av_addr_to_entry_checked(av, fi_addr);
 	if (!entry) {
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return -FI_EINVAL;
@@ -491,8 +500,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	if (av->type != FI_AV_TABLE)
-		return -FI_EINVAL;
+	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
 
 	/* The order in which the util domain and av locks are acquired must be
 	 * util_domain.lock -> util_av.lock in the AV insertion and removal
@@ -500,7 +508,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	for (i = 0; i < count; i++) {
-		entry = efa_av_addr_to_entry(av, fi_addr[i]);
+		entry = efa_av_addr_to_entry_checked(av, fi_addr[i]);
 		if (!entry) {
 			err = -FI_EINVAL;
 			break;
@@ -585,7 +593,7 @@ static int efa_av_close(struct fid *fid)
 	 * reused (ahn, qpn) would be missed if we iterated the reverse AV here and
 	 * would leak its AH.
 	 */
-	efa_av_array_iter(av->addr_to_entry_map, av,
+	efa_av_array_iter(av->entry_table, av,
 			  efa_av_destruct_release_entry);
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
@@ -594,7 +602,7 @@ static int efa_av_close(struct fid *fid)
 	if (OFI_UNLIKELY(err))
 		EFA_WARN(FI_LOG_AV, "Failed to close util av: %s\n", fi_strerror(-err));
 
-	efa_av_array_destroy(av->addr_to_entry_map);
+	efa_av_array_destroy(av->entry_table);
 	efa_av_array_destroy(av->cur_reverse_av);
 
 	free(av);
@@ -658,20 +666,20 @@ int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
 {
 	int ret;
 
-	ret = efa_av_array_init(&av->addr_to_entry_map);
+	ret = efa_av_array_init(&av->entry_table);
 	if (ret)
 		return ret;
 
 	ret = efa_av_reverse_av_init(&av->cur_reverse_av);
 	if (ret) {
-		efa_av_array_destroy(av->addr_to_entry_map);
+		efa_av_array_destroy(av->entry_table);
 		return ret;
 	}
 
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context, entry_size);
 	if (ret) {
 		efa_av_array_destroy(av->cur_reverse_av);
-		efa_av_array_destroy(av->addr_to_entry_map);
+		efa_av_array_destroy(av->entry_table);
 		return ret;
 	}
 
@@ -707,10 +715,11 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 	else
 		attr->count = MAX(attr->count, EFA_MIN_AV_SIZE);
 
-	if (attr->type == FI_AV_MAP) {
-		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
-					"EFA provider will now switch to using FI_AV_TABLE.\n");
-	}
+	/* FI_AV_MAP is honored on top of the table: util_av is always set up as
+	 * a table, and the open path marks the efa_av as FI_AV_MAP afterwards */
+	if (attr->type == FI_AV_MAP && !efa_env.support_av_map)
+		EFA_INFO(FI_LOG_AV, "FI_EFA_SUPPORT_AV_MAP is 0: using FI_AV_TABLE "
+				    "instead of the requested FI_AV_MAP.\n");
 	attr->type = FI_AV_TABLE;
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
@@ -729,8 +738,12 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct efa_domain *efa_domain;
 	struct efa_av *av;
+	bool map;
 	int ret;
 
+	/* decided before efa_av_open_prepare_attr(), which sets attr->type to
+	 * FI_AV_TABLE for util_av */
+	map = attr && attr->type == FI_AV_MAP && efa_env.support_av_map;
 	ret = efa_av_open_prepare_attr(domain_fid, attr, &efa_domain);
 	if (ret)
 		return ret;
@@ -744,7 +757,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_free;
 
-	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n", attr->flags);
+	if (map) {
+		av->type = FI_AV_MAP;
+		attr->type = FI_AV_MAP;
+	}
+
+	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 " type %s\n", attr->flags,
+		 efa_av_is_map(av) ? "FI_AV_MAP" : "FI_AV_TABLE");
 
 	*av_fid = &av->util_av.av_fid;
 	(*av_fid)->fid.fclass = FI_CLASS_AV;

@@ -737,19 +737,11 @@ static ssize_t util_srx_peek(struct util_srx_ctx *srx, const struct iovec *iov,
 		}
 	}
 
-	if (srx->cq->src) {
-		ret = ofi_cq_write_src(srx->cq, context,
-				      rx_entry->peer_entry.flags,
-				      rx_entry->peer_entry.msg_size, NULL,
-				      rx_entry->peer_entry.cq_data,
-				      rx_entry->peer_entry.tag,
-				      rx_entry->peer_entry.addr);
-	} else {
-		ret = ofi_cq_write(srx->cq, context, rx_entry->peer_entry.flags,
-				  rx_entry->peer_entry.msg_size, NULL,
-				  rx_entry->peer_entry.cq_data,
-				  rx_entry->peer_entry.tag);
-	}
+	ret = ofi_peer_cq_write(srx->cq, context, rx_entry->peer_entry.flags,
+				rx_entry->peer_entry.msg_size, NULL,
+				rx_entry->peer_entry.cq_data,
+				rx_entry->peer_entry.tag,
+				rx_entry->peer_entry.addr);
 	if (flags & FI_DISCARD)
 		ofi_buf_free(rx_entry);
 	return ret;

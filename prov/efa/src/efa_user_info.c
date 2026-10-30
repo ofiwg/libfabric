@@ -537,11 +537,10 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		}
 	}
 
-	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
-	if (hints && hints->domain_attr && hints->domain_attr->av_type == FI_AV_MAP)
-		EFA_INFO(FI_LOG_CORE, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
-					"EFA provider will now switch to using FI_AV_TABLE.\n");
-	info->domain_attr->av_type = FI_AV_TABLE;
+	/* FI_AV_TABLE unless the application asks for FI_AV_MAP */
+	info->domain_attr->av_type =
+		(hints && hints->domain_attr && hints->domain_attr->av_type == FI_AV_MAP &&
+		 efa_env.support_av_map) ? FI_AV_MAP : FI_AV_TABLE;
 
 	if (!hints || !hints->domain_attr ||
 	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
@@ -770,11 +769,10 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		}
 	}
 
-	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
-	if (hints && hints->domain_attr && hints->domain_attr->av_type == FI_AV_MAP)
-		EFA_INFO(FI_LOG_CORE, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
-					"EFA direct provider will now switch to using FI_AV_TABLE.\n");
-	info->domain_attr->av_type = FI_AV_TABLE;
+	/* FI_AV_TABLE unless the application asks for FI_AV_MAP */
+	info->domain_attr->av_type =
+		(hints && hints->domain_attr && hints->domain_attr->av_type == FI_AV_MAP &&
+		 efa_env.support_av_map) ? FI_AV_MAP : FI_AV_TABLE;
 
 	efa_user_info_set_max_cntr_value(version, info, hints);
 

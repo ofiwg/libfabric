@@ -440,7 +440,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	EFA_DBG(FI_LOG_EP_DATA,
 		"peer: %" PRIu64
 		": size %lu tag: %lx op: %x flags: %lx msg_id: %" PRIu32 "\n",
-		efa_rdm_peer_fi_addr(peer), txe->total_len, tag, op, fi_flags, txe->msg_id);
+		efa_rdm_peer_av_index(peer), txe->total_len, tag, op, fi_flags, txe->msg_id);
 
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
@@ -995,7 +995,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 
 	peer = (*pkt_entry_ptr)->peer;
-	attr.addr = efa_rdm_peer_fi_addr(peer);
+	attr.addr = efa_rdm_peer_av_index(peer);
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = 0;
 	ret = peer_srx->owner_ops->get_msg(peer_srx, &attr, &peer_rxe);
@@ -1040,7 +1040,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 		efa_rdm_tracepoint(msg_recv_unexpected_nontagged, (uint64_t) orig_pke_ptr,
 				   (*pkt_entry_ptr)->pkt_size, rxe->msg_id,
 				   (size_t) rxe->cq_entry.op_context,
-				   rxe->total_len, rxe->tag, efa_rdm_peer_fi_addr(rxe->peer));
+				   rxe->total_len, rxe->tag, efa_rdm_peer_av_index(rxe->peer));
 #endif
 
 	} else { /* Unexpected errors */
@@ -1090,7 +1090,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 	peer = (*pkt_entry_ptr)->peer;
 
 	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
-	attr.addr = efa_rdm_peer_fi_addr(peer);
+	attr.addr = efa_rdm_peer_av_index(peer);
 	attr.msg_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
 	attr.tag = efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr);
 
@@ -1142,7 +1142,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		efa_rdm_tracepoint(msg_recv_unexpected_tagged, (uint64_t) orig_pke_ptr,
 				   (*pkt_entry_ptr)->pkt_size, rxe->msg_id,
 				   (size_t) rxe->cq_entry.op_context,
-				   rxe->total_len, rxe->tag, efa_rdm_peer_fi_addr(rxe->peer));
+				   rxe->total_len, rxe->tag, efa_rdm_peer_av_index(rxe->peer));
 #endif
 
 	} else { /* Unexpected errors */
@@ -1169,6 +1169,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 			     uint64_t flags)
 {
 	ssize_t ret = 0;
+	fi_addr_t src_addr;
 
 	assert(msg->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 
@@ -1186,13 +1187,22 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	if (ret)
 		return ret;
 
+	/* util_srx keys its per-source queues (ofi_array) by fi_addr, so it works
+	 * on the util_av index for both AV types. The source address only means
+	 * something with FI_DIRECTED_RECV on the endpoint; without it the
+	 * application may pass anything, so pass FI_ADDR_UNSPEC: util_srx decides
+	 * directed receive from the domain caps and would use the value. */
+	src_addr = (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
+			   ? efa_av_fi_addr_to_index(ep->base_ep.av, msg->addr)
+			   : FI_ADDR_UNSPEC;
+
 	if (op == ofi_op_tagged) {
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
-					     msg->iov_count, msg->addr, msg->context,
+					     msg->iov_count, src_addr, msg->context,
 					     tag, ignore, flags);
 	} else {
 		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
-				            msg->iov_count, msg->addr, msg->context, flags);
+				            msg->iov_count, src_addr, msg->context, flags);
 	}
 
 	efa_perfset_end(ep, perf_efa_recv);

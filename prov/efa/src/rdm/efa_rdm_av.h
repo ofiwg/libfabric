@@ -31,7 +31,8 @@ struct efa_rdm_av {
 	/* implicit AV is used when receiving messages from peers not explicitly
 	 * inserted by the application */
 	struct util_av util_av_implicit;
-	struct efa_av_array *addr_to_entry_map_implicit;
+	/* efa_av_entry of each util_av_implicit index */
+	struct efa_av_array *entry_table_implicit;
 	struct efa_av_array *cur_reverse_av_implicit;
 	struct efa_prv_reverse_av *prv_reverse_av_implicit;
 
@@ -96,6 +97,16 @@ struct efa_rdm_av_entry {
 	fi_addr_t		shm_fi_addr;
 	struct dlist_entry	implicit_av_lru_entry;
 	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
+	/*
+	 * FI_AV_MAP: the peer of one endpoint that uses this entry, so that
+	 * turning an application fi_addr into a peer is two loads with no
+	 * peer-map lookup. The first endpoint to resolve the entry claims it by
+	 * setting cache_ep with a compare-and-swap, and only that endpoint ever
+	 * writes cache_peer, so endpoints that share the AV cannot tear the
+	 * pair. Other endpoints of the same AV use their peer maps.
+	 */
+	struct efa_rdm_ep	*cache_ep;
+	struct efa_rdm_peer	*cache_peer;
 #if ENABLE_DEBUG
 	enum efa_rdm_av_entry_publish_state publish_state;
 #endif
@@ -117,6 +128,44 @@ struct efa_rdm_av_entry {
 #define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)	do {} while (0)
 #define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)	do {} while (0)
 #endif
+
+static inline void efa_rdm_av_entry_cache_init(struct efa_rdm_av_entry *av_entry)
+{
+	av_entry->cache_ep = NULL;
+	av_entry->cache_peer = NULL;
+}
+
+/*
+ * record ep's peer for this entry, claiming the cache for ep if no endpoint
+ * owns it yet; a no-op if another endpoint owns it. Caller holds the
+ * endpoint's ctrl_lock.
+ */
+static inline void efa_rdm_av_entry_cache_peer(struct efa_rdm_av_entry *av_entry,
+					       struct efa_rdm_ep *ep,
+					       struct efa_rdm_peer *peer)
+{
+	struct efa_rdm_ep *owner = NULL;
+
+	if (!__atomic_compare_exchange_n(&av_entry->cache_ep, &owner, ep, false,
+					 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE) &&
+	    owner != ep)
+		return;
+	__atomic_store_n(&av_entry->cache_peer, peer, __ATOMIC_RELEASE);
+}
+
+/*
+ * forget ep's cached peer and release the cache, before that peer is freed.
+ * The peer is cleared before the owner, so an endpoint that claims the cache
+ * next cannot have its peer overwritten.
+ */
+static inline void efa_rdm_av_entry_uncache_peer(struct efa_rdm_av_entry *av_entry,
+						 struct efa_rdm_ep *ep)
+{
+	if (__atomic_load_n(&av_entry->cache_ep, __ATOMIC_ACQUIRE) != ep)
+		return;
+	__atomic_store_n(&av_entry->cache_peer, NULL, __ATOMIC_RELEASE);
+	__atomic_store_n(&av_entry->cache_ep, NULL, __ATOMIC_RELEASE);
+}
 
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");

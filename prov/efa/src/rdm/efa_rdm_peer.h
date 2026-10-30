@@ -160,7 +160,7 @@ struct efa_rdm_peer {
 	 * has fi_addr set and implicit_fi_addr FI_ADDR_NOTAVAIL, and a peer only
 	 * in the implicit AV the reverse. Moving the peer to the explicit AV
 	 * changes them while lock-free readers can run, so they are only accessed
-	 * through efa_rdm_peer_fi_addr(), efa_rdm_peer_implicit_fi_addr(),
+	 * through efa_rdm_peer_av_index(), efa_rdm_peer_implicit_fi_addr(),
 	 * efa_rdm_peer_is_explicit() and efa_rdm_peer_move_to_explicit().
 	 */
 	fi_addr_t fi_addr;
@@ -313,10 +313,11 @@ size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *
 int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
 /**
- * @brief Return the explicit fi_addr of a peer, or FI_ADDR_NOTAVAIL if the
- * peer is only in the implicit AV. Safe without the AV locks.
+ * @brief Return the util_av index of a peer in the explicit AV, or
+ * FI_ADDR_NOTAVAIL if the peer is only in the implicit AV. Safe without the
+ * AV locks.
  */
-static inline fi_addr_t efa_rdm_peer_fi_addr(const struct efa_rdm_peer *peer)
+static inline fi_addr_t efa_rdm_peer_av_index(const struct efa_rdm_peer *peer)
 {
 	return __atomic_load_n(&peer->fi_addr, __ATOMIC_ACQUIRE);
 }
@@ -336,7 +337,7 @@ static inline fi_addr_t efa_rdm_peer_implicit_fi_addr(const struct efa_rdm_peer 
  */
 static inline bool efa_rdm_peer_is_explicit(const struct efa_rdm_peer *peer)
 {
-	return efa_rdm_peer_fi_addr(peer) != FI_ADDR_NOTAVAIL;
+	return efa_rdm_peer_av_index(peer) != FI_ADDR_NOTAVAIL;
 }
 
 /**
@@ -357,6 +358,18 @@ static inline void efa_rdm_peer_move_to_explicit(struct efa_rdm_peer *peer,
 	__atomic_store_n(&peer->fi_addr, fi_addr, __ATOMIC_RELEASE);
 	__atomic_store_n(&peer->implicit_fi_addr, FI_ADDR_NOTAVAIL, __ATOMIC_RELEASE);
 }
+
+/**
+ * @brief the fi_addr the application sees for a peer in the explicit AV
+ *
+ * efa_rdm_peer_av_index() is the util_av index, which keys the peer maps and
+ * util_srx. With FI_AV_MAP the application fi_addr is the AV entry's address
+ * instead. FI_ADDR_NOTAVAIL for a peer only in the implicit AV. A macro
+ * because struct efa_rdm_ep is not complete here.
+ */
+#define efa_rdm_peer_fi_addr(peer)                                             \
+	efa_av_index_to_fi_addr((peer)->ep->base_ep.av,                        \
+				efa_rdm_peer_av_index(peer))
 
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \

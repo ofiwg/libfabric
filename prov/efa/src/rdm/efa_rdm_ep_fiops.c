@@ -855,7 +855,17 @@ static int efa_rdm_ep_destroy_peer(struct efa_av_array *arr, void *entry,
 {
 	struct efa_rdm_ep *ep = context;
 	struct efa_rdm_peer *peer = entry;
+	struct efa_av *av = ep->base_ep.av;
 
+	/* the FI_AV_MAP peer cache must not outlive the peer, nor this ep */
+	if (av && efa_av_is_map(av) && efa_rdm_peer_is_explicit(peer)) {
+		struct efa_av_entry *av_entry = efa_av_index_to_entry(
+			av->entry_table, efa_rdm_peer_av_index(peer));
+
+		if (av_entry)
+			efa_rdm_av_entry_uncache_peer(
+				container_of(av_entry, struct efa_rdm_av_entry, efa_av_entry), ep);
+	}
 	efa_rdm_peer_destruct(peer, ep);
 	ofi_buf_free(peer);
 	return 0;
@@ -1581,6 +1591,17 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		ret = efa_rdm_peer_srx_construct(ep);
 		if (ret)
 			return ret;
+
+		if (ep->base_ep.av && efa_av_is_map(ep->base_ep.av)) {
+			if (ep->base_ep.util_ep.rx_cq)
+				efa_rdm_cq_set_map_av(container_of(ep->base_ep.util_ep.rx_cq,
+								   struct efa_rdm_cq, efa_cq.util_cq),
+						      ep->base_ep.av);
+			if (ep->base_ep.util_ep.tx_cq)
+				efa_rdm_cq_set_map_av(container_of(ep->base_ep.util_ep.tx_cq,
+								   struct efa_rdm_cq, efa_cq.util_cq),
+						      ep->base_ep.av);
+		}
 
 		efa_rdm_ep_update_shm(ep);
 

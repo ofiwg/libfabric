@@ -83,13 +83,32 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
  * @param[in]		addr 		libfabric address
  * @returns pointer to #efa_rdm_peer
  */
-struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t app_addr)
 {
 	struct efa_av_entry *entry;
 	struct efa_rdm_peer *peer;
+	fi_addr_t addr;
 
-	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+	if (OFI_UNLIKELY(app_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
+
+	/* Path 0 (FI_AV_MAP): the fi_addr is the AV entry, which caches the
+	 * peer of the endpoint that owns its cache. A NULL peer means the owner
+	 * has not stored it yet or is releasing the cache: use the peer map. */
+	if (efa_av_is_map(ep->base_ep.av)) {
+		struct efa_rdm_av_entry *av_entry =
+			(struct efa_rdm_av_entry *) (uintptr_t) app_addr;
+
+		if (OFI_LIKELY(__atomic_load_n(&av_entry->cache_ep, __ATOMIC_ACQUIRE) == ep)) {
+			peer = __atomic_load_n(&av_entry->cache_peer, __ATOMIC_ACQUIRE);
+			if (OFI_LIKELY(peer != NULL))
+				return peer;
+		}
+	}
+
+	/* the peer map is keyed by the util_av index, which is the
+	 * application fi_addr for FI_AV_TABLE */
+	addr = efa_av_fi_addr_to_index(ep->base_ep.av, app_addr);
 
 	/* Path 1 (common case): the peer is already in the map. Keep this
 	 * lookup lock-free -- if we find the peer, just return it. */
@@ -97,7 +116,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (peer)
 		return peer;
 
-	entry = efa_av_addr_to_entry(ep->base_ep.av, addr);
+	entry = efa_av_addr_to_entry(ep->base_ep.av, app_addr);
 	if (OFI_UNLIKELY(!entry))
 		return NULL;
 
@@ -146,6 +165,9 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	}
 
 unlock:
+	if (peer && efa_av_is_map(ep->base_ep.av))
+		efa_rdm_av_entry_cache_peer(
+			container_of(entry, struct efa_rdm_av_entry, efa_av_entry), ep, peer);
 	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	return peer;
 }
@@ -617,7 +639,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 			"initializing backoff timeout for peer fi_addr: "
 			"%" PRIu64 " implicit fi_addr: %" PRIu64
 			" timeout: %ld rnr_queued_pkts: %d\n",
-			efa_rdm_peer_fi_addr(peer), efa_rdm_peer_implicit_fi_addr(peer),
+			efa_rdm_peer_av_index(peer), efa_rdm_peer_implicit_fi_addr(peer),
 			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
@@ -626,7 +648,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 			"increasing backoff timeout for peer fi_addr: %" PRIu64
 			" implicit fi_addr %" PRIu64
 			" to %ld rnr_queued_pkts: %d\n",
-			efa_rdm_peer_fi_addr(peer), efa_rdm_peer_implicit_fi_addr(peer),
+			efa_rdm_peer_av_index(peer), efa_rdm_peer_implicit_fi_addr(peer),
 			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	}
 }
@@ -660,7 +682,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 			     (peer->flags & EFA_RDM_PEER_REQ_SENT)))
 		return 0;
 
-	msg.addr = efa_rdm_peer_fi_addr(peer);
+	msg.addr = efa_rdm_peer_av_index(peer);
 
 	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
 	if (OFI_UNLIKELY(!txe)) {
@@ -798,7 +820,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer fi_addr: %ld implicit fi_addr %ld. %s\n",
-			efa_rdm_peer_fi_addr(peer), efa_rdm_peer_implicit_fi_addr(peer), fi_strerror(-err));
+			efa_rdm_peer_av_index(peer), efa_rdm_peer_implicit_fi_addr(peer), fi_strerror(-err));
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
@@ -1209,7 +1231,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Failed to post HANDSHAKE to peer fi_addr: "
 				 "%ld implicit fi_addr: %ld. %s\n",
-				 efa_rdm_peer_fi_addr(peer),
+				 efa_rdm_peer_av_index(peer),
 				 efa_rdm_peer_implicit_fi_addr(peer),
 				 fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);

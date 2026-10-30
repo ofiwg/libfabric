@@ -66,7 +66,7 @@ static int efa_test_ctrl_setup_peer(struct fid_ep *ep, struct fid_av *av)
 		return -FI_EINVAL;
 
 	g_ctrl.peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	container_of(efa_av_addr_to_entry(g_ctrl.peer->ep->base_ep.av, efa_rdm_peer_fi_addr(g_ctrl.peer)),
+	container_of(efa_av_addr_to_entry(g_ctrl.peer->ep->base_ep.av, efa_rdm_peer_av_index(g_ctrl.peer)),
 		     struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	return 0;
 }
