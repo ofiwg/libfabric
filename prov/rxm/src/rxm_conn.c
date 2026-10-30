@@ -699,7 +699,19 @@ rxm_process_reject(struct rxm_conn *conn, uint8_t idx,
 		break;
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
-		/* Our request was rejected, but we accepted the peer's. */
+		/* The reject is for the msg ep this conn is using, so the
+		 * peer refused our accept (e.g. the IB CM answers our REP
+		 * with a stale connection reject after we restarted and
+		 * reused a QPN).  A reject for our own earlier request never
+		 * gets here, because that ep was closed when we accepted the
+		 * peer's.  Keeping the conn would leave a dead msg ep and
+		 * make us reject every new request from this peer with
+		 * EALREADY, so drop it and let the peer reconnect.
+		 */
+		FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+			"accept rejected, closing conn %p\n", conn);
+		rxm_close_conn(conn);
+		rxm_free_conn(conn);
 		break;
 	default:
 		assert(0);
