@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2023,2026 Hewlett Packard Enterprise Development LP
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  */
 #include "cxip.h"
@@ -308,20 +308,64 @@ cp_set:
 }
 
 /*
+ * cxip_alloc_dev_cmdq() - Allocate the libcxi command queue.
+ *
+ * With a user buffer, the ring is placed in that buffer; this requires
+ * a runtime libcxi that provides cxil_alloc_buf_cmdq(), resolved into
+ * cxip_libcxi_ops.alloc_buf_cmdq, and build headers that declare
+ * struct cxi_cq_alloc_opts_buf.  cxip_cmdq_alloc() rejects a user
+ * buffer before calling this when either is missing.
+ */
+static int cxip_alloc_dev_cmdq(struct cxip_lni *lni, struct cxi_eq *evtq,
+			       struct cxi_cq_alloc_opts *cq_opts,
+			       const struct fi_cxi_ki_cmdq_buf *ubuf,
+			       struct cxi_cq **dev_cmdq)
+{
+#ifdef CXI_HAVE_ALLOC_BUF_CMDQ
+	if (ubuf) {
+		struct cxi_cq_alloc_opts_buf buf_opts = {
+			.opts = *cq_opts,
+			.buf = ubuf->buf,
+			.is_host_mem = ubuf->is_host_mem,
+			.dmabuf_fd = ubuf->dmabuf_fd,
+			.dmabuf_offset = ubuf->dmabuf_offset,
+		};
+
+		return cxip_libcxi_ops.alloc_buf_cmdq(lni->lni, evtq,
+						      &buf_opts, dev_cmdq);
+	}
+#endif
+
+	return cxil_alloc_cmdq(lni->lni, evtq, cq_opts, dev_cmdq);
+}
+
+/*
  * cxip_cmdq_alloc() - Allocate a command queue.
  *
  * For a triggered CQ, the lcid must be 0.
+ *
+ * ubuf describes a user-provided buffer to hold the command queue, or
+ * is NULL for a driver-allocated queue.
  */
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
 		    enum cxi_traffic_class tc,
 		    enum cxi_traffic_class_type tc_type,
+		    const struct fi_cxi_ki_cmdq_buf *ubuf,
 		    struct cxip_cmdq **cmdq)
 {
 	int ret;
 	struct cxi_cq *dev_cmdq;
 	struct cxip_cmdq *new_cmdq;
 	struct cxi_cp *cp = NULL;
+
+	/* Fail before allocating a communication profile for a request
+	 * that cannot succeed.
+	 */
+	if (ubuf && !cxip_libcxi_ops.alloc_buf_cmdq) {
+		CXIP_WARN("User cmdq buffer unsupported by this libcxi\n");
+		return -FI_ENOSYS;
+	}
 
 	new_cmdq = calloc(1, sizeof(*new_cmdq));
 	if (!new_cmdq) {
@@ -351,11 +395,40 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		new_cmdq->llring_mode = CXIP_LLRING_NEVER;
 	}
 
-	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
+	ret = cxip_alloc_dev_cmdq(lni, evtq, cq_opts, ubuf, &dev_cmdq);
 	if (ret) {
-		CXIP_WARN("Failed to allocate %s, ret: %d\n",
-			  cq_opts->flags & CXI_CQ_IS_TX ? "TXQ" : "TGQ", ret);
+		CXIP_WARN("Failed to allocate %s, ret: %d count: %u "
+			  "policy: %d stat_cnt_pool: %u flags: %#x "
+			  "lcid: %u lpe_cdt_thresh_id: %u vni: %u "
+			  "tc: %d tc_type: %d buf: %p is_host: %d "
+			  "dmabuf_fd: %d\n",
+			  (cq_opts->flags & CXI_CQ_IS_TX) ? "TXQ" : "TGQ", ret,
+			  cq_opts->count, (int)cq_opts->policy,
+			  cq_opts->stat_cnt_pool, cq_opts->flags, cq_opts->lcid,
+			  cq_opts->lpe_cdt_thresh_id, vni, (int)tc, (int)tc_type,
+			  ubuf ? ubuf->buf : NULL,
+			  ubuf ? ubuf->is_host_mem : 0,
+			  ubuf ? ubuf->dmabuf_fd : -1);
+		if (ubuf && ret == -EINVAL)
+			CXIP_WARN("User cmdq buffer rejected by the driver; "
+				  "it may lack CXI_OP_CQ_ALLOC_BUF\n");
 		ret = -FI_ENOSPC;
+		goto free_cmdq;
+	}
+
+	/* The kernel may round the ring up to more commands than requested.
+	 * For a user-provided buffer, a larger ring would extend past the
+	 * buffer, so refuse it.  The KI hints validation should prevent
+	 * this; this is a backstop in case it and the kernel's rounding
+	 * disagree.
+	 */
+	if (ubuf && (size_t)dev_cmdq->size * C_CQ_CMD_SIZE > ubuf->len) {
+		CXIP_WARN("User-provided cmdq buffer %p: kernel sized ring "
+			  "at %u commands (%zu bytes), buffer is %zu bytes\n",
+			  ubuf->buf, dev_cmdq->size,
+			  (size_t)dev_cmdq->size * C_CQ_CMD_SIZE, ubuf->len);
+		cxil_destroy_cmdq(dev_cmdq);
+		ret = -FI_EINVAL;
 		goto free_cmdq;
 	}
 

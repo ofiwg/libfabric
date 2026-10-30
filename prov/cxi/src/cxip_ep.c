@@ -4,7 +4,7 @@
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018,2020-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2020-2023,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -16,6 +16,7 @@
 
 #include "ofi_util.h"
 #include "cxip.h"
+#include "fi_cxi_gpu_ext.h"
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
@@ -63,11 +64,15 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
 	ofi_atomic32_t *ep_obj_ref;
 	int ret;
 	size_t size;
+	const struct fi_cxi_ki_cmdq_buf *ubuf = NULL;
 
 	if (transmit) {
 		ep_obj_cmdq = &ep_obj->txq;
 		ep_obj_ref = &ep_obj->txq_ref;
 		size = ep_obj->txq_size;
+		/* Check for KI user-provided TX cmdq buffer */
+		if (ep_obj->ki_hints.tx_cmdq.buf)
+			ubuf = &ep_obj->ki_hints.tx_cmdq;
 	} else {
 		ep_obj_cmdq = &ep_obj->tgq;
 		ep_obj_ref = &ep_obj->tgq_ref;
@@ -88,12 +93,19 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
 	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
 	cq_opts.policy = cxip_env.cq_policy;
 
+	/* Use KI user-provided buffer if available */
+	if (ubuf) {
+		cq_opts.count = ubuf->len / C_CQ_CMD_SIZE;
+		CXIP_DBG("Using KI user-provided cmdq buffer: %p (%zu bytes)\n",
+			 ubuf->buf, ubuf->len);
+	}
+
 	ret = cxip_cmdq_alloc(ep_obj->domain->lni, evtq, &cq_opts,
 			      ep_obj->auth_key.vni, cxip_ofi_to_cxi_tc(tclass),
-			      CXI_TC_TYPE_DEFAULT, cmdq);
+			      CXI_TC_TYPE_DEFAULT, ubuf, cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
-		return -FI_ENOSPC;
+		return ret;
 	}
 	*ep_obj_cmdq = *cmdq;
 	ofi_atomic_inc32(ep_obj_ref);
@@ -706,13 +718,43 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 	ret = cxip_txc_enable(ep_obj->txc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_txc_enable returned: %d\n", ret);
-		goto unlock;
+		goto free_zbcoll;
+	}
+
+	/* Allocate KI triggered cmdq if user provided a buffer. */
+	if (ep_obj->ki_hints.trig_cmdq.buf) {
+		const struct fi_cxi_ki_cmdq_buf *ubuf =
+			&ep_obj->ki_hints.trig_cmdq;
+		struct cxi_cq_alloc_opts cq_opts = {};
+
+		cq_opts.count = ubuf->len / C_CQ_CMD_SIZE;
+		cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;
+		cq_opts.policy = CXI_CQ_UPDATE_ALWAYS;
+
+		ret = cxip_cmdq_alloc(ep_obj->domain->lni,
+				      ep_obj->txc->tx_evtq.eq, &cq_opts,
+				      ep_obj->auth_key.vni,
+				      cxip_ofi_to_cxi_tc(ep_obj->tx_attr.tclass),
+				      CXI_TC_TYPE_DEFAULT, ubuf,
+				      &ep_obj->ki_trig_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to allocate KI triggered cmdq: %d\n",
+				  ret);
+			/* Match the TX cmdq path (cxip_ep_ctrl_init). */
+			ret = -FI_EDOMAIN;
+			goto disable_txc;
+		}
+		CXIP_DBG("Allocated KI triggered cmdq: %p (buf=%p, len=%zu, eq=%p eqn=%u)\n",
+			 ep_obj->ki_trig_cmdq, ubuf->buf, ubuf->len,
+			 ep_obj->txc->tx_evtq.eq,
+			 ep_obj->txc->tx_evtq.eq ?
+			 cxip_evtq_eqn(&ep_obj->txc->tx_evtq) : 0);
 	}
 
 	ret = cxip_rxc_enable(ep_obj->rxc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_rxc_enable returned: %d\n", ret);
-		goto unlock;
+		goto free_ki_trig;
 	}
 
 	ret = cxip_coll_enable(ep);
@@ -780,14 +822,32 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		}
 	}
 
+	/* An EP with a KI TX command queue buffer is driven by the GPU.
+	 * Host data-transfer operations would share the ring and its
+	 * write pointer with the GPU, so install the no-op tables.
+	 */
+	if (ep_obj->ki_hints.tx_cmdq.buf) {
+		ep->ep.msg = &cxip_ep_msg_no_ops;
+		ep->ep.tagged = &cxip_ep_tagged_no_ops;
+		ep->ep.rma = &cxip_ep_rma_no_ops;
+		ep->ep.atomic = &cxip_ep_atomic_no_ops;
+	}
+
 	ep_obj->enabled = true;
-	ofi_genlock_unlock(&ep_obj->lock);
+	goto unlock;
 
-	return FI_SUCCESS;
-
+free_ki_trig:
+	if (ep_obj->ki_trig_cmdq) {
+		/* Before txc_disable: holds a ref on txc->tx_evtq */
+		cxip_cmdq_free(ep_obj->ki_trig_cmdq);
+		ep_obj->ki_trig_cmdq = NULL;
+	}
+disable_txc:
+	cxip_txc_disable(ep_obj->txc);
+free_zbcoll:
+	cxip_zbcoll_fini(ep_obj);
 free_ep_ctrl:
 	cxip_ep_ctrl_fini(ep_obj);
-
 free_portals_table:
 	cxip_portals_table_free(ep_obj->ptable);
 	ep_obj->ptable = NULL;
@@ -798,12 +858,11 @@ free_vnis:
 		ep_obj->vnis = NULL;
 	}
 free_wait:
-	if (ep_obj->priv_wait)
+	if (ep_obj->priv_wait) {
 		cxip_ep_destroy_priv_wait(ep_obj);
-
+	}
 unlock:
 	ofi_genlock_unlock(&ep_obj->lock);
-
 	return ret;
 }
 
@@ -860,6 +919,14 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	}
 
 	ofi_genlock_lock(&ep_obj->lock);
+	/* The KI triggered command queue holds a reference on the TXC's
+	 * TX event queue, so it must be destroyed before cxip_txc_close()
+	 * destroys that event queue.
+	 */
+	if (ep_obj->ki_trig_cmdq) {
+		cxip_cmdq_free(ep_obj->ki_trig_cmdq);
+		ep_obj->ki_trig_cmdq = NULL;
+	}
 	cxip_coll_close(ep_obj);
 	cxip_txc_close(ep);
 	cxip_rxc_close(ep);
@@ -1038,7 +1105,7 @@ static int cxip_ep_bind_cntr(struct cxip_ep *ep, struct cxip_cntr *cntr,
 			cxip_cmdq_alloc(dom->lni, NULL, &cq_opts,
 					dom->auth_key.vni,
 					cxip_ofi_to_cxi_tc(dom->tclass),
-					CXI_TC_TYPE_DEFAULT,
+					CXI_TC_TYPE_DEFAULT, NULL,
 					&cntr->trig_cmdq);
 			if (cntr->trig_cmdq == NULL) {
 				CXIP_WARN("Alloc of cntr trig_cmdq failed\n");
@@ -1226,6 +1293,83 @@ static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
 }
 
 /*
+ * cxip_ki_cmdq_buf_validate() - Validate a user-provided KI command queue
+ * buffer.
+ *
+ * Validate a user-provided KI command queue buffer against the
+ * constraints the kernel applies when the endpoint is enabled.
+ *
+ * Omitting a buffer entirely is valid: a NULL pointer with a zero
+ * length means no queue of that kind is requested, and the triggered
+ * queue in particular is only allocated when a buffer is supplied.
+ * Setting just one of the two is a caller error and is rejected.
+ *
+ * The kernel requires a supplied buffer to be page aligned and
+ * physically contiguous, so a misaligned buffer is rejected here
+ * rather than at enable time.
+ *
+ * The kernel also sizes the ring from the command count by rounding
+ * up to a power-of-two number of pages, and maps that rounded length
+ * starting at the buffer.  A length that is not itself a power-of-two
+ * number of pages would therefore have the kernel map, and the
+ * producer write, memory beyond the caller's buffer.  Such lengths
+ * are rejected here, along with lengths above the hardware maximum.
+ *
+ * Physical contiguity cannot be checked from user space; it is only
+ * detected by the kernel at allocation time.
+ *
+ * The dmabuf fields must agree with is_host_mem.  The kernel ignores
+ * them for host memory, so a host buffer must carry the "not dmabuf"
+ * values (fd -1, offset 0) to catch callers that filled them by
+ * mistake.  A device buffer is either a dmabuf (fd >= 0) or not
+ * (fd -1 with offset 0).
+ */
+static int cxip_ki_cmdq_buf_validate(const char *name,
+				     const struct fi_cxi_ki_cmdq_buf *ubuf)
+{
+	long page_size = ofi_get_page_size();
+	size_t max_len = (size_t)CXI_MAX_CQ_COUNT * C_CQ_CMD_SIZE;
+	int ret = FI_SUCCESS;
+
+	if ((ubuf->len == 0) && !ubuf->buf) {
+		/* No buffer supplied for this queue; nothing to validate. */
+	} else if ((ubuf->len == 0) || !ubuf->buf) {
+		CXIP_WARN("KI %s cmdq buffer %p and length %zu must both be "
+			  "set or both be unset\n", name, ubuf->buf, ubuf->len);
+		ret = -FI_EINVAL;
+	} else if ((uintptr_t)ubuf->buf % (uintptr_t)page_size) {
+		CXIP_WARN("KI %s cmdq buffer %p is not aligned to the %ld "
+			  "byte page size\n", name, ubuf->buf, page_size);
+		ret = -FI_EINVAL;
+	} else if ((ubuf->len < (size_t)page_size) ||
+		   ((ubuf->len & (ubuf->len - 1)) != 0)) {
+		CXIP_WARN("KI %s cmdq buffer length %zu must be a power-of-two "
+			  "multiple of the %ld byte page size\n", name,
+			  ubuf->len, page_size);
+		ret = -FI_EINVAL;
+	} else if (ubuf->len > max_len) {
+		CXIP_WARN("KI %s cmdq buffer length %zu exceeds the maximum "
+			  "%zu\n", name, ubuf->len, max_len);
+		ret = -FI_EINVAL;
+	} else if (ubuf->is_host_mem &&
+		   ((ubuf->dmabuf_fd != -1) || (ubuf->dmabuf_offset != 0))) {
+		CXIP_WARN("KI %s cmdq host buffer must have dmabuf_fd -1 and "
+			  "dmabuf_offset 0, got %d and %lu\n", name,
+			  ubuf->dmabuf_fd, ubuf->dmabuf_offset);
+		ret = -FI_EINVAL;
+	} else if (!ubuf->is_host_mem &&
+		   ((ubuf->dmabuf_fd < -1) ||
+		    ((ubuf->dmabuf_fd == -1) && (ubuf->dmabuf_offset != 0)))) {
+		CXIP_WARN("KI %s cmdq device buffer must have dmabuf_fd >= 0 "
+			  "or dmabuf_fd -1 with dmabuf_offset 0, got %d and "
+			  "%lu\n", name, ubuf->dmabuf_fd, ubuf->dmabuf_offset);
+		ret = -FI_EINVAL;
+	}
+
+	return ret;
+}
+
+/*
  * cxip_ep_control() - Provider EP control implementation.
  */
 static int cxip_ep_control(struct fid *fid, int command, void *arg)
@@ -1290,6 +1434,77 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 		if (!arg)
 			return -FI_EINVAL;
 		return cxip_ep_set_val(ep, (struct fi_fid_var *) arg);
+	case FI_OPT_CXI_SET_KI_EP_HINTS_1:
+		if (!arg)
+			return -FI_EINVAL;
+		if (ep->ep_obj->enabled) {
+			CXIP_WARN("KI EP hints must be set before enable\n");
+			return -FI_EOPBADSTATE;
+		}
+		/* The KI command queues are allocated for the EP's single
+		 * VNI and the GPU cannot switch them to another, so KI
+		 * cannot reach peers with per-peer VNIs.
+		 */
+		if (ep->ep_obj->av_auth_key) {
+			CXIP_WARN("KI requires a single-VNI EP; "
+				  "FI_AV_AUTH_KEY is not supported\n");
+			return -FI_EOPNOTSUPP;
+		}
+		{
+			struct fi_cxi_ki_ep_hints *hints =
+				(struct fi_cxi_ki_ep_hints *)arg;
+
+			if (hints->flags) {
+				CXIP_WARN("KI EP hints flags %#lx must be 0\n",
+					  hints->flags);
+				return -FI_EINVAL;
+			}
+
+			/* Report this here: the first command queue
+			 * allocation happens in cxip_ep_ctrl_init(), which
+			 * maps every failure to -FI_EDOMAIN.
+			 */
+			if ((hints->tx_cmdq.buf || hints->trig_cmdq.buf) &&
+			    !cxip_libcxi_ops.alloc_buf_cmdq) {
+				CXIP_WARN("User cmdq buffer unsupported by "
+					  "this libcxi\n");
+				return -FI_ENOSYS;
+			}
+
+			/* A KI TX command queue buffer becomes the ring for
+			 * the EP's shared TX command queue, which messaging
+			 * flow control and collectives also emit on without
+			 * the application issuing host operations.  Those
+			 * emits would collide with the GPU's write pointer,
+			 * so refuse the capabilities that enable them.
+			 */
+			if (hints->tx_cmdq.buf &&
+			    (ep->ep_obj->caps &
+			     (FI_MSG | FI_TAGGED | FI_COLLECTIVE))) {
+				CXIP_WARN("KI TX cmdq buffer requires an EP "
+					  "without FI_MSG, FI_TAGGED and "
+					  "FI_COLLECTIVE\n");
+				return -FI_EINVAL;
+			}
+
+			ret = cxip_ki_cmdq_buf_validate("TX", &hints->tx_cmdq);
+			if (ret != FI_SUCCESS) {
+				return ret;
+			}
+
+			ret = cxip_ki_cmdq_buf_validate("triggered",
+							&hints->trig_cmdq);
+			if (ret != FI_SUCCESS) {
+				return ret;
+			}
+
+			ep->ep_obj->ki_hints = *hints;
+
+			CXIP_DBG("KI EP hints set: tx_buf=%p (%zu), trig_buf=%p (%zu)\n",
+				 hints->tx_cmdq.buf, hints->tx_cmdq.len,
+				 hints->trig_cmdq.buf, hints->trig_cmdq.len);
+		}
+		break;
 	default:
 		return -FI_EINVAL;
 	}
@@ -1297,12 +1512,574 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 	return FI_SUCCESS;
 }
 
+/* KI (GPU-initiated) Unified Operations Implementation */
+
+/*
+ * struct cxip_ki_peer_blob
+ *
+ * Internal view of the opaque bytes in struct fi_cxi_ki_peer_info.
+ *
+ * The public type is a bare uint8_t[32] so that callers treat it as
+ * an opaque payload to hand to PMI_Allgather.  Within the provider the
+ * layout is known, so peer blobs are cast to this structure rather
+ * than assembled and taken apart one memcpy at a time.
+ *
+ * The blob crosses process boundaries, so it starts with a magic
+ * byte and a version that get_gpu_remote_mrs() checks before
+ * decoding.  The MR key is carried whole; the initiator-side values
+ * that depend on it (match bits, offset adjustment, restricted or
+ * unrestricted) are derived when the blob is decoded.
+ *
+ * Packed for alignment, not for layout.  Every member already sits at
+ * its natural offset, so the attribute changes nothing except the
+ * alignment the structure demands of its address.  That matters
+ * because the public type is only 1-byte aligned, and peer blobs
+ * routinely arrive in the middle of an allgather receive buffer.
+ */
+#define CXIP_KI_PEER_BLOB_MAGIC		0xC2
+#define CXIP_KI_PEER_BLOB_VERSION	1
+
+struct cxip_ki_peer_blob {
+	uint8_t  magic;		/* CXIP_KI_PEER_BLOB_MAGIC */
+	uint8_t  version;	/* CXIP_KI_PEER_BLOB_VERSION */
+	uint8_t  padding[2];	/* Align the subsequent fields */
+	uint16_t write_ptl_idx;	/* Portal table index for Puts */
+	uint16_t read_ptl_idx;	/* Portal table index for Gets */
+	uint64_t iova;		/* IOVA of the MR start */
+	uint64_t key;		/* MR key, as passed to fi_mr_reg() */
+	uint8_t  unused[8];	/* Fills a fi_cxi_ki_peer_info */
+} __attribute__((packed));
+
+_Static_assert(sizeof(struct cxip_ki_peer_blob) <=
+	       sizeof(struct fi_cxi_ki_peer_info),
+	       "KI peer blob must fit within the opaque payload");
+
+/*
+ * Helper: populate a fi_cxi_gpu_cmdq wrapper from a cxip_cmdq.
+ *
+ * Copies the command queue state the GPU needs into the wrapper and sets
+ * host pointers.  Device pointers are set later by the user via inline
+ * helpers.
+ */
+static void cxip_ki_fill_cmdq(struct fi_cxi_gpu_cmdq *out,
+			      struct cxip_cmdq *cmdq)
+{
+	struct cxi_cq *dev = cmdq->dev_cmdq;
+
+	/* Host pointers - user needs these for GPU registration */
+	out->hptr_buff = (void *)dev->cmds32;
+	out->hptr_mmio_db = dev->wp_addr;
+
+	/* Device pointers - not set yet (user calls set_buf/set_db) */
+	out->dptr_buff = NULL;
+	out->dptr_mmio_db = NULL;
+
+	/* Copy HW command queue state */
+	out->cq.cmds32 = dev->cmds32;
+	out->cq.wp_addr = dev->wp_addr;
+	out->cq.wp32 = dev->wp32;
+	out->cq.hw_wp32 = dev->hw_wp32;
+	out->cq.rp32 = dev->rp32;
+	out->cq.size32 = dev->size32;
+}
+
+/*
+ * cxip_ki_selective_completion_cb() - KI completion callback.
+ *
+ * KI commands must suppress send and success events, so this normally
+ * only runs for failures.  The request carries no per-operation state,
+ * so error entries reported here have flags 0 and carry the endpoint's
+ * context (the context passed to fi_endpoint()) as op_context.
+ */
+static int cxip_ki_selective_completion_cb(struct cxip_req *req,
+					   const union c_event *event)
+{
+	int event_rc;
+	int ret_err;
+	int ret;
+
+	event_rc = cxi_init_event_rc(event);
+
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		/*
+		 * When errors happen, send events can occur before the
+		 * put/get event.  The put/get event is authoritative and
+		 * is reported on its own, so the send event is dropped
+		 * whatever its return code, as cxip_rma_cb() does.
+		 * Reporting a failed send as well would post two error
+		 * entries for one command.
+		 */
+		CXIP_WARN(CXIP_UNEXPECTED_EVENT, cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+		ret = FI_SUCCESS;
+	} else if (event_rc == C_RC_OK) {
+		/*
+		 * The command left event_success_disable clear.  A
+		 * completion written here would carry no operation
+		 * information (flags 0, endpoint context), so drop the
+		 * event and warn.
+		 */
+		CXIP_WARN("Unexpected successful %s event\n",
+			  cxi_event_to_str(event));
+		ret = FI_SUCCESS;
+	} else {
+		ret_err = proverr2errno(event_rc);
+
+		CXIP_WARN("KI operation failed: %s rc=%s\n",
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+
+		ret = cxip_cq_req_error(req, 0, ret_err, cxi_event_rc(event),
+					NULL, 0, FI_ADDR_UNSPEC);
+	}
+
+	return ret;
+}
+
+/*
+ * cxip_ki_selective_completion_req() - Return the shared KI error
+ * completion request.
+ *
+ * Allocates on first use and caches on the EP.  Every KI command, of
+ * any operation type, stamps this same request as its user_ptr, so
+ * the resulting error completion carries no operation-type
+ * information (flags is 0).  The request belongs to the TXC event
+ * queue and is reclaimed with its request pool when cxip_txc_disable()
+ * calls cxip_evtq_fini().
+ *
+ * Takes ep_obj->lock: the request pool is shared with the data path,
+ * and the application may call this concurrently with progress.
+ *
+ * Returns NULL if no request could be allocated.
+ */
+static struct cxip_req *
+cxip_ki_selective_completion_req(struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_req **cached = &ep_obj->ki_selective_completion_req;
+	struct cxip_req *req;
+
+	ofi_genlock_lock(&ep_obj->lock);
+	if (!*cached) {
+		req = cxip_evtq_req_alloc(&ep_obj->txc->tx_evtq, 0,
+					  ep_obj->txc);
+		if (!req) {
+			CXIP_WARN("Failed to allocate KI completion request\n");
+		} else {
+			req->cb = cxip_ki_selective_completion_cb;
+			req->context = (uint64_t)ep_obj->txc->context;
+			req->flags = 0;
+			req->addr = FI_ADDR_UNSPEC;
+
+			*cached = req;
+		}
+	}
+	req = *cached;
+	ofi_genlock_unlock(&ep_obj->lock);
+
+	return req;
+}
+
+/*
+ * cxip_ki_get_gpu_ep_info() - Get GPU-ready EP info in one call.
+ *
+ * Replaces: get_tx_cmdq_info + get_trig_cmdq_info + get_ep_info + get_cntr_info
+ */
+static int cxip_ki_get_gpu_ep_info(struct fid *fid,
+				   struct fi_cxi_gpu_ep_info *gpu_ep)
+{
+	struct cxip_ep *ep;
+
+	if (!fid || !gpu_ep)
+		return -FI_EINVAL;
+
+	if (fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct cxip_ep, ep.fid);
+
+	if (!ep->ep_obj->enabled) {
+		CXIP_WARN("EP must be enabled before getting GPU EP info\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	memset(gpu_ep, 0, sizeof(*gpu_ep));
+
+	/* TX command queue */
+	if (!ep->ep_obj->txq || !ep->ep_obj->txq->dev_cmdq) {
+		CXIP_WARN("TX cmdq not available\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	cxip_ki_fill_cmdq(&gpu_ep->tx_cmdq, ep->ep_obj->txq);
+
+	/*
+	 * Triggered command queue (optional).
+	 *
+	 * Left zero-filled when no triggered buffer was supplied via
+	 * FI_OPT_CXI_SET_KI_EP_HINTS_1.  Callers detect this by testing
+	 * cq.wp_addr (or hptr_mmio_db) for NULL.
+	 */
+	if (ep->ep_obj->ki_trig_cmdq && ep->ep_obj->ki_trig_cmdq->dev_cmdq) {
+		cxip_ki_fill_cmdq(&gpu_ep->trig_cmdq, ep->ep_obj->ki_trig_cmdq);
+	} else {
+		CXIP_DBG("KI trig cmdq not present, trig_cmdq left zeroed\n");
+	}
+
+	/*
+	 * EQ number from the TXC's TX event queue (cxip_txc.tx_evtq), not
+	 * the similarly-named control event queue (cxip_ctrl.tx_evtq).
+	 */
+	if (ep->ep_obj->txc && ep->ep_obj->txc->tx_evtq.eq) {
+		gpu_ep->eqn = cxip_evtq_eqn(&ep->ep_obj->txc->tx_evtq);
+	} else {
+		gpu_ep->eqn = C_EQ_NONE;
+		CXIP_DBG("KI: no TX event queue, eqn=C_EQ_NONE\n");
+	}
+
+	/*
+	 * Error reporting handle.
+	 *
+	 * KI commands suppress success events, so this is used only when
+	 * an operation fails.  Left zero when the endpoint has no event
+	 * queue to report against, in which case a failure is visible only
+	 * through the counter's failure count.
+	 */
+	if (gpu_ep->eqn != C_EQ_NONE) {
+		struct cxip_req *req;
+
+		req = cxip_ki_selective_completion_req(ep->ep_obj);
+		if (!req)
+			return -FI_ENOMEM;
+
+		gpu_ep->user_ptr = (uint64_t)req;
+	} else {
+		CXIP_DBG("KI: no event queue, error reporting disabled\n");
+	}
+
+	/* Counter number from the EP's bound send counter. */
+	if (ep->ep_obj->txc && ep->ep_obj->txc->send_cntr &&
+	    ep->ep_obj->txc->send_cntr->ct) {
+		gpu_ep->ctn = ep->ep_obj->txc->send_cntr->ct->ctn;
+	} else {
+		gpu_ep->ctn = C_CT_NONE;
+		CXIP_DBG("KI: no bound send counter, ctn=C_CT_NONE\n");
+	}
+
+	/* PID bits */
+	gpu_ep->pid_bits = ep->ep_obj->domain->iface->info->pid_bits;
+
+	CXIP_DBG("KI get_gpu_ep_info: eqn=%u ctn=%u pid_bits=%u\n",
+		 gpu_ep->eqn, gpu_ep->ctn, gpu_ep->pid_bits);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ki_get_peer_info() - Get opaque blob for PMI exchange.
+ *
+ * Encodes MR's {iova, write_ptl_idx, read_ptl_idx} into an
+ * opaque blob that can be exchanged via PMI_Allgather.
+ */
+static int cxip_ki_get_peer_info(struct fid *ep_fid, struct fid *fid,
+				 struct fi_cxi_ki_peer_info *info)
+{
+	struct cxip_ki_peer_blob *blob;
+	struct cxip_ep *ep;
+	struct cxip_mr *mr;
+
+	if (!ep_fid || !fid || !info)
+		return -FI_EINVAL;
+
+	if (ep_fid->fclass != FI_CLASS_EP || fid->fclass != FI_CLASS_MR)
+		return -FI_EINVAL;
+
+	ep = container_of(ep_fid, struct cxip_ep, ep.fid);
+	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
+
+	/* Peers reach the MR through the PID of the EP it is bound to,
+	 * so the blob is only valid alongside that EP's address.
+	 */
+	if (!mr->ep || mr->ep->ep_obj != ep->ep_obj) {
+		CXIP_WARN("MR not bound to EP\n");
+		return -FI_EINVAL;
+	}
+
+	/* Only a remotely accessible MR gets a key, and so portal indexes,
+	 * and they are assigned at enable.
+	 */
+	if (!(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE))) {
+		CXIP_WARN("MR has no remote access\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	if (!mr->enabled) {
+		CXIP_WARN("MR not enabled\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	if (!mr->md || !mr->md->md) {
+		CXIP_WARN("MR not mapped\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	memset(info, 0, sizeof(*info));
+
+	blob = (struct cxip_ki_peer_blob *)info->opaque;
+
+	blob->magic = CXIP_KI_PEER_BLOB_MAGIC;
+	blob->version = CXIP_KI_PEER_BLOB_VERSION;
+	blob->write_ptl_idx = cxip_generic_mr_key_to_ptl_idx(mr->domain,
+							     mr->key, true);
+	blob->read_ptl_idx = cxip_generic_mr_key_to_ptl_idx(mr->domain,
+							    mr->key, false);
+	/* The IOVA of the MR itself, as linked in its LE, not of the
+	 * possibly larger cached MD that backs it.
+	 */
+	blob->iova = mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0;
+	blob->key = mr->key;
+
+	CXIP_DBG("KI get_peer_info: iova=0x%lx wptl=%u rptl=%u key=0x%lx\n",
+		 blob->iova, blob->write_ptl_idx, blob->read_ptl_idx,
+		 blob->key);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ki_get_gpu_target_info() - Bulk resolve fi_addr_t → NID/PID.
+ *
+ * Pure addressing - no DFA, no MR info.  A command carries no VNI; the
+ * KI command queues send on the EP's VNI, so per-peer VNIs
+ * (FI_AV_AUTH_KEY) are not supported.
+ */
+static int cxip_ki_get_gpu_target_info(struct fid *fid,
+				       fi_addr_t *addrs,
+				       int npes,
+				       struct fi_cxi_gpu_target_info *targets)
+{
+	struct cxip_ep *ep;
+	struct cxip_addr caddr;
+	int i, ret;
+
+	if (!fid || !addrs || !targets || npes <= 0)
+		return -FI_EINVAL;
+
+	if (fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct cxip_ep, ep.fid);
+
+	if (ep->ep_obj->av_auth_key) {
+		CXIP_WARN("KI requires a single-VNI EP; "
+			  "FI_AV_AUTH_KEY is not supported\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (!ep->ep_obj->av) {
+		CXIP_WARN("EP has no bound AV\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	for (i = 0; i < npes; i++) {
+		ret = cxip_av_lookup_addr_checked(ep->ep_obj->av, addrs[i],
+						  &caddr);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to lookup fi_addr %lu: %d\n",
+				  addrs[i], ret);
+			return ret;
+		}
+
+		targets[i].nid = caddr.nic;
+		targets[i].pid = caddr.pid;
+	}
+
+	CXIP_DBG("KI get_gpu_target_info: resolved %d targets\n", npes);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ki_get_gpu_remote_mrs() - Decode remote MRs from peer blobs.
+ *
+ * Extracts {iova, write_ptl_idx, read_ptl_idx} from each peer
+ * blob and derives from its MR key the values an initiator needs to
+ * target the MR: the DMA match bits (used only by a standard MR's
+ * matching LE), the offset to add to every MR-relative remote offset
+ * (nonzero for a cached provider key), and whether the MR must be
+ * targeted with unrestricted commands.  DFA is NOT computed here -
+ * GPU computes it on-device.
+ */
+static int cxip_ki_get_gpu_remote_mrs(struct fid *fid,
+				      const struct fi_cxi_ki_peer_info *peer_info,
+				      int npes,
+				      struct fi_cxi_gpu_remote_mr *remote_mrs)
+{
+	const struct cxip_ki_peer_blob *blob;
+	struct cxip_mr_key key;
+	struct cxip_ep *ep;
+	int i;
+
+	if (!fid || !peer_info || !remote_mrs || npes <= 0)
+		return -FI_EINVAL;
+
+	if (fid->fclass != FI_CLASS_EP)
+		return -FI_EINVAL;
+
+	ep = container_of(fid, struct cxip_ep, ep.fid);
+
+	for (i = 0; i < npes; i++) {
+		blob = (const struct cxip_ki_peer_blob *)peer_info[i].opaque;
+
+		if (blob->magic != CXIP_KI_PEER_BLOB_MAGIC ||
+		    blob->version != CXIP_KI_PEER_BLOB_VERSION) {
+			CXIP_WARN("Peer blob %d has magic 0x%02x version %u, "
+				  "expected 0x%02x version %u\n", i,
+				  blob->magic, blob->version,
+				  CXIP_KI_PEER_BLOB_MAGIC,
+				  CXIP_KI_PEER_BLOB_VERSION);
+			return -FI_EINVAL;
+		}
+
+		key.raw = blob->key;
+
+		memset(&remote_mrs[i], 0, sizeof(remote_mrs[i]));
+		remote_mrs[i].iova = blob->iova;
+		remote_mrs[i].write_ptl_idx = blob->write_ptl_idx;
+		remote_mrs[i].read_ptl_idx = blob->read_ptl_idx;
+		remote_mrs[i].match_bits = CXIP_KEY_MATCH_BITS(blob->key);
+		remote_mrs[i].offset_adjust = key.cached ? key.lac_off : 0;
+		remote_mrs[i].unrestricted =
+			!cxip_generic_is_mr_key_opt(blob->key) ||
+			cxip_generic_is_mr_key_events(ep->ep_obj->caps,
+						      blob->key);
+	}
+
+	CXIP_DBG("KI get_gpu_remote_mrs: decoded %d remote MRs\n", npes);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ki_get_gpu_mr_info() - Get local MR info for GPU access.
+ *
+ * Returns the LAC and the IOVA of buf, which must lie within the MR.
+ */
+static int cxip_ki_get_gpu_mr_info(struct fid *ep_fid, struct fid *fid,
+				   void *buf,
+				   struct fi_cxi_gpu_mr_info *info)
+{
+	struct cxip_ep *ep;
+	struct cxip_mr *mr;
+
+	if (!ep_fid || !fid || !buf || !info)
+		return -FI_EINVAL;
+
+	if (ep_fid->fclass != FI_CLASS_EP || fid->fclass != FI_CLASS_MR)
+		return -FI_EINVAL;
+
+	ep = container_of(ep_fid, struct cxip_ep, ep.fid);
+	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
+
+	/* The LAC and IOVA are only meaningful on the EP's LNI. */
+	if (mr->domain != ep->ep_obj->domain) {
+		CXIP_WARN("MR domain does not match EP\n");
+		return -FI_EINVAL;
+	}
+
+	if (!mr->md || !mr->md->md) {
+		CXIP_WARN("MR not mapped\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	if ((uintptr_t)buf < (uintptr_t)mr->buf ||
+	    (uintptr_t)buf >= (uintptr_t)mr->buf + mr->len) {
+		CXIP_WARN("buf %p outside MR [%p, %p)\n", buf, mr->buf,
+			  (void *)((uintptr_t)mr->buf + mr->len));
+		return -FI_EINVAL;
+	}
+
+	info->buf = buf;
+	info->iova = CXI_VA_TO_IOVA(mr->md->md, buf);
+	info->lac = mr->md->md->lac;
+	info->flags = 0;
+
+	CXIP_DBG("KI get_gpu_mr_info: buf=%p iova=0x%lx lac=%u\n",
+		 buf, info->iova, info->lac);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ki_get_cntr_number() - Get HW counter number from a counter FID.
+ */
+static int cxip_ki_get_cntr_number(struct fid *ep_fid, struct fid *fid,
+				   uint32_t *ctn)
+{
+	struct cxip_ep *ep;
+	struct cxip_cntr *cntr;
+
+	if (!ep_fid || !fid || !ctn)
+		return -FI_EINVAL;
+
+	if (ep_fid->fclass != FI_CLASS_EP || fid->fclass != FI_CLASS_CNTR)
+		return -FI_EINVAL;
+
+	ep = container_of(ep_fid, struct cxip_ep, ep.fid);
+	cntr = container_of(fid, struct cxip_cntr, cntr_fid);
+
+	/* The counter number is only meaningful on the EP's LNI. */
+	if (cntr->domain != ep->ep_obj->domain) {
+		CXIP_WARN("Counter domain does not match EP\n");
+		return -FI_EINVAL;
+	}
+
+	if (!cntr->ct)
+		return -FI_EOPBADSTATE;
+
+	*ctn = cntr->ct->ctn;
+
+	CXIP_DBG("KI get_cntr_number: ctn=%u\n", *ctn);
+
+	return FI_SUCCESS;
+}
+
+/* KI unified operations structure */
+static struct fi_cxi_ki_ops cxip_ki_ops = {
+	.get_gpu_ep_info = cxip_ki_get_gpu_ep_info,
+	.get_peer_info = cxip_ki_get_peer_info,
+	.get_gpu_target_info = cxip_ki_get_gpu_target_info,
+	.get_gpu_remote_mrs = cxip_ki_get_gpu_remote_mrs,
+	.get_gpu_mr_info = cxip_ki_get_gpu_mr_info,
+	.get_cntr_number = cxip_ki_get_cntr_number,
+};
+
+/*
+ * cxip_ep_ops_open() - Open provider-specific operations for EP.
+ *
+ * No flags are defined; returns -FI_ENOSYS for an unknown ops name so
+ * that an application built against a newer interface can detect an
+ * older provider.
+ */
+static int cxip_ep_ops_open(struct fid *fid, const char *name,
+			    uint64_t flags, void **ops, void *context)
+{
+	if (!name || !ops || flags)
+		return -FI_EINVAL;
+
+	if (strcmp(name, FI_CXI_KI_OPS_1) == 0) {
+		*ops = &cxip_ki_ops;
+		return FI_SUCCESS;
+	}
+
+	return -FI_ENOSYS;
+}
+
 struct fi_ops cxip_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_ep_close,
 	.bind = cxip_ep_bind,
 	.control = cxip_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = cxip_ep_ops_open,
 };
 
 int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,

@@ -1,11 +1,244 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2020-2024 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020-2024,2026 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _FI_CXI_EXT_H_
 #define _FI_CXI_EXT_H_
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#include <rdma/fabric.h>
+
+/*
+ * CXI Provider Kernel Initiated (KI) Communication Extensions
+ * These extensions enable GPU-initiated network operations by exposing
+ * hardware metadata that GPU kernels need to directly post network commands.
+ */
+
+/*
+ * A GPU-accessible buffer to hold one KI command queue.
+ *
+ * A NULL buf means no buffer is supplied for that queue; len must then
+ * be 0.
+ * For a supplied buffer the dmabuf fields must agree with is_host_mem:
+ * a host buffer must have dmabuf_fd -1 and dmabuf_offset 0; a device
+ * buffer has dmabuf_fd >= 0 (a dmabuf) or dmabuf_fd -1 with
+ * dmabuf_offset 0.
+ */
+struct fi_cxi_ki_cmdq_buf {
+	void *buf;
+	size_t len;
+	bool is_host_mem;		/* true if buf is in host memory */
+	int dmabuf_fd;			/* dmabuf fd, or -1 if not dmabuf */
+	unsigned long dmabuf_offset;	/* offset within dmabuf */
+};
+
+/*
+ * EP hints for GPU-accessible command queue buffers.
+ *
+ * Set via fi_control(FI_OPT_CXI_SET_KI_EP_HINTS_1) before fi_enable().
+ * The _1 suffix versions the layout of this struct, since fi_control()
+ * is not covered by the fi_cxi_ki_ops version: the layout is frozen,
+ * and a future change will add a new struct and a new
+ * FI_OPT_CXI_SET_KI_EP_HINTS_<n> command rather than alter this one.
+ * Placing a command queue in a user-provided buffer requires a libcxi
+ * with cxil_alloc_buf_cmdq(); without it fi_control() returns
+ * -FI_ENOSYS when either buffer is non-NULL.
+ *
+ * flags is reserved and must be 0.  fi_control() returns -FI_EINVAL
+ * for a non-zero flags or an invalid buffer description.
+ */
+struct fi_cxi_ki_ep_hints {
+	struct fi_cxi_ki_cmdq_buf tx_cmdq;	/* TX command queue */
+	struct fi_cxi_ki_cmdq_buf trig_cmdq;	/* Triggered command queue */
+
+	/* Reserved for future use; must be 0 */
+	uint64_t flags;
+};
+
+/*
+ * Forward declarations for GPU data structures.
+ * Full definitions are in fi_cxi_gpu_ext.h.
+ */
+struct fi_cxi_gpu_ep_info;
+struct fi_cxi_gpu_target_info;
+struct fi_cxi_gpu_remote_mr;
+struct fi_cxi_gpu_mr_info;
+
+/*
+ * Opaque peer exchange blob for PMI.
+ * Encodes: iova, write_ptl_idx, read_ptl_idx, and the MR key,
+ * behind a magic byte and a version. User exchanges via PMI_Allgather,
+ * then passes to get_gpu_target_info / get_gpu_remote_mrs.
+ */
+struct fi_cxi_ki_peer_info {
+	uint8_t opaque[32];
+};
+
+/*
+ * KI Ops — Structure containing function pointers for obtaining the resources
+ * necessary for kernel-initiated operations.
+ * Obtained via:
+ *   fi_open_ops(&ep->fid, FI_CXI_KI_OPS_1, 0, (void **)&ki_ops, NULL)
+ * No flags are defined; flags must be 0.
+ *
+ * The name carries the KI interface version, which covers this
+ * structure and every fi_cxi_gpu_* structure in fi_cxi_gpu_ext.h.  The
+ * version is bumped on any incompatible change so that a caller built
+ * against an older interface gets -FI_ENOSYS instead of a mismatched
+ * layout.
+ */
+#define FI_CXI_KI_OPS_1 "cxi_ki_ops_v1"
+
+struct fi_cxi_ki_ops {
+
+	/*
+	 * get_gpu_ep_info — Get GPU-ready EP info.
+	 *
+	 * Provider fills fi_cxi_gpu_ep_info from EP + its bound counter.
+	 * Sets hptr_buff and hptr_mmio_db in each cmdq wrapper.
+	 * User then calls set_buf/set_db helpers to set device pointers.
+	 * May be called more than once; every call returns the same
+	 * user_ptr.
+	 *
+	 * The TX cmdq is always populated; the call fails if it is
+	 * unavailable.  The triggered cmdq is optional: if no triggered
+	 * buffer was supplied via FI_OPT_CXI_SET_KI_EP_HINTS_1 the call
+	 * still succeeds and gpu_ep->trig_cmdq is left zero-filled, with
+	 * hptr_buff, hptr_mmio_db, cq.cmds32, and cq.wp_addr all NULL.
+	 * Test cq.wp_addr (or hptr_mmio_db) for NULL to detect this;
+	 * hptr_buff and cq.cmds32 are also NULL for a present
+	 * device-memory queue.
+	 *
+	 * gpu_ep->ctn is C_CT_NONE (0) when the EP has no bound send
+	 * counter, and gpu_ep->eqn is C_EQ_NONE (0) when it has no TX
+	 * event queue.  gpu_ep->user_ptr is 0 when eqn is C_EQ_NONE; a
+	 * failure is then visible only through the counter's failure
+	 * count.
+	 *
+	 * Every KI command must set event_send_disable and
+	 * event_success_disable.  Completions are counter-only;
+	 * gpu_ep->eqn and gpu_ep->user_ptr exist so that failures reach
+	 * the EP's completion queue as error entries.  The TX event
+	 * queue is sized for host operations and drained only by host
+	 * progress, so commands that post success events can overflow
+	 * it, which is fatal.
+	 *
+	 * @ep_fid  : Enabled endpoint FID
+	 * @gpu_ep  : Output — caller-allocated fi_cxi_gpu_ep_info
+	 * Returns  : 0 on success, -FI_EOPBADSTATE if the EP is not
+	 *            enabled, -FI_EOPNOTSUPP if it has no TX cmdq,
+	 *            -FI_ENOMEM if the error reporting handle cannot be
+	 *            allocated, other negative errno on failure
+	 */
+	int (*get_gpu_ep_info)(struct fid *ep_fid,
+			       struct fi_cxi_gpu_ep_info *gpu_ep);
+
+	/*
+	 * get_peer_info — Get opaque blob for PMI exchange.
+	 *
+	 * Encodes MR's {iova, write_ptl_idx, read_ptl_idx, key}
+	 * into opaque blob. User exchanges via PMI_Allgather, then
+	 * passes to get_gpu_target_info / get_gpu_remote_mrs.
+	 *
+	 * @ep_fid  : Endpoint FID the MR is bound to
+	 * @mr_fid  : Memory region FID, enabled with fi_mr_enable()
+	 * @info    : Output — opaque peer blob
+	 * Returns  : 0 on success, -FI_EINVAL if the MR is not bound to
+	 *            ep_fid, -FI_EOPBADSTATE if the MR is not enabled,
+	 *            not mapped or has neither FI_REMOTE_READ nor
+	 *            FI_REMOTE_WRITE access, other negative errno on
+	 *            failure
+	 */
+	int (*get_peer_info)(struct fid *ep_fid,
+			     struct fid *mr_fid,
+			     struct fi_cxi_ki_peer_info *info);
+
+	/*
+	 * get_gpu_target_info — Resolve all target addresses.
+	 *
+	 * Fills array of fi_cxi_gpu_target_info (NID/PID) from fi_addr_t
+	 * array. Pure addressing, no DFA, no MR info. A command carries
+	 * no VNI; the KI command queues send on the endpoint's VNI.
+	 *
+	 * @ep_fid  : Enabled endpoint FID (accesses bound AV)
+	 * @addrs   : Array of fi_addr_t from fi_av_insert [npes]
+	 * @npes    : Number of PEs
+	 * @targets : Output — caller-allocated array [npes]
+	 * Returns  : 0 on success, -FI_EOPNOTSUPP if the endpoint uses
+	 *            FI_AV_AUTH_KEY, -FI_EOPBADSTATE if it has no bound
+	 *            AV, -FI_EINVAL if npes is not positive or an address
+	 *            is not an inserted AV entry, other negative errno on
+	 *            failure
+	 */
+	int (*get_gpu_target_info)(struct fid *ep_fid,
+				   fi_addr_t *addrs,
+				   int npes,
+				   struct fi_cxi_gpu_target_info *targets);
+
+	/*
+	 * get_gpu_remote_mrs — Decode remote MRs from peer blobs.
+	 *
+	 * Extracts {iova, write_ptl_idx, read_ptl_idx} from each peer
+	 * blob and derives match_bits, offset_adjust and unrestricted from
+	 * the MR key it carries. DFA is NOT computed here — GPU computes it
+	 * on-device from target(NID/PID) + the appropriate ptl_idx +
+	 * ep.pid_bits. Pure scalars — no host-to-device translation needed.
+	 *
+	 * @ep_fid    : Enabled endpoint FID
+	 * @peer_info : Array of opaque blobs from PMI exchange [npes]
+	 * @npes      : Number of PEs
+	 * @remote_mrs: Output — caller-allocated array [npes]
+	 * Returns    : 0 on success, -FI_EINVAL if a blob was not produced
+	 *              by a compatible get_peer_info, other negative errno
+	 *              on failure
+	 */
+	int (*get_gpu_remote_mrs)(struct fid *ep_fid,
+				  const struct fi_cxi_ki_peer_info *peer_info,
+				  int npes,
+				  struct fi_cxi_gpu_remote_mr *remote_mrs);
+
+	/*
+	 * get_gpu_mr_info — Get local MR info for GPU access.
+	 *
+	 * Returns the LAC and the IOVA of buf. A device command builder
+	 * forms a local address as iova + offset, where offset is
+	 * relative to buf.
+	 *
+	 * @ep_fid : Endpoint FID; the MR must be in its domain
+	 * @mr_fid : Memory region FID
+	 * @buf    : Pointer within the MR (stored as-is in output)
+	 * @info   : Output — caller-allocated fi_cxi_gpu_mr_info
+	 * Returns : 0 on success, -FI_EINVAL on a domain mismatch or if
+	 *           buf lies outside the MR, -FI_EOPBADSTATE if the MR is
+	 *           not mapped, other negative errno on failure
+	 */
+	int (*get_gpu_mr_info)(struct fid *ep_fid,
+			       struct fid *mr_fid,
+			       void *buf,
+			       struct fi_cxi_gpu_mr_info *info);
+
+	/*
+	 * get_cntr_number — Get HW counter number from a counter FID.
+	 *
+	 * Returns the hardware counter number for a standalone counter
+	 * (e.g. a signal counter not bound through the EP).
+	 *
+	 * @ep_fid   : Endpoint FID; the counter must be in its domain
+	 * @cntr_fid : Counter FID
+	 * @ctn      : Output — hardware counter number
+	 * Returns   : 0 on success, -FI_EINVAL on a domain mismatch,
+	 *             -FI_EOPBADSTATE if the counter has no hardware
+	 *             counter, other negative errno on failure
+	 */
+	int (*get_cntr_number)(struct fid *ep_fid,
+			      struct fid *cntr_fid,
+			      uint32_t *ctn);
+};
 
 /* CXI provider specific NIC attributes. This information is returned in
  * fi_info::nid::prov_attr.
@@ -63,6 +296,8 @@ enum {
 	FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE,		/* size_t */
 	FI_OPT_CXI_GET_RNR_APPEND_RETRY_ATTEMPTS,       /* uint64_t */
 
+	/* Set KI (GPU-initiated) EP hints; struct fi_cxi_ki_ep_hints */
+	FI_OPT_CXI_SET_KI_EP_HINTS_1,
 };
 
 /*

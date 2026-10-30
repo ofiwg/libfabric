@@ -98,3 +98,19 @@ tests:
        FI_CXI_RDZV_GET_MIN: 0,
        FI_CXI_RDZV_THRESHOLD: 2048},
      csrs: null}
+
+  - {description: "Run KI hints tests",
+     filter: "ki_hints/*",
+     runtime_parameters: null,
+     csrs: null}
+
+  - {description: "Run KI info tests",
+     filter: "ki_info/*",
+     runtime_parameters: null,
+     csrs: null}
+
+  - {description: "Run KI RMA tests",
+     filter: "ki_rma*/*",
+     runtime_parameters: null,
+     csrs: null}
+

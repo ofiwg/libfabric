@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2018,2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2020,2026 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_TEST_COMMON_H_

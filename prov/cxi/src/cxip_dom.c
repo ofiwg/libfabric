@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018,2020-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2020-2023,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -61,7 +61,7 @@ static int cxip_domain_cmdq_alloc(struct cxip_domain *dom,
 	cq_opts.count = 4 * dom->tx_size;
 
 	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts, vni, tc,
-			      CXI_TC_TYPE_DEFAULT, &cmdq->cmdq);
+			      CXI_TC_TYPE_DEFAULT, NULL, &cmdq->cmdq);
 	if (ret) {
 		CXIP_WARN("Failed to allocate cmdq: %d\n", ret);
 		goto err_free_mem;

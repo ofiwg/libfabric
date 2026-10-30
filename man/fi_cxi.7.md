@@ -1682,6 +1682,287 @@ functionality.
 
 Guidance is to default amo_remap_to_pcie_fadd to 10.
 
+## Kernel-Initiated (KI) Communication
+
+The CXI provider supports kernel-initiated communication, which allows GPU
+kernels to post NIC commands directly without CPU involvement on the critical
+path. The host-side API is declared in `fi_cxi_ext.h`; the data structures
+shared with GPU kernels and the host-side command queue helpers are declared in
+`fi_cxi_gpu_ext.h`. Device-side command builders are not part of libfabric and
+are provided by a separate library. Allocating a command queue in a
+user-provided buffer requires a libcxi that provides `cxil_alloc_buf_cmdq`() at
+runtime and libfabric built against headers that declare it; without both,
+`fi_control`() rejects hints that supply a buffer with -FI_ENOSYS. It also
+requires a cxi-driver that implements `CXI_OP_CQ_ALLOC_BUF`. The provider
+cannot detect the driver version in advance; on an older driver the allocation
+fails when the endpoint is enabled and `fi_enable`() returns -FI_EDOMAIN.
+
+An endpoint is prepared for KI use by passing a `struct fi_cxi_ki_ep_hints` via
+`fi_control`() with command *FI_OPT_CXI_SET_KI_EP_HINTS_1*, before
+`fi_enable`(). `fi_control`() returns `-FI_EOPBADSTATE` if the endpoint is
+already enabled. The hints supply GPU-accessible buffers for the transmit (TX)
+and triggered command queues.
+
+```c
+struct fi_cxi_ki_cmdq_buf {
+	void          *buf;            /* Command queue buffer */
+	size_t         len;
+	bool           is_host_mem;    /* true if buf is host memory */
+	int            dmabuf_fd;      /* dmabuf fd, or -1 */
+	unsigned long  dmabuf_offset;
+};
+
+struct fi_cxi_ki_ep_hints {
+	struct fi_cxi_ki_cmdq_buf tx_cmdq;    /* TX command queue */
+	struct fi_cxi_ki_cmdq_buf trig_cmdq;  /* Triggered command queue */
+	uint64_t                  flags;      /* Reserved; must be 0 */
+};
+
+ret = fi_control(&ep->fid, FI_OPT_CXI_SET_KI_EP_HINTS_1, &hints);
+```
+
+The triggered command queue buffer is optional; set `buf = NULL` and `len = 0`
+if one isn't desired. Buffers must be page aligned and physically
+contiguous. A buffer's length must be a power-of-two multiple of the page size,
+at least one page and at most 4 MiB (65536 64-byte commands). The provider
+rejects other lengths with `-FI_EINVAL` because the kernel sizes the command
+queue by rounding the length up to a power-of-two number of pages and maps that
+rounded length starting at the buffer; a shorter buffer would be overrun.
+
+For a supplied buffer the dmabuf fields must agree with `is_host_mem`:
+a host-memory buffer must have `dmabuf_fd` -1 and `dmabuf_offset` 0; a
+device-memory buffer is either a dmabuf (`dmabuf_fd` >= 0) or not
+(`dmabuf_fd` -1 with `dmabuf_offset` 0). `flags` is reserved and must
+be 0. `fi_control`() returns `-FI_EINVAL` otherwise.
+
+A buffer in device memory (`is_host_mem` false) has no host mapping.
+The provider returns it with `hptr_buff` and `cq.cmds32` set to NULL,
+so the caller must supply the device address with
+`fi_cxi_ki_cmdq_set_buf`() before the GPU uses the queue.
+The command queue status area (`struct c_cq_status`, at the start of
+the buffer) is initialized only for host memory; for a device-memory
+buffer the caller must initialize it before first use, setting
+`rd_ptr` to `C_CQ_FIRST_WR_PTR` and `return_code` to `C_RC_OK`.
+
+The provider cannot check physical contiguity; the kernel detects it when the
+command queue is allocated during `fi_enable`(), which returns `-FI_EDOMAIN`
+if the kernel rejects either buffer.
+
+An endpoint given a TX command queue buffer is driven by the GPU and is not
+usable for host data transfers. The provider installs no-op message, tagged,
+RMA and atomic operations on such an endpoint, and `fi_control`() returns
+`-FI_EINVAL` if the endpoint has the *FI_MSG*, *FI_TAGGED* or
+*FI_COLLECTIVE* capability, since those let the provider emit
+commands on the command queue.
+
+KI requires a single-VNI endpoint. The KI command queues are allocated for
+the endpoint's VNI and a GPU cannot switch them to another, so an endpoint
+whose domain was opened with *FI_AV_AUTH_KEY* (per-peer VNIs) is not
+supported; `fi_control`() returns `-FI_EOPNOTSUPP` for such an endpoint.
+
+The command queue buffers belong to the NIC from `fi_enable`() until
+`fi_close`() of the endpoint returns; the buffers must not be freed, unmapped
+or reused before then. Before calling `fi_close`(), the application must stop
+every GPU kernel that issues commands on the endpoint and wait for any pending
+commands to complete.
+
+After `fi_enable`(), the KI operations are obtained with:
+
+```c
+struct fi_cxi_ki_ops *ki_ops;
+
+ret = fi_open_ops(&ep->fid, FI_CXI_KI_OPS_1, 0, (void **)&ki_ops, NULL);
+```
+
+No flags are defined; `fi_open_ops`() returns `-FI_EINVAL` if *flags* is
+non-zero. The name carries the KI interface version, which covers `struct
+fi_cxi_ki_ops` and every `fi_cxi_gpu_*` structure. It is bumped on any
+incompatible change, so an application built against an older interface gets
+`-FI_ENOSYS` rather than a mismatched layout.
+
+The following endpoint extensions are defined:
+
+```c
+struct fi_cxi_ki_ops {
+	/* Populate a fi_cxi_gpu_ep_info with command queue pointers, counter
+	 * number, and PID bits from an enabled endpoint. Called after
+	 * fi_enable and before GPU kernel launch; may be called more than
+	 * once. Returns -FI_EOPBADSTATE if the endpoint is not enabled,
+	 * -FI_EOPNOTSUPP if it has no TX command queue and -FI_ENOMEM if the
+	 * error reporting handle cannot be allocated.
+	 */
+	int (*get_gpu_ep_info)(struct fid *ep_fid,
+	                       struct fi_cxi_gpu_ep_info *gpu_ep);
+
+	/* Encode local MR credentials (IOVA, LAC, portal indices, MR key)
+	 * into an opaque 32-byte blob for PMI allgather exchange with remote
+	 * PEs. The MR must be bound to ep_fid (returns -FI_EINVAL otherwise)
+	 * and enabled, mapped and remotely accessible (returns
+	 * -FI_EOPBADSTATE otherwise).
+	 */
+	int (*get_peer_info)(struct fid *ep_fid,
+	                     struct fid *mr_fid,
+	                     struct fi_cxi_ki_peer_info *info);
+
+	/* Resolve an array of fi_addr_t handles (from fi_av_insert) to
+	 * per-peer target structs containing NID and PID. A command
+	 * carries no VNI; the KI command queues send on the endpoint's
+	 * VNI. Returns -FI_EOPNOTSUPP if the endpoint uses FI_AV_AUTH_KEY,
+	 * -FI_EOPBADSTATE if it has no bound AV and -FI_EINVAL if npes is
+	 * not positive or an address is not an inserted AV entry.
+	 */
+	int (*get_gpu_target_info)(struct fid *ep_fid,
+	                           fi_addr_t *addrs,
+	                           int npes,
+	                           struct fi_cxi_gpu_target_info *targets);
+
+	/* Decode peer blobs obtained from get_peer_info and exchanged via PMI
+	 * into per-peer remote MR structs: IOVA, LAC, portal indices, and the
+	 * match bits, remote offset adjustment and restricted/unrestricted
+	 * requirement derived from the MR key. A Put or Get sets match_bits
+	 * as given and remote_offset = offset_adjust + the MR-relative
+	 * offset. Returns -FI_EINVAL for a blob that was not produced by a
+	 * compatible get_peer_info.
+	 */
+	int (*get_gpu_remote_mrs)(struct fid *ep_fid,
+	                          const struct fi_cxi_ki_peer_info *peer_info,
+	                          int npes,
+	                          struct fi_cxi_gpu_remote_mr *remote_mrs);
+
+	/* Return the LAC and the IOVA of buf, a pointer within a local
+	 * memory region. A GPU kernel forms a local address as
+	 * iova + offset, where offset is relative to buf. The MR must be
+	 * in the domain of ep_fid and buf must lie within the MR; returns
+	 * -FI_EINVAL otherwise. Returns -FI_EOPBADSTATE if the MR is not
+	 * mapped.
+	 */
+	int (*get_gpu_mr_info)(struct fid *ep_fid,
+	                       struct fid *mr_fid,
+	                       void *buf,
+	                       struct fi_cxi_gpu_mr_info *info);
+
+	/* Return the hardware counter number for a standalone counter FID,
+	 * for a GPU kernel that references a counter directly by number.
+	 * The counter must be in the domain of ep_fid; returns -FI_EINVAL
+	 * otherwise. Returns -FI_EOPBADSTATE if the counter has no hardware
+	 * counter.
+	 */
+	int (*get_cntr_number)(struct fid *ep_fid,
+	                       struct fid *cntr_fid,
+	                       uint32_t *ctn);
+};
+```
+
+All `fi_cxi_ki_ops` functions write their output into caller-allocated host
+memory; none populate GPU memory directly. The caller copies the populated
+output to the device (e.g., via `hipMemcpy`) before passing it to a GPU
+kernel.
+
+`get_gpu_ep_info` populates a `struct fi_cxi_gpu_ep_info`:
+
+```c
+struct fi_cxi_gpu_ep_info {
+	struct fi_cxi_gpu_cmdq tx_cmdq;    /* TX command queue state */
+	struct fi_cxi_gpu_cmdq trig_cmdq;  /* Triggered command queue state */
+	uint32_t eqn;                      /* Event queue number */
+	uint32_t ctn;                      /* Counter number */
+	uint32_t pid_bits;                 /* PID bit width for DFA */
+	uint64_t user_ptr;                 /* Error reporting handle */
+};
+```
+
+`trig_cmdq` is left zero-filled when no triggered command queue buffer was
+supplied. Test `trig_cmdq.cq.wp_addr` (or `hptr_mmio_db`) for NULL to detect
+this; `hptr_buff` and `cq.cmds32` are also NULL for a present device-memory
+queue.
+
+`ctn` is `C_CT_NONE` (0) when the endpoint has no bound send counter, and `eqn`
+is `C_EQ_NONE` (0) when it has no transmit event queue. `user_ptr` is an
+opaque handle the provider uses to report failures; every KI command, of any
+operation type, stamps this same handle, so the resulting error completion
+carries no operation-type information. Its `op_context` is the context passed
+to `fi_endpoint`() and its `flags` are 0. `user_ptr` is 0 when `eqn` is
+`C_EQ_NONE`; a failure is then visible only through the counter's failure
+count.
+
+An error completion is terminal. The NIC reports it only after exhausting its
+retries, so the operation will not complete afterwards, and its target memory
+is unchanged unless the error was reported mid-transfer. KI operations cannot
+be cancelled; the only recovery is to re-issue the command.
+
+Every KI command must set `event_send_disable` and `event_success_disable`.
+Completions are counter-only; `eqn` and `user_ptr` exist so that failures
+reach the endpoint's completion queue as error entries. The transmit event
+queue is sized for host operations and is drained only by host progress, so
+commands that post success events can overflow it, which is fatal. A
+malformed command (one the NIC rejects with a command failure event) is also
+fatal: the provider aborts the process. The provider cannot check the commands
+a GPU builds, so it drops any success event that does arrive, with a warning.
+
+Each `fi_cxi_gpu_cmdq` carries both host and device virtual addresses for
+the command queue buffer and MMIO doorbell, since the same physical memory is
+mapped at different addresses on the host and the GPU, together with the
+command queue state a GPU kernel needs to emit commands:
+
+```c
+struct fi_cxi_gpu_cmdq_state {
+	void     *cmds32;       /* Command buffer (device VA after set_buf) */
+	uint64_t *wp_addr;      /* Doorbell (device VA after set_db) */
+	uint64_t  wp32;         /* Next slot to write */
+	uint64_t  hw_wp32;      /* Last slot rung to hardware */
+	uint64_t  rp32;         /* Cached hardware read pointer */
+	uint32_t  size32;       /* Buffer size in slots */
+};
+
+struct fi_cxi_gpu_cmdq {
+	void     *hptr_buff;    /* Host VA of cmd buffer (setup/teardown);
+				 * NULL for a device-memory buffer
+				 */
+	uint64_t *hptr_mmio_db; /* Host VA of the MMIO doorbell register */
+	void     *dptr_buff;    /* Device VA of cmd buffer (set by set_buf) */
+	uint64_t *dptr_mmio_db; /* Device VA of MMIO doorbell (set by set_db) */
+	struct fi_cxi_gpu_cmdq_state cq; /* State the GPU kernel operates on */
+};
+```
+
+`fi_cxi_gpu_cmdq_state` is a provider-owned subset of the libcxi command
+queue, so applications do not depend on libcxi's internal layout. The command
+buffer holds 32-byte slots; slot 0 is the hardware status/read-pointer
+writeback, which the kernel reads through `cmds32`. The state does not include
+the command queue's low-latency write regions (`ll_64`, `ll_128a`, `ll_128u`),
+so GPU kernels must issue commands through the standard doorbell path.
+
+If the provider could not directly place a command queue buffer in GPU memory
+(e.g., no DMA-buf), the caller remaps `tx_cmdq`/`trig_cmdq` to device virtual
+addresses itself, using three host-side inline helpers declared in
+`fi_cxi_gpu_ext.h`:
+
+```c
+enum fi_cxi_ki_cmdq_type {
+	FI_CXI_KI_TXC,    /* Transmit (TX) command queue */
+	FI_CXI_KI_TRIGC,  /* Triggered command queue */
+};
+
+/* Return the host VA of the doorbell MMIO register, so the caller can map
+ * its containing page and compute the device-mapped doorbell address.
+ */
+fi_cxi_ki_cmdq_get_db(&gpu_ep, FI_CXI_KI_TXC, &db);
+
+/* Store a caller-computed device-mapped doorbell pointer, patching
+ * gpu_ep.tx_cmdq.cq.wp_addr so GPU kernels use the device mapping.
+ */
+fi_cxi_ki_cmdq_set_db(&gpu_ep, FI_CXI_KI_TXC, dev_db);
+
+/* Store a caller-computed device-mapped command buffer pointer, patching
+ * gpu_ep.tx_cmdq.cq.cmds32. Required for a device-memory buffer; skip
+ * if the hints already supplied a device-accessible buffer.
+ */
+fi_cxi_ki_cmdq_set_buf(&gpu_ep, FI_CXI_KI_TXC, dev_buf);
+```
+
+After remapping, `cq.cmds32` and `cq.wp_addr` are device VAs, so the caller
+can use `cq` directly with no address translation at runtime.
+
 # FABTESTS
 
 The CXI provider does not currently support fabtests which depend on IP

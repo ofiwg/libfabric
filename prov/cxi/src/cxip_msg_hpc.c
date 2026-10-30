@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2 Clause or GPL-2.0-only
  *
- * Copyright (c) 2018-2024 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018-2024,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -3898,7 +3898,8 @@ static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
 				      rxc->base.ep_obj->auth_key.vni,
 				      cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
 				      alt_read ? CXI_TC_TYPE_RESTRICTED :
-				      CXI_TC_TYPE_DEFAULT, &rxc->tx_rget_cmdq);
+				      CXI_TC_TYPE_DEFAULT, NULL,
+				      &rxc->tx_rget_cmdq);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Allocate rget CMDQ failed, ret: %d %s %s\n",
 				  ret,

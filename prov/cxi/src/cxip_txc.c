@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
  * Copyright (c) 2014 Intel Corporation. All rights reserved.
- * Copyright (c) 2019-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2019-2023,2026 Hewlett Packard Enterprise Development LP
  */
 
 /* CXI TX Context Management */
@@ -431,6 +431,13 @@ void cxip_txc_disable(struct cxip_txc *txc)
 	}
 
 	cxip_ep_cmdq_put(txc->ep_obj, true);
+
+	/*
+	 * The KI error completion request lives in tx_evtq's request pool and is
+	 * freed with it; clear the pointer so it cannot be reused after the pool
+	 * is freed.
+	 */
+	txc->ep_obj->ki_selective_completion_req = NULL;
 	cxip_evtq_fini(&txc->tx_evtq);
 }
 

@@ -119,6 +119,18 @@ provider_keys_std_fallback_test=(
 zero_eager_size_test=(
 	"FI_CXI_RDZV_EAGER_SIZE=0 ./cxitest --filter=\"@(tagged|msg)/*\" -j 1 -f --verbose --tap=cxitest-zero-rdzv-eager-size.tap")
 
+ki_hints_test=(
+	"./cxitest --verbose --filter=\"ki_hints/*\" -j 1 --tap=cxitest-ki_hints.tap"
+)
+
+ki_info_test=(
+	"./cxitest --verbose --filter=\"ki_info/*\" -j 1 --tap=cxitest-ki_info.tap"
+)
+
+ki_rma_test=(
+	"./cxitest --verbose --filter=\"ki_rma*/*\" -j 1 --tap=cxitest-ki_rma.tap"
+)
+
 alt_read_rendezvous_test=(
 	"FI_CXI_RDZV_PROTO=\"alt_read\" ./cxitest --filter=\"tagged/*rdzv\" -j 1 -f --verbose --tap=cxitest-alt-read-rdzv.tap"
 	"cxiutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null"
@@ -159,6 +171,9 @@ writedata_rma_test=(
 
 long_test_suite=(
 	"basic_test"
+	"ki_hints_test"
+	"ki_info_test"
+	"ki_rma_test"
 	"swget_test"
 	"swget_unaligned_test"
 	"constrained_le_test"

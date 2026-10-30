@@ -1,6 +1,6 @@
 dnl SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
 dnl
-dnl Copyright 2018 Hewlett Packard Enterprise Development LP
+dnl Copyright 2018,2026 Hewlett Packard Enterprise Development LP
 
 dnl CXI provider specific configuration
 
@@ -195,6 +195,13 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 			AC_CHECK_DECL([cxil_svc_get_netns],
 				[AC_DEFINE([CXI_HAVE_SVC_GET_NETNS],[1],
 				    [Whether libcxi.h has cxil_svc_get_netns() support])],
+				[],
+				[#include "libcxi/libcxi.h"]
+			)
+
+			AC_CHECK_DECL([cxil_alloc_buf_cmdq],
+				[AC_DEFINE([CXI_HAVE_ALLOC_BUF_CMDQ],[1],
+				    [Whether libcxi.h has cxil_alloc_buf_cmdq() support])],
 				[],
 				[#include "libcxi/libcxi.h"]
 			)
