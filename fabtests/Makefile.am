@@ -34,6 +34,7 @@ bin_PROGRAMS = \
 	functional/fi_multi_ep \
 	functional/fi_recv_cancel \
 	functional/fi_unexpected_msg \
+	functional/fi_directed_recv \
 	functional/fi_unmap_mem \
 	functional/fi_inject_test \
 	functional/fi_resmgmt_test \
@@ -187,6 +188,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_rma_bw.py \
 	pytest/efa/test_rma_pingpong.py \
 	pytest/efa/test_unexpected_msg.py \
+	pytest/efa/test_directed_recv.py \
 	pytest/efa/test_multi_recv.py \
 	pytest/efa/test_rnr.py \
 	pytest/efa/test_remote_exit_early.py \
@@ -340,6 +342,10 @@ functional_fi_multi_mr_LDADD = libfabtests.la
 functional_fi_unexpected_msg_SOURCES = \
 	functional/unexpected_msg.c
 functional_fi_unexpected_msg_LDADD = libfabtests.la
+
+functional_fi_directed_recv_SOURCES = \
+	functional/directed_recv.c
+functional_fi_directed_recv_LDADD = libfabtests.la
 
 functional_fi_unmap_mem_SOURCES = \
 	functional/unmap_mem.c
@@ -651,6 +657,7 @@ dummy_man_pages = \
 	man/man1/fi_cm_data.1 \
 	man/man1/fi_cq_data.1 \
 	man/man1/fi_dgram.1 \
+	man/man1/fi_directed_recv.1 \
 	man/man1/fi_inj_complete.1 \
 	man/man1/fi_mcast.1 \
 	man/man1/fi_msg.1 \

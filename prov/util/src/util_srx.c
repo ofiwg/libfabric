@@ -222,7 +222,7 @@ static int util_get_msg(struct fid_peer_srx *srx,
 
 	util_entry = container_of(queue->head, struct util_rx_entry, s_entry);
 	if (!slist_empty(&srx_ctx->msg_queue)) {
-		any_entry = container_of(&srx_ctx->msg_queue.head,
+		any_entry = container_of(srx_ctx->msg_queue.head,
 					 struct util_rx_entry, s_entry);
 		if (any_entry->seq_no <= util_entry->seq_no) {
 			queue = &srx_ctx->msg_queue;
@@ -315,7 +315,7 @@ static int util_get_tag(struct fid_peer_srx *srx,
 check_any:
 	slist_foreach(&srx_ctx->tag_queue, any_item, any_prev) {
 		any_entry = container_of(any_item, struct util_rx_entry,
-					 peer_entry);
+					 s_entry);
 		if (any_entry->seq_no > util_entry->seq_no)
 			break;
 
