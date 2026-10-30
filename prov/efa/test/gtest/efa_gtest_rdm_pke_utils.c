@@ -12,6 +12,7 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/efa_rdm_srx.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -583,4 +584,105 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	} else {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
+}
+
+static size_t efa_test_dlist_count(struct dlist_entry *head)
+{
+	struct dlist_entry *item;
+	size_t count = 0;
+
+	dlist_foreach(head, item)
+		count++;
+	return count;
+}
+
+static struct efa_rdm_pke *efa_test_eager_msgrtm_pke(struct efa_rdm_ep *ep,
+						     struct efa_rdm_peer *peer)
+{
+	struct efa_rdm_eager_msgrtm_hdr hdr = {0};
+	struct efa_rdm_req_opt_connid_hdr connid = {0};
+	struct efa_rdm_pke *pke =
+		efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				  EFA_RDM_PKE_FROM_EFA_RX_POOL);
+
+	if (!pke)
+		return NULL;
+
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	pke->peer = peer;
+	hdr.hdr.version = EFA_RDM_PROTOCOL_VERSION;
+	hdr.hdr.type = EFA_RDM_EAGER_MSGRTM_PKT;
+	hdr.hdr.flags = EFA_RDM_PKT_CONNID_HDR | EFA_RDM_REQ_MSG;
+	connid.connid = 0x1234;
+	memcpy(pke->wiredata, &hdr, sizeof hdr);
+	memcpy(pke->wiredata + sizeof hdr, &connid, sizeof connid);
+	pke->pkt_size = sizeof hdr + sizeof connid;
+	return pke;
+}
+
+int efa_test_av_remove_releases_unexp_pkt(
+	struct fid_ep *ep_fid, struct fid_av *av, fi_addr_t peer_addr,
+	int copy_unexp, struct efa_test_av_remove_unexp_result *out)
+{
+	struct efa_rdm_ep *ep = container_of(
+		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct util_srx_ctx *srx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	int saved_rx_copy_unexp = efa_env.rx_copy_unexp;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *rxe;
+	ssize_t ret;
+
+	memset(out, 0, sizeof *out);
+	if (!peer)
+		return -FI_EINVAL;
+
+	pke = efa_test_eager_msgrtm_pke(ep, peer);
+	if (!pke)
+		return -FI_ENOMEM;
+
+	out->unexp_pool_outstanding_before =
+		efa_test_ep_unexp_pool_outstanding(ep_fid);
+	out->rx_pkts_held_before = ep->efa_rx_pkts_held;
+	out->ope_count_before = efa_test_dlist_count(&ep->base_ep.ope_list);
+
+	ofi_genlock_lock(srx->lock);
+	efa_env.rx_copy_unexp = copy_unexp;
+	ret = efa_rdm_pke_proc_msgrtm(pke);
+	efa_env.rx_copy_unexp = saved_rx_copy_unexp;
+	if (ret) {
+		ofi_genlock_unlock(srx->lock);
+		return ret;
+	}
+	if (dlist_empty(&ep->base_ep.ope_list)) {
+		ofi_genlock_unlock(srx->lock);
+		return -FI_ENOENT;
+	}
+	rxe = container_of(ep->base_ep.ope_list.prev, struct efa_rdm_ope,
+			   ep_entry);
+	out->was_unexpected =
+		rxe->state == EFA_RDM_RXE_UNEXP && rxe->unexp_pkt &&
+		(copy_unexp ? rxe->unexp_pkt->alloc_type ==
+				      EFA_RDM_PKE_FROM_UNEXP_POOL
+			    : rxe->unexp_pkt == pke);
+
+	out->unexp_pool_outstanding_queued =
+		efa_test_ep_unexp_pool_outstanding(ep_fid);
+	out->rx_pkts_held_queued = ep->efa_rx_pkts_held;
+	out->rx_pkts_to_post_queued = ep->efa_rx_pkts_to_post;
+	out->ope_count_queued = efa_test_dlist_count(&ep->base_ep.ope_list);
+
+	ret = fi_av_remove(av, &peer_addr, 1, 0);
+	ofi_genlock_unlock(srx->lock);
+	if (ret)
+		return ret;
+
+	out->unexp_pool_outstanding_after =
+		efa_test_ep_unexp_pool_outstanding(ep_fid);
+	out->rx_pkts_held_after = ep->efa_rx_pkts_held;
+	out->rx_pkts_to_post_after = ep->efa_rx_pkts_to_post;
+	out->ope_count_after = efa_test_dlist_count(&ep->base_ep.ope_list);
+	out->unspec_unexp_queue_empty =
+		dlist_empty(&srx->unspec_unexp_msg_queue);
+	return 0;
 }
