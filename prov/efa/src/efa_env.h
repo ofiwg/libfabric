@@ -75,6 +75,7 @@ struct efa_env {
 	/* Cap on the efa-rdm txe pool, see FI_EFA_RDM_TXE_POOL_SIZE. */
 	size_t rdm_txe_pool_size;
 	int use_data_path_direct;
+	int support_av_map;
 	/**
 	 * The maximum size of the implicit AV used to store AV entries of peers
 	 * that were not explicitly inserted into the AV by the application.
