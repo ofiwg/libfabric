@@ -167,7 +167,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 
 void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry);
 
 static inline
 struct efa_rdm_ctsdata_hdr *efa_rdm_pke_get_ctsdata_hdr(struct efa_rdm_pke *pke)
@@ -198,7 +198,7 @@ int efa_rdm_pke_init_readrsp(struct efa_rdm_pke *pkt_entry,
 
 void efa_rdm_pke_handle_readrsp_sent(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_readrsp_send_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_readrsp_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry);
 
@@ -253,7 +253,7 @@ struct efa_rdm_eor_hdr *efa_rdm_pke_get_eor_hdr(struct efa_rdm_pke *pke)
 int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry,
 			 struct efa_rdm_ope *rxe);
 
-void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry);
 
 /* Read NACK packet functions */
 
@@ -264,6 +264,8 @@ struct efa_rdm_read_nack_hdr *efa_rdm_pke_get_read_nack_hdr(struct efa_rdm_pke *
 }
 
 int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
+
+ssize_t efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry);
 
@@ -336,6 +338,8 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope);
 
+ssize_t efa_rdm_pke_handle_peer_error_send_completion(struct efa_rdm_pke *pkt_entry);
+
 void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry);
 
 /* ATOMRSP packet related functions */
@@ -346,7 +350,7 @@ static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa
 
 int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
-void efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_atomrsp_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry);
 
@@ -359,6 +363,6 @@ struct efa_rdm_receipt_hdr *efa_rdm_pke_get_receipt_hdr(struct efa_rdm_pke *pke)
 
 int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
-void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry);
 
 #endif

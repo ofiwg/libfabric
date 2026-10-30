@@ -605,25 +605,25 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_CTS_PKT:
-		efa_rdm_pke_handle_cts_send_completion(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("CTS");
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
 		break;
 	case EFA_RDM_READRSP_PKT:
-		efa_rdm_pke_handle_readrsp_send_completion(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("READRSP");
 		break;
 	case EFA_RDM_EOR_PKT:
-		efa_rdm_pke_handle_eor_send_completion(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("EOR");
 		break;
 	case EFA_RDM_RMA_CONTEXT_PKT:
 		efa_rdm_pke_handle_rma_completion(pkt_entry);
 		return;
 	case EFA_RDM_ATOMRSP_PKT:
-		efa_rdm_pke_handle_atomrsp_send_completion(pkt_entry);
-		return;
+		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
+		break;
 	case EFA_RDM_RECEIPT_PKT:
-		efa_rdm_pke_handle_receipt_send_completion(pkt_entry);
+		EFA_RDM_PKT_TYPE_MOVED("RECEIPT");
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
@@ -675,18 +675,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_READ_NACK_PKT:
-		/* no action needed for NACK packet */
+		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
 		break;
 	case EFA_RDM_PEER_ERROR_PKT:
-		/*
-		 * The PEER_ERROR_PKT send completed. Defer OPE release
-		 * to the drain helper.
-		 */
-		assert(pkt_entry->ope);
-		if (pkt_entry->ope->type == EFA_RDM_RXE)
-			efa_rdm_rxe_release_peer_abort_if_drained(pkt_entry->ope);
-		else
-			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		EFA_RDM_PKT_TYPE_MOVED("PEER_ERROR");
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,
