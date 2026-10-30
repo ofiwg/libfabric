@@ -136,7 +136,8 @@ struct efa_av {
 	 * efa_av_entry. */
 	struct efa_av_array *cur_reverse_av;
 	struct util_av util_av;
-	struct efa_av_array *addr_to_entry_map;
+	/* efa_av_entry of each util_av index */
+	struct efa_av_array *entry_table;
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
@@ -156,8 +157,8 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 
 struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
 
-struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
-					       fi_addr_t fi_addr);
+struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
+					   fi_addr_t index);
 
 int efa_av_is_valid_address(struct efa_ep_addr *addr);
 

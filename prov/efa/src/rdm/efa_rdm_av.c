@@ -511,7 +511,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	 */
 	if (efa_rdm_av_entry_publish(av, av_entry, FI_ADDR_NOTAVAIL)) {
 		efa_rdm_ah_release(av->domain, entry->ah, false);
-		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+		efa_av_entry_remove_from_util_av(av->entry_table, &av->util_av,
 						 entry, fi_addr);
 		return NULL;
 	}
@@ -528,7 +528,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 		efa_rdm_av_reverse_av_remove(av->cur_reverse_av,
 					     &rdm_av->prv_reverse_av, entry);
 		efa_rdm_ah_release(av->domain, entry->ah, false);
-		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+		efa_av_entry_remove_from_util_av(av->entry_table, &av->util_av,
 						 entry, fi_addr);
 		return NULL;
 	}
@@ -615,7 +615,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 		goto err_release;
 	}
 
-	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, fi_addr, efa_av_entry);
+	err = efa_av_array_insert(rdm_av->entry_table_implicit, fi_addr, efa_av_entry);
 	if (err) {
 		efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 					     &rdm_av->prv_reverse_av_implicit, efa_av_entry);
@@ -661,7 +661,7 @@ void efa_rdm_av_entry_release_explicit(struct efa_av *av,
 				     &av_entry->efa_av_entry);
 	efa_rdm_av_entry_deinit(av, av_entry);
 	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, false);
-	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+	efa_av_entry_remove_from_util_av(av->entry_table, &av->util_av,
 					 &av_entry->efa_av_entry,
 					 av_entry->efa_av_entry.fi_addr);
 }
@@ -688,7 +688,7 @@ void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entr
 
 	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
 	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, true);
-	efa_av_entry_remove_from_util_av(rdm_av->addr_to_entry_map_implicit,
+	efa_av_entry_remove_from_util_av(rdm_av->entry_table_implicit,
 					 &rdm_av->util_av_implicit,
 					 &av_entry->efa_av_entry,
 					 av_entry->implicit_fi_addr);
@@ -718,7 +718,7 @@ void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	dlist_remove(&av_entry->ah_implicit_conn_list_entry);
 
-	efa_av_entry_remove_from_util_av(rdm_av->addr_to_entry_map_implicit,
+	efa_av_entry_remove_from_util_av(rdm_av->entry_table_implicit,
 					 &rdm_av->util_av_implicit,
 					 &av_entry->efa_av_entry,
 					 av_entry->implicit_fi_addr);
@@ -738,7 +738,7 @@ struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct efa_av_entry *entry;
 
-	entry = efa_av_addr_to_entry_impl(rdm_av->addr_to_entry_map_implicit, fi_addr);
+	entry = efa_av_index_to_entry(rdm_av->entry_table_implicit, fi_addr);
 	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry) : NULL;
 }
 
@@ -1400,9 +1400,9 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	dlist_init(&explicit_av_entry->implicit_av_lru_entry);
 	dlist_init(&explicit_av_entry->ah_implicit_conn_list_entry);
 
-	err = efa_av_array_insert(av->addr_to_entry_map, *fi_addr, explicit_base_entry);
+	err = efa_av_array_insert(av->entry_table, *fi_addr, explicit_base_entry);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert explicit entry for fi_addr %" PRIu64 " into addr_to_entry_map: %s\n",
+		EFA_WARN(FI_LOG_AV, "Failed to insert explicit entry for fi_addr %" PRIu64 " into entry_table: %s\n",
 			 *fi_addr, fi_strerror(-err));
 		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
 		if (cleanup_err)
@@ -1413,7 +1413,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 
 	err = efa_rdm_av_entry_publish(av, explicit_av_entry, implicit_fi_addr);
 	if (err) {
-		cleanup_err = efa_av_array_insert(av->addr_to_entry_map, *fi_addr, NULL);
+		cleanup_err = efa_av_array_insert(av->entry_table, *fi_addr, NULL);
 		assert(!cleanup_err);
 		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
 		if (cleanup_err)
@@ -1428,7 +1428,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 				     &implicit_av_entry->efa_av_entry);
 
 	dlist_remove(&implicit_av_entry->implicit_av_lru_entry);
-	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, implicit_fi_addr, NULL);
+	err = efa_av_array_insert(rdm_av->entry_table_implicit, implicit_fi_addr, NULL);
 	assert(!err);
 
 	err = ofi_av_remove_addr(&rdm_av->util_av_implicit, implicit_fi_addr);
@@ -1806,8 +1806,8 @@ static int efa_rdm_av_close(struct fid *fid)
 		free(ep_addr_hashable);
 	}
 
-	efa_av_array_destroy(av->addr_to_entry_map);
-	efa_av_array_destroy(rdm_av->addr_to_entry_map_implicit);
+	efa_av_array_destroy(av->entry_table);
+	efa_av_array_destroy(rdm_av->entry_table_implicit);
 	efa_av_array_destroy(av->cur_reverse_av);
 	efa_av_array_destroy(rdm_av->cur_reverse_av_implicit);
 
@@ -1848,7 +1848,7 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_free;
 
-	ret = efa_av_array_init(&rdm_av->addr_to_entry_map_implicit);
+	ret = efa_av_array_init(&rdm_av->entry_table_implicit);
 	if (ret)
 		goto err_destruct_base;
 
@@ -1913,14 +1913,14 @@ err_destroy_implicit_reverse_av:
 	efa_av_array_destroy(rdm_av->cur_reverse_av_implicit);
 
 err_destroy_implicit_map:
-	efa_av_array_destroy(rdm_av->addr_to_entry_map_implicit);
+	efa_av_array_destroy(rdm_av->entry_table_implicit);
 
 err_destruct_base:
 	retv = ofi_av_close(&av->util_av);
 	if (retv)
 		EFA_WARN(FI_LOG_AV,
 			 "Unable to close util_av: %s\n", fi_strerror(-retv));
-	efa_av_array_destroy(av->addr_to_entry_map);
+	efa_av_array_destroy(av->entry_table);
 	efa_av_array_destroy(av->cur_reverse_av);
 
 err_free:
