@@ -350,6 +350,12 @@ static inline struct efa_rdm_pke* efa_rdm_proto_tx_pke_init_common(struct efa_rd
 	return pkt_entry;
 }
 
+ssize_t efa_rdm_proto_split_req_data(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe,
+				     size_t total_data_size,
+				     size_t max_data_size,
+				     size_t *pkt_entry_cnt,
+				     size_t *pkt_entry_data_size_vec);
 
 /**
  * @brief Initialize a TXE for use by the new protocol interface.
