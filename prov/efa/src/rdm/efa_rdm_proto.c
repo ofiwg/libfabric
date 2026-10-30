@@ -308,6 +308,62 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 /* Utility funcions */
 
+/**
+ * @brief Split a transfer's REQ data into near-equal packets of at most
+ *        max_data_size bytes.
+ *
+ * The data is cut into near-equal pieces rounded down to the memory alignment,
+ * because the device handles similarly sized sends best. Leftover bytes go on
+ * the last packet, or on one extra packet if they do not fit.
+ *
+ * @return 0 on success, -FI_EAGAIN when not enough TX packets are free
+ */
+ssize_t efa_rdm_proto_split_req_data(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe,
+				     size_t total_data_size,
+				     size_t max_data_size,
+				     size_t *pkt_entry_cnt,
+				     size_t *pkt_entry_data_size_vec)
+{
+	size_t i, cnt, max_cnt, data_size, full_cnt, remainder;
+	size_t memory_alignment;
+	enum fi_hmem_iface iface;
+
+	assert(total_data_size);
+	assert(max_data_size);
+
+	max_cnt = MIN(efa_rdm_ep_get_available_tx_pkts(ep),
+		      efa_base_ep_get_tx_pool_size(&ep->base_ep));
+
+	iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
+			       FI_HMEM_SYSTEM;
+	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
+
+	cnt = (total_data_size - 1) / max_data_size + 1;
+	data_size = (total_data_size - 1) / cnt + 1;
+	data_size &= ~(memory_alignment - 1);
+	assert(data_size);
+
+	full_cnt = total_data_size / data_size;
+	remainder = total_data_size - full_cnt * data_size;
+	cnt = full_cnt + (data_size + remainder > max_data_size ? 1 : 0);
+
+	if (cnt > max_cnt)
+		return -FI_EAGAIN;
+
+	assert(full_cnt > 0);
+	for (i = 0; i < full_cnt; ++i)
+		pkt_entry_data_size_vec[i] = data_size;
+
+	if (cnt == full_cnt)
+		pkt_entry_data_size_vec[full_cnt - 1] += remainder;
+	else
+		pkt_entry_data_size_vec[full_cnt] = remainder;
+
+	*pkt_entry_cnt = cnt;
+	return FI_SUCCESS;
+}
+
 void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
 			    struct efa_rdm_peer *peer, const struct fi_msg *msg,
 			    uint32_t op, uint64_t tag, uint64_t flags,
