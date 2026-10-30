@@ -24,6 +24,69 @@ void cxit_setup_rma_writedata(void)
 TestSuite(rma_writedata, .init = cxit_setup_rma_writedata, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
+static void cxit_setup_writedata_source(void)
+{
+	struct cxip_cq *cq;
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+	uint64_t caps, rx_caps, domain_caps;
+	size_t addrlen = sizeof(cxit_ep_addr);
+	size_t i;
+	int ret;
+
+	cxip_env.enable_writedata = 1;
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps |= FI_RMA | FI_RMA_EVENT | FI_MSG | FI_SOURCE;
+	cxit_fi_hints->domain_attr->mr_mode |= FI_MR_PROV_KEY | FI_MR_ENDPOINT;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->tx_attr->size = 512;
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_rx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_setup_domain();
+
+	/* Open the domain and CQs before requesting endpoint source tracking. */
+	caps = cxit_fi->caps;
+	rx_caps = cxit_fi->rx_attr->caps;
+	domain_caps = cxit_fi->domain_attr->caps;
+	cxit_fi->caps &= ~(FI_SOURCE | FI_SOURCE_ERR);
+	cxit_fi->rx_attr->caps &= ~(FI_SOURCE | FI_SOURCE_ERR);
+	cxit_fi->domain_attr->caps &= ~(FI_SOURCE | FI_SOURCE_ERR);
+	cxit_create_domain();
+	cxit_create_cqs();
+	cxit_fi->caps = caps;
+	cxit_fi->rx_attr->caps = rx_caps;
+	cxit_fi->domain_attr->caps = domain_caps;
+
+	cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_null(cq->util_cq.src);
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
+	cxit_bind_cqs();
+	cr_assert_not_null(cq->util_cq.src);
+	for (i = 0; i < cq->util_cq.cirq->size; i++)
+		cr_assert_eq(cq->util_cq.src[i], FI_ADDR_NOTAVAIL);
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_enable failed %d", ret);
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getname failed %d", ret);
+	cr_assert_eq(addrlen, sizeof(cxit_ep_addr));
+	ret = fi_av_insert(cxit_av, &fake_addr, 1, NULL, 0, NULL);
+	cr_assert_eq(ret, 1);
+	ret = fi_av_insert(cxit_av, &cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
+	cr_assert_eq(ret, 1);
+}
+
+TestSuite(rma_writedata_source,
+	  .init = cxit_setup_writedata_source,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
 Test(rma_writedata, simple)
 {
 	int ret;
@@ -95,7 +158,8 @@ done:
 	mr_destroy(&mem_window);
 }
 
-Test(rma_writedata, with_source)
+static void writedata_with_source(struct fid_ep *tx_ep, fi_addr_t dest_addr,
+				  fi_addr_t expected_source)
 {
 	int ret;
 	struct mem_region mem_window;
@@ -104,7 +168,7 @@ Test(rma_writedata, with_source)
 	uint64_t immediate_data = 0xDEADBEEF;
 	size_t len = 1024;
 	uint8_t *send_buf;
-	struct cxip_ep *ep = container_of(cxit_ep, struct cxip_ep, ep);
+	struct cxip_ep *ep = container_of(tx_ep, struct cxip_ep, ep);
 	fi_addr_t src_addr;
 	int poll_count = 0;
 
@@ -135,8 +199,8 @@ Test(rma_writedata, with_source)
 	key_val = fi_mr_key(mem_window.mr);
 
 	/* Perform writedata */
-	ret = fi_writedata(cxit_ep, send_buf, len, NULL, immediate_data,
-			   cxit_ep_fi_addr, 0, key_val, NULL);
+	ret = fi_writedata(tx_ep, send_buf, len, NULL, immediate_data,
+			   dest_addr, 0, key_val, NULL);
 	if (ep->ep_obj->domain->rma_cq_data_size) {
 		cr_assert_eq(ret, FI_SUCCESS, "fi_writedata failed %d", ret);
 	} else {
@@ -167,7 +231,7 @@ Test(rma_writedata, with_source)
 		     cqe.data, immediate_data);
 
 	/* Validate source address */
-	cr_assert_eq(src_addr, cxit_ep_fi_addr, "Source address mismatch");
+	cr_assert_eq(src_addr, expected_source, "Source address mismatch");
 
 	/* Verify data */
 	for (size_t i = 0; i < len; i++) {
@@ -178,4 +242,47 @@ Test(rma_writedata, with_source)
 done:
 	free(send_buf);
 	mr_destroy(&mem_window);
+}
+
+Test(rma_writedata, with_source)
+{
+	writedata_with_source(cxit_ep, cxit_ep_fi_addr, cxit_ep_fi_addr);
+}
+
+Test(rma_writedata_source, shared_cq)
+{
+	struct cxip_cq *cq;
+	struct fid_ep *shared_ep;
+	struct cxip_addr shared_addr;
+	size_t addrlen = sizeof(shared_addr);
+	fi_addr_t shared_fi_addr;
+	fi_addr_t *source;
+	int ret;
+
+	cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid);
+	source = cq->util_cq.src;
+	ret = fi_endpoint(cxit_domain, cxit_fi, &shared_ep, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint failed %d", ret);
+	ret = fi_ep_bind(shared_ep, &cxit_eq->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "shared EQ bind failed %d", ret);
+	ret = fi_ep_bind(shared_ep, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
+	cr_assert_eq(ret, FI_SUCCESS, "shared TX CQ bind failed %d", ret);
+	ret = fi_ep_bind(shared_ep, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
+	cr_assert_eq(ret, FI_SUCCESS, "shared RX CQ bind failed %d", ret);
+	ret = fi_ep_bind(shared_ep, &cxit_av->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "shared AV bind failed %d", ret);
+	cr_assert_eq(cq->util_cq.src, source);
+
+	ret = fi_enable(shared_ep);
+	cr_assert_eq(ret, FI_SUCCESS, "shared endpoint enable failed %d", ret);
+	ret = fi_getname(&shared_ep->fid, &shared_addr, &addrlen);
+	cr_assert_eq(ret, FI_SUCCESS, "shared endpoint getname failed %d", ret);
+	cr_assert_eq(addrlen, sizeof(shared_addr));
+	ret = fi_av_insert(cxit_av, &shared_addr, 1, &shared_fi_addr, 0, NULL);
+	cr_assert_eq(ret, 1, "shared endpoint AV insert failed %d", ret);
+
+	writedata_with_source(shared_ep, cxit_ep_fi_addr, shared_fi_addr);
+
+	ret = fi_close(&shared_ep->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "shared endpoint close failed %d", ret);
 }
