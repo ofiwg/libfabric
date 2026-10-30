@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2019,2022-2024 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2019,2022-2024,2026 Hewlett Packard Enterprise Development LP
  */
 
 /* CXI fabric discovery implementation. */
@@ -1394,12 +1394,16 @@ static void cxip_libcxi_ops_init(void)
 #ifdef CXI_HAVE_SVC_GET_NETNS
 	cxip_libcxi_ops.svc_get_netns = cxil_svc_get_netns;
 #endif
+#ifdef CXI_HAVE_ALLOC_BUF_CMDQ
+	cxip_libcxi_ops.alloc_buf_cmdq = cxil_alloc_buf_cmdq;
+#endif
 
 	CXIP_INFO("libcxi symbols (static link): alloc_trig_cp=%d modify_cp=%d "
-		  "svc_get_vni_range=%d svc_get_netns=%d\n",
+		  "svc_get_vni_range=%d svc_get_netns=%d alloc_buf_cmdq=%d\n",
 		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp,
 		  !!cxip_libcxi_ops.svc_get_vni_range,
-		  !!cxip_libcxi_ops.svc_get_netns);
+		  !!cxip_libcxi_ops.svc_get_netns,
+		  !!cxip_libcxi_ops.alloc_buf_cmdq);
 #else
 	Dl_info dl_info = {};
 	void *handle = NULL;
@@ -1447,13 +1451,22 @@ static void cxip_libcxi_ops_init(void)
 		dlsym(handle, "cxil_svc_get_vni_range");
 	*(void **)&cxip_libcxi_ops.svc_get_netns =
 		dlsym(handle, "cxil_svc_get_netns");
+#ifdef CXI_HAVE_ALLOC_BUF_CMDQ
+	/* Only when the build headers define struct cxi_cq_alloc_opts_buf;
+	 * otherwise cxip_alloc_dev_cmdq() cannot build the request and the
+	 * pointer stays NULL regardless of the runtime libcxi.
+	 */
+	*(void **)&cxip_libcxi_ops.alloc_buf_cmdq =
+		dlsym(handle, "cxil_alloc_buf_cmdq");
+#endif
 
 	CXIP_INFO("libcxi runtime symbols (%s): alloc_trig_cp=%d modify_cp=%d "
-		  "svc_get_vni_range=%d svc_get_netns=%d\n",
+		  "svc_get_vni_range=%d svc_get_netns=%d alloc_buf_cmdq=%d\n",
 		  handle == RTLD_DEFAULT ? "global scope" : dl_info.dli_fname,
 		  !!cxip_libcxi_ops.alloc_trig_cp, !!cxip_libcxi_ops.modify_cp,
 		  !!cxip_libcxi_ops.svc_get_vni_range,
-		  !!cxip_libcxi_ops.svc_get_netns);
+		  !!cxip_libcxi_ops.svc_get_netns,
+		  !!cxip_libcxi_ops.alloc_buf_cmdq);
 
 	if (handle != RTLD_DEFAULT)
 		dlclose(handle);

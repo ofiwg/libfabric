@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
- * Copyright (c) 2018 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -189,8 +189,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts,
 			      dom->auth_key.vni,
 			      cxip_ofi_to_cxi_tc(dom->tclass),
-			      CXI_TC_TYPE_DEFAULT,
-			      &dom->trig_cmdq);
+			      CXI_TC_TYPE_DEFAULT, NULL, &dom->trig_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate trig_cmdq: %d\n", ret);
 		goto err_close_sem;

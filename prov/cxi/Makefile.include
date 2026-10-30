@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
 #
-# Copyright 2018,2020-2023 Hewlett Packard Enterprise Development LP
+# Copyright 2018,2020-2023,2026 Hewlett Packard Enterprise Development LP
 
 if HAVE_CXI
 
@@ -47,10 +47,12 @@ _cxi_files = \
 _cxi_headers = \
 	prov/cxi/include/cxip.h \
 	prov/cxi/include/cxip_faults.h \
-	prov/cxi/include/fi_cxi_ext.h
+	prov/cxi/include/fi_cxi_ext.h \
+	prov/cxi/include/fi_cxi_gpu_ext.h
 
 rdmainclude_HEADERS += \
-	prov/cxi/include/fi_cxi_ext.h
+	prov/cxi/include/fi_cxi_ext.h \
+	prov/cxi/include/fi_cxi_gpu_ext.h
 
 # Stand-alone srun tests for hardware testing environment
 noinst_PROGRAMS += prov/cxi/test/multinode/test_frmwk
@@ -105,8 +107,16 @@ prov_cxi_test_curltest_LDFLAGS = $(cxitest_LDFLAGS) -static
 prov_cxi_test_curltest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
 
 bin_PROGRAMS += prov/cxi/test/cxitest
+
+cxip_test_ki_sources = \
+	prov/cxi/test/ki.c \
+	prov/cxi/test/ki_info.c \
+	prov/cxi/test/ki_rma.c \
+	prov/cxi/test/cxip_ki_test_common.c
+
 nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/cxip_test_common.c \
+	$(cxip_test_ki_sources) \
 	prov/cxi/test/fabric.c \
 	prov/cxi/test/domain.c \
 	prov/cxi/test/ep.c \

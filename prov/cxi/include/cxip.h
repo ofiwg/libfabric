@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
- * Copyright (c) 2018-2024 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018-2024,2026 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_PROV_H_
@@ -56,6 +56,11 @@ enum cxi_trig_cp {
 };
 #endif
 
+/* Declared by the uapi header only when libcxi has cxil_alloc_buf_cmdq();
+ * the forward declaration lets the pointer below exist either way.
+ */
+struct cxi_cq_alloc_opts_buf;
+
 struct cxip_libcxi_ops {
 	int (*alloc_trig_cp)(struct cxil_lni *lni, unsigned int vni,
 			     enum cxi_traffic_class tc,
@@ -68,6 +73,9 @@ struct cxip_libcxi_ops {
 				 uint16_t *vni_min, uint16_t *vni_max);
 	int (*svc_get_netns)(struct cxil_dev *dev, unsigned int svc_id,
 			     unsigned int *netns);
+	int (*alloc_buf_cmdq)(struct cxil_lni *lni, struct cxi_eq *evtq,
+			      const struct cxi_cq_alloc_opts_buf *opts,
+			      struct cxi_cq **cmdq);
 };
 
 extern struct cxip_libcxi_ops cxip_libcxi_ops;
@@ -2636,6 +2644,30 @@ struct cxip_ep_obj {
 	size_t tgq_size;
 	ofi_atomic32_t ref;
 	struct cxip_portals_table *ptable;
+
+	/* KI (GPU-initiated) endpoint hints supplied via
+	 * FI_OPT_CXI_SET_KI_EP_HINTS_1: the GPU-accessible TX/triggered
+	 * cmdq buffers (and their host/dmabuf placement) that the GPU
+	 * issues raw KI commands into directly.
+	 */
+	struct fi_cxi_ki_ep_hints ki_hints;
+
+	/* KI triggered command queue, whose ring memory is the
+	 * GPU-accessible buffer at ki_hints.trig_cmdq.buf; NULL if no
+	 * triggered buffer was supplied.
+	 */
+	struct cxip_cmdq *ki_trig_cmdq;
+
+	/*
+	 * Shared request that KI error completions are reported against.
+	 *
+	 * KI commands are built on the GPU, so no per-operation request
+	 * exists to carry completion state.  One request is allocated on
+	 * first use and stamped into every KI command as user_ptr, letting
+	 * the provider report an error completion.  It is freed when the
+	 * TXC event queue is torn down.
+	 */
+	struct cxip_req *ki_selective_completion_req;
 };
 
 int cxip_ep_obj_map(struct cxip_ep_obj *ep, const void *buf, unsigned long len,
@@ -2882,6 +2914,8 @@ extern void (*cxip_av_addr_out)(struct cxip_addr *addr_out,
 				struct cxip_addr *addr);
 int cxip_av_lookup_addr(struct cxip_av *av, fi_addr_t fi_addr,
 			struct cxip_addr *addr);
+int cxip_av_lookup_addr_checked(struct cxip_av *av, fi_addr_t fi_addr,
+				struct cxip_addr *addr);
 fi_addr_t cxip_av_lookup_fi_addr(struct cxip_av *av,
 				 const struct cxip_addr *addr);
 fi_addr_t cxip_av_lookup_auth_key_fi_addr(struct cxip_av *av, unsigned int vni);
@@ -3328,6 +3362,7 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
 		    enum cxi_traffic_class tc,
 		    enum cxi_traffic_class_type tc_type,
+		    const struct fi_cxi_ki_cmdq_buf *ubuf,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,

@@ -5,7 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 Los Alamos National Security, LLC.
  *                    All rights reserved.
- * Copyright (c) 2018,2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2020,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -333,6 +333,39 @@ int cxip_av_lookup_addr(struct cxip_av *av, fi_addr_t fi_addr,
 	return -FI_EINVAL;
 }
 
+/*
+ * cxip_av_lookup_addr_checked() - Look up an untrusted fi_addr.
+ *
+ * Unlike cxip_av_lookup_addr(), which only asserts that fi_addr is in
+ * range, this verifies that fi_addr refers to an allocated AV entry
+ * before dereferencing it.  The check and the lookup are done under a
+ * single read lock so that a concurrent insert or remove cannot
+ * invalidate the entry in between.  For control-path callers that
+ * take fi_addr from the application; the data path is unchanged.
+ */
+int cxip_av_lookup_addr_checked(struct cxip_av *av, fi_addr_t fi_addr,
+				struct cxip_addr *addr)
+{
+	struct cxip_av_entry *entry = NULL;
+
+	cxip_av_read_lock(av);
+
+	if (ofi_bufpool_ibuf_is_valid(av->av_entry_pool, fi_addr)) {
+		entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
+		if (addr)
+			cxip_av_addr_out(addr, &entry->addr);
+	}
+
+	cxip_av_unlock(av);
+
+	if (entry)
+		return FI_SUCCESS;
+
+	CXIP_WARN("Invalid fi_addr %#lx\n", fi_addr);
+
+	return -FI_EINVAL;
+}
+
 fi_addr_t cxip_av_lookup_fi_addr(struct cxip_av *av,
 				 const struct cxip_addr *addr)
 {
@@ -395,7 +428,7 @@ static int cxip_av_lookup(struct fid_av *fid, fi_addr_t fi_addr, void *addr_out,
 	struct cxip_addr addr;
 	int ret;
 
-	ret = cxip_av_lookup_addr(av, fi_addr, &addr);
+	ret = cxip_av_lookup_addr_checked(av, fi_addr, &addr);
 	if (ret != FI_SUCCESS)
 		return ret;
 
