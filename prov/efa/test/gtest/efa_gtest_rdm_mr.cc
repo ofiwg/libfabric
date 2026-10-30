@@ -5,8 +5,12 @@
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "fi_ext_efa.h"
+#include <cstring>
+#include <functional>
 #include <gtest/gtest.h>
 
+using testing::AtLeast;
+using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 using testing::Test;
@@ -143,4 +147,158 @@ TEST_F(EfaRdmMrTest, shm_flags_host_memory_not_device_only)
 
 	EXPECT_EQ(shm_flags & FI_HMEM_DEVICE_ONLY, 0u);
 	EXPECT_EQ(shm_flags & FI_EFA_MR_RELAXED_ORDERING, 0u);
+}
+
+class EfaRdmMrNonP2pTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+	uint64_t saved_caps = 0;
+	bool saved_initialized = false;
+	bool saved_p2p = false;
+	struct fid_domain *saved_shm_domain = nullptr;
+	char buf[64] = {};
+	struct iovec iov = {};
+	struct fi_mr_attr attr = {};
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+
+		efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.domain, nullptr);
+
+		saved_caps = efa_test_get_info_domain_caps(resource.domain);
+		efa_test_set_info_domain_caps(resource.domain,
+					      saved_caps | FI_HMEM);
+		saved_initialized =
+			efa_test_set_hmem_initialized(FI_HMEM_ROCR, true);
+		saved_p2p =
+			efa_test_set_hmem_p2p_supported(FI_HMEM_ROCR, false);
+
+		saved_shm_domain = efa_test_get_shm_domain(resource.domain);
+		efa_test_set_shm_domain(resource.domain, nullptr);
+
+		iov.iov_base = buf;
+		iov.iov_len = sizeof(buf);
+		attr.mr_iov = &iov;
+		attr.iov_count = 1;
+		attr.access = FI_SEND | FI_RECV;
+		attr.iface = FI_HMEM_ROCR;
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_set_shm_domain(resource.domain, saved_shm_domain);
+		efa_test_set_hmem_p2p_supported(FI_HMEM_ROCR, saved_p2p);
+		efa_test_set_hmem_initialized(FI_HMEM_ROCR, saved_initialized);
+		efa_test_set_info_domain_caps(resource.domain, saved_caps);
+		efa_test_resource_destruct(&resource);
+	}
+
+	static uint64_t key_of(uint64_t drawn)
+	{
+		return (drawn & ~(1ULL << 63)) | (1ULL << 32);
+	}
+
+	static std::function<int(struct efa_device *, void *, size_t)>
+	draws(uint64_t drawn)
+	{
+		return [drawn](struct efa_device *, void *out, size_t len) {
+			EXPECT_EQ(len, sizeof(drawn));
+			memcpy(out, &drawn, sizeof(drawn));
+			return 0;
+		};
+	}
+};
+
+TEST_F(EfaRdmMrNonP2pTest, key_is_drawn_from_random_source)
+{
+	struct fid_mr *mr = nullptr;
+	uint64_t drawn = 0xfffffffefffffffeULL;
+
+	EFA_EXPECT_CALL(mock_efa, efa_device_read_random)
+		.Times(1)
+		.WillOnce(Invoke(draws(drawn)));
+
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), 0);
+	ASSERT_NE(mr, nullptr);
+
+	EXPECT_EQ(fi_mr_key(mr), key_of(drawn));
+	EXPECT_GT(fi_mr_key(mr), UINT32_MAX);
+	EXPECT_NE(fi_mr_key(mr), FI_KEY_NOTAVAIL);
+
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+}
+
+TEST_F(EfaRdmMrNonP2pTest, key_already_in_map_is_redrawn)
+{
+	struct fid_mr *mr = nullptr, *mr2 = nullptr;
+	uint64_t drawn = 0x1234, drawn2 = 0x5678;
+
+	EFA_EXPECT_CALL(mock_efa, efa_device_read_random)
+		.Times(3)
+		.WillOnce(Invoke(draws(drawn)))
+		.WillOnce(Invoke(draws(drawn)))
+		.WillOnce(Invoke(draws(drawn2)));
+
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), 0);
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr2), 0);
+
+	EXPECT_EQ(fi_mr_key(mr), key_of(drawn));
+	EXPECT_EQ(fi_mr_key(mr2), key_of(drawn2));
+
+	EXPECT_EQ(fi_close(&mr2->fid), 0);
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+}
+
+TEST_F(EfaRdmMrNonP2pTest, key_is_reusable_after_mr_is_closed)
+{
+	struct fid_mr *mr = nullptr, *mr2 = nullptr;
+	uint64_t drawn = 0x1234;
+
+	EFA_EXPECT_CALL(mock_efa, efa_device_read_random)
+		.Times(2)
+		.WillRepeatedly(Invoke(draws(drawn)));
+
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), 0);
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr2), 0);
+	EXPECT_EQ(fi_mr_key(mr2), key_of(drawn));
+
+	EXPECT_EQ(fi_close(&mr2->fid), 0);
+}
+
+TEST_F(EfaRdmMrNonP2pTest, registration_fails_when_every_draw_is_in_map)
+{
+	struct fid_mr *mr = nullptr, *mr2 = nullptr;
+	uint64_t drawn = 0x1234;
+
+	EFA_EXPECT_CALL(mock_efa, efa_device_read_random)
+		.Times(AtLeast(2))
+		.WillRepeatedly(Invoke(draws(drawn)));
+
+	ASSERT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), 0);
+
+	EXPECT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr2), -FI_ENOKEY);
+
+	EXPECT_EQ(fi_close(&mr->fid), 0);
+}
+
+TEST_F(EfaRdmMrNonP2pTest, registration_fails_when_random_source_fails)
+{
+	struct fid_mr *mr = nullptr;
+
+	EFA_EXPECT_CALL(mock_efa, efa_device_read_random)
+		.Times(1)
+		.WillOnce(Return(-FI_EIO));
+
+	EXPECT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), -FI_EIO);
 }

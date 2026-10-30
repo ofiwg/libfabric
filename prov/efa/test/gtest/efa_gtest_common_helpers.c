@@ -258,6 +258,38 @@ uint64_t efa_test_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface)
 	return efa_rdm_mr_shm_flags(mr_flags, iface);
 }
 
+uint64_t efa_test_get_info_domain_caps(struct fid_domain *domain)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+
+	return efa_domain->util_domain.info_domain_caps;
+}
+
+void efa_test_set_info_domain_caps(struct fid_domain *domain, uint64_t caps)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+
+	efa_domain->util_domain.info_domain_caps = caps;
+}
+
+bool efa_test_set_hmem_initialized(enum fi_hmem_iface iface, bool value)
+{
+	bool prev = g_efa_hmem_info[iface].initialized;
+
+	g_efa_hmem_info[iface].initialized = value;
+	return prev;
+}
+
+bool efa_test_set_hmem_p2p_supported(enum fi_hmem_iface iface, bool value)
+{
+	bool prev = g_efa_hmem_info[iface].p2p_supported_by_device;
+
+	g_efa_hmem_info[iface].p2p_supported_by_device = value;
+	return prev;
+}
+
 int efa_test_rdm_rma_verified_copy_iov(struct fid_ep *ep_fid, uint64_t addr,
 				       size_t len, uint64_t key, uint32_t flags,
 				       struct iovec *iov, void **desc)

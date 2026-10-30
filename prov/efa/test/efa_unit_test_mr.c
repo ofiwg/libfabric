@@ -1434,12 +1434,13 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 	struct efa_domain *efa_domain;
 	size_t mr_size = 64;
 	void *buf;
-	struct fid_mr *mr = NULL;
+	struct fid_mr *mr = NULL, *mr2 = NULL;
 	struct fi_mr_attr mr_reg_attr = { 0 };
 	struct iovec iovec;
 	struct efa_rdm_mr *efa_rdm_mr;
 	void *desc;
 	int err, baseline_ct, baseline_sz;
+	bool orig_p2p;
 
 	if (!g_efa_hmem_info[FI_HMEM_CUDA].initialized) {
 		skip();
@@ -1457,6 +1458,7 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 				  util_domain.domain_fid);
 
 	/* Mock p2p as not supported to force non-p2p path */
+	orig_p2p = g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device;
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
 
 	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
@@ -1493,6 +1495,17 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 	/* Verify key is set (non-p2p path should generate proprietary key) */
 	assert_true(fi_mr_key(mr) != FI_KEY_NOTAVAIL);
 	assert_true(fi_mr_key(mr) > UINT32_MAX); /* Non-p2p keys should be > UINT32_MAX */
+	assert_false(fi_mr_key(mr) & BIT_ULL(63));
+
+	/*
+	 * Non-p2p keys authorize remote RMA, so they must be random.
+	 */
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr2);
+	assert_int_equal(err, 0);
+	assert_non_null(mr2);
+	assert_true(fi_mr_key(mr2) > UINT32_MAX);
+	assert_true(fi_mr_key(mr2) != fi_mr_key(mr));
+	assert_int_equal(fi_close(&mr2->fid), 0);
 
 	/* Since we're in non-p2p path, no ibv_mr should be registered */
 	assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), baseline_ct);
@@ -1506,6 +1519,8 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 	assert_int_equal(fi_close(&mr->fid), 0);
 	err = ofi_cudaFree(buf);
 	assert_int_equal(err, 0);
+
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = orig_p2p;
 }
 #else
 void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)

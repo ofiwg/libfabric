@@ -31,6 +31,7 @@ struct efa_rdm_pke;
 struct ofi_bufpool;
 struct efa_qp;
 struct efa_ah;
+struct efa_device;
 struct efa_rdm_ep;
 struct efa_rdm_ope;
 struct dlist_entry;
@@ -125,6 +126,9 @@ struct dlist_entry;
 	  (struct ofi_mr_map * map, const struct fi_mr_attr *attr,             \
 	   uint64_t *key, void *context, uint64_t flags),                      \
 	  (map, attr, key, context, flags))                                    \
+	X(int, efa_device_read_random,                                         \
+	  (struct efa_device * device, void *buf, size_t len),                 \
+	  (device, buf, len))                                                  \
 	X(struct efa_rdm_pke *, efa_rdm_pke_clone,                             \
 	  (struct efa_rdm_pke * src, struct ofi_bufpool * pkt_pool,            \
 	   int alloc_type),                                                    \
