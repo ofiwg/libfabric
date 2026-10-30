@@ -554,6 +554,9 @@ void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
 		case EFA_RDM_CTSDATA_PKT:
 			pkt_entry->handle_pke = &efa_rdm_proto_ctsdata_handle_send_completion;
 			break;
+		case EFA_RDM_RMA_CONTEXT_PKT:
+			pkt_entry->handle_pke = &efa_rdm_pke_handle_rma_completion;
+			break;
 		case EFA_RDM_HANDSHAKE_PKT:
 			pkt_entry->handle_pke = &efa_rdm_pke_handle_handshake_send_completion;
 			break;

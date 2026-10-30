@@ -611,8 +611,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_RDM_PKT_TYPE_MOVED("EOR");
 		break;
 	case EFA_RDM_RMA_CONTEXT_PKT:
-		efa_rdm_pke_handle_rma_completion(pkt_entry);
-		return;
+		EFA_RDM_PKT_TYPE_MOVED("RMA_CONTEXT");
+		break;
 	case EFA_RDM_ATOMRSP_PKT:
 		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
 		break;
