@@ -460,3 +460,260 @@ void test_av_base_addr_to_entry_invalid(void **state)
 	entry = efa_av_addr_to_entry(av, FI_ADDR_UNSPEC);
 	assert_null(entry);
 }
+
+/**
+ * @brief Insert, look up, reverse-look-up and remove an address on a FI_AV_MAP AV
+ *
+ * With FI_AV_MAP the fi_addr is the address of the provider's AV entry, while
+ * the entry keeps its util_av index.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ * @param[in]	fabric_name	efa or efa-direct
+ */
+static void test_av_map_insert_remove_lookup_impl(void **state, char *fabric_name)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0}, raw_addr_out = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	int strict_mode_orig;
+	struct fi_av_attr av_attr = {.type = FI_AV_MAP};
+	struct fid_av *map_av;
+	struct efa_av *av;
+	struct efa_av_entry *entry;
+	fi_addr_t fi_addr, fi_addr2, src;
+	int err, num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
+
+	err = fi_av_open(resource->domain, &av_attr, &map_av, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(av_attr.type, FI_AV_MAP);
+	av = container_of(map_av, struct efa_av, util_av.av_fid);
+	assert_true(efa_av_is_map(av));
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 7;
+	raw_addr.qkey = 0xABCD;
+
+	num_addr = fi_av_insert(map_av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	/* the fi_addr is the entry, which keeps the util_av index */
+	entry = efa_av_addr_to_entry(av, fi_addr);
+	assert_non_null(entry);
+	assert_ptr_equal((void *) (uintptr_t) fi_addr, entry);
+	assert_int_equal(entry->fi_addr, 0);
+	assert_int_equal(efa_av_fi_addr_to_index(av, fi_addr), 0);
+	assert_int_equal(efa_av_index_to_fi_addr(av, 0), fi_addr);
+	assert_int_equal(efa_av_entry_ep_addr(entry)->qpn, 7);
+
+	/* inserting the same address again returns the same fi_addr */
+	num_addr = fi_av_insert(map_av, &raw_addr, 1, &fi_addr2, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	assert_int_equal(fi_addr2, fi_addr);
+
+	/* a completion's source is reported as the application fi_addr */
+	if (!strcmp(fabric_name, EFA_DIRECT_FABRIC_NAME))
+		src = efa_av_reverse_lookup(av, entry->ah->ahn, 7);
+	else
+		src = efa_rdm_av_reverse_lookup(av, entry->ah->ahn, 7, NULL);
+	assert_int_equal(src, fi_addr);
+
+	raw_addr_len = sizeof(raw_addr_out);
+	err = fi_av_lookup(map_av, fi_addr, &raw_addr_out, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_out), 1);
+
+	err = fi_av_remove(map_av, &fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+	assert_int_equal(HASH_CNT(hh, av->util_av.hash), 0);
+
+	/* a removed FI_AV_MAP fi_addr is rejected, not dereferenced */
+	assert_int_equal(fi_av_lookup(map_av, fi_addr, &raw_addr_out, &raw_addr_len), -FI_EINVAL);
+	assert_int_equal(fi_av_remove(map_av, &fi_addr, 1, 0), -FI_EINVAL);
+	/* data transfers only check it in strict mode */
+	strict_mode_orig = efa_env.strict_mode;
+	efa_env.strict_mode = 1;
+	assert_null(efa_av_addr_to_entry(av, fi_addr));
+	assert_int_equal(efa_av_fi_addr_to_index(av, fi_addr), FI_ADDR_NOTAVAIL);
+	efa_env.strict_mode = strict_mode_orig;
+
+	err = fi_close(&map_av->fid);
+	assert_int_equal(err, 0);
+}
+
+void test_av_map_insert_remove_lookup_efa(void **state)
+{
+	test_av_map_insert_remove_lookup_impl(state, EFA_FABRIC_NAME);
+}
+
+void test_av_map_insert_remove_lookup_efa_direct(void **state)
+{
+	test_av_map_insert_remove_lookup_impl(state, EFA_DIRECT_FABRIC_NAME);
+}
+
+/**
+ * @brief With FI_EFA_SUPPORT_AV_MAP=0 a FI_AV_MAP request opens a table
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_map_disabled(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_av_attr av_attr = {.type = FI_AV_MAP};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct fid_av *map_av;
+	fi_addr_t fi_addr;
+	int err, saved = efa_env.support_av_map;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_env.support_av_map = 0;
+	err = fi_av_open(resource->domain, &av_attr, &map_av, NULL);
+	efa_env.support_av_map = saved;
+	assert_int_equal(err, 0);
+	assert_int_equal(av_attr.type, FI_AV_TABLE);
+	assert_false(efa_av_is_map(container_of(map_av, struct efa_av, util_av.av_fid)));
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 7;
+	assert_int_equal(fi_av_insert(map_av, &raw_addr, 1, &fi_addr, 0, NULL), 1);
+	assert_int_equal(fi_addr, 0);
+
+	err = fi_close(&map_av->fid);
+	assert_int_equal(err, 0);
+}
+
+/**
+ * @brief On the efa (RDM) fabric with FI_AV_MAP, the AV entry caches the peer
+ * of the first endpoint that resolves it, and the peer keeps the util_av index
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_av_map_rdm_peer_cache(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_av_attr av_attr = {.type = FI_AV_MAP};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ep *ep;
+	struct fid_av *map_av;
+	struct fid_ep *ep_fid;
+	fi_addr_t fi_addr;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	err = fi_av_open(resource->domain, &av_attr, &map_av, NULL);
+	assert_int_equal(err, 0);
+
+	err = fi_endpoint(resource->domain, resource->info, &ep_fid, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(fi_ep_bind(ep_fid, &map_av->fid, 0), 0);
+	assert_int_equal(fi_ep_bind(ep_fid, &resource->cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(ep_fid), 0);
+	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 9;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(map_av, &raw_addr, 1, &fi_addr, 0, NULL), 1);
+	av_entry = (struct efa_rdm_av_entry *) (uintptr_t) fi_addr;
+	assert_null(av_entry->cache_ep);
+
+	/* first resolution creates the peer and caches it in the entry */
+	peer = efa_rdm_ep_get_peer_explicit(ep, fi_addr);
+	assert_non_null(peer);
+	assert_ptr_equal(av_entry->cache_ep, ep);
+	assert_ptr_equal(av_entry->cache_peer, peer);
+	assert_int_equal(efa_rdm_peer_av_index(peer), av_entry->efa_av_entry.fi_addr);
+	assert_int_equal(efa_rdm_peer_fi_addr(peer), fi_addr);
+
+	/* later resolutions return the cached peer */
+	assert_ptr_equal(efa_rdm_ep_get_peer_explicit(ep, fi_addr), peer);
+
+	assert_int_equal(fi_close(&ep_fid->fid), 0);
+	/* closing the endpoint cleared the cache before freeing the peer */
+	assert_null(av_entry->cache_ep);
+	assert_null(av_entry->cache_peer);
+
+	assert_int_equal(fi_av_remove(map_av, &fi_addr, 1, 0), 0);
+	assert_int_equal(fi_close(&map_av->fid), 0);
+}
+
+static struct fid_ep *test_av_map_open_rdm_ep(struct efa_resource *resource,
+					       struct fid_av *av)
+{
+	struct fid_ep *ep_fid;
+
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep_fid, NULL), 0);
+	assert_int_equal(fi_ep_bind(ep_fid, &av->fid, 0), 0);
+	assert_int_equal(fi_ep_bind(ep_fid, &resource->cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(ep_fid), 0);
+	return ep_fid;
+}
+
+/**
+ * @brief Two endpoints on one FI_AV_MAP AV: the first to resolve an entry owns
+ * its peer cache, the second never overwrites it and uses its peer map, and
+ * closing the owner releases the cache without affecting the second.
+ */
+void test_av_map_rdm_peer_cache_two_eps(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_av_attr av_attr = {.type = FI_AV_MAP};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_peer *peer1, *peer2;
+	struct efa_rdm_ep *ep1, *ep2;
+	struct fid_ep *ep1_fid, *ep2_fid;
+	struct fid_av *map_av;
+	fi_addr_t fi_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	assert_int_equal(fi_av_open(resource->domain, &av_attr, &map_av, NULL), 0);
+	ep1_fid = test_av_map_open_rdm_ep(resource, map_av);
+	ep2_fid = test_av_map_open_rdm_ep(resource, map_av);
+	ep1 = container_of(ep1_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	ep2 = container_of(ep2_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 9;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(map_av, &raw_addr, 1, &fi_addr, 0, NULL), 1);
+	av_entry = (struct efa_rdm_av_entry *) (uintptr_t) fi_addr;
+
+	/* ep1 resolves first and owns the cache */
+	peer1 = efa_rdm_ep_get_peer_explicit(ep1, fi_addr);
+	assert_non_null(peer1);
+	assert_ptr_equal(av_entry->cache_ep, ep1);
+	assert_ptr_equal(av_entry->cache_peer, peer1);
+
+	/* ep2 gets its own peer from its peer map; ep1's cache is untouched */
+	peer2 = efa_rdm_ep_get_peer_explicit(ep2, fi_addr);
+	assert_non_null(peer2);
+	assert_ptr_not_equal(peer2, peer1);
+	assert_ptr_equal(av_entry->cache_ep, ep1);
+	assert_ptr_equal(av_entry->cache_peer, peer1);
+	assert_ptr_equal(efa_rdm_ep_get_peer_explicit(ep2, fi_addr), peer2);
+	assert_ptr_equal(efa_rdm_ep_get_peer_explicit(ep1, fi_addr), peer1);
+
+	/* closing ep1 releases the cache; ep2 keeps resolving through its map */
+	assert_int_equal(fi_close(&ep1_fid->fid), 0);
+	assert_null(av_entry->cache_ep);
+	assert_null(av_entry->cache_peer);
+	assert_ptr_equal(efa_rdm_ep_get_peer_explicit(ep2, fi_addr), peer2);
+
+	assert_int_equal(fi_close(&ep2_fid->fid), 0);
+	assert_null(av_entry->cache_ep);
+	assert_int_equal(fi_av_remove(map_av, &fi_addr, 1, 0), 0);
+	assert_int_equal(fi_close(&map_av->fid), 0);
+}

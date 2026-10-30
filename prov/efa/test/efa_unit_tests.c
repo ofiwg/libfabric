@@ -238,6 +238,11 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_av_multiple_ep_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_insert_remove_lookup_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_base_addr_to_entry_invalid, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_map_insert_remove_lookup_efa, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_map_insert_remove_lookup_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_map_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_map_rdm_peer_cache, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_map_rdm_peer_cache_two_eps, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_av.c */
 
 		/* begin efa_unit_test_rdm_av.c */
