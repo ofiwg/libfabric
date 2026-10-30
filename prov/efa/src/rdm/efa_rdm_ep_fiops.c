@@ -1582,6 +1582,17 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
+		if (ep->base_ep.av && efa_av_is_map(ep->base_ep.av)) {
+			if (ep->base_ep.util_ep.rx_cq)
+				efa_rdm_cq_set_map_av(container_of(ep->base_ep.util_ep.rx_cq,
+								   struct efa_rdm_cq, efa_cq.util_cq),
+						      ep->base_ep.av);
+			if (ep->base_ep.util_ep.tx_cq)
+				efa_rdm_cq_set_map_av(container_of(ep->base_ep.util_ep.tx_cq,
+								   struct efa_rdm_cq, efa_cq.util_cq),
+						      ep->base_ep.av);
+		}
+
 		efa_rdm_ep_update_shm(ep);
 
 		ret = efa_base_ep_create_and_enable_qp(&ep->base_ep);

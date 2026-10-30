@@ -359,9 +359,21 @@ static inline void efa_rdm_peer_move_to_explicit(struct efa_rdm_peer *peer,
 	__atomic_store_n(&peer->implicit_fi_addr, FI_ADDR_NOTAVAIL, __ATOMIC_RELEASE);
 }
 
+/**
+ * @brief the fi_addr the application sees for a peer in the explicit AV
+ *
+ * efa_rdm_peer_av_index() is the util_av index, which keys the peer maps and
+ * util_srx. With FI_AV_MAP the application fi_addr is the AV entry's address
+ * instead. FI_ADDR_NOTAVAIL for a peer only in the implicit AV. A macro
+ * because struct efa_rdm_ep is not complete here.
+ */
+#define efa_rdm_peer_fi_addr(peer)                                             \
+	efa_av_index_to_fi_addr((peer)->ep->base_ep.av,                        \
+				efa_rdm_peer_av_index(peer))
+
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, efa_rdm_peer_av_index(peer), peer_addr_str, &(size_t){sizeof peer_addr_str});
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, efa_rdm_peer_fi_addr(peer), peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */

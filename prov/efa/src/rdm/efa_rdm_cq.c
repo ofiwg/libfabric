@@ -434,8 +434,10 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 
 	/* Step 3: Check explicit AV for the raw address */
 	if (raw_addr_available) {
-		explicit_fi_addr = ofi_av_lookup_fi_addr(&rdm_av->efa_av.util_av,
-							 (void *) &efa_ep_addr);
+		explicit_fi_addr = efa_av_index_to_fi_addr(
+			&rdm_av->efa_av,
+			ofi_av_lookup_fi_addr(&rdm_av->efa_av.util_av,
+					      (void *) &efa_ep_addr));
 		if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
 			peer = efa_rdm_ep_get_peer_explicit(ep, explicit_fi_addr);
 			if (OFI_LIKELY(!!peer)) {
@@ -482,8 +484,10 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	}
 
 	if (raw_addr_available) {
-		explicit_fi_addr = ofi_av_lookup_fi_addr_unsafe(
-			&rdm_av->efa_av.util_av, &efa_ep_addr);
+		explicit_fi_addr = efa_av_index_to_fi_addr(
+			&rdm_av->efa_av,
+			ofi_av_lookup_fi_addr_unsafe(&rdm_av->efa_av.util_av,
+						     &efa_ep_addr));
 		if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
 			EFA_INFO(FI_LOG_AV,
 				 "Found existing AV entry in explicit AV pointing to "
@@ -1391,6 +1395,62 @@ static int efa_rdm_cq_init_entry_size(struct efa_rdm_cq *cq,
 }
 
 /**
+ * @brief the application fi_addr of a completion source written through the
+ * peer CQ
+ *
+ * shm and util_srx report the source as the util_av index; with FI_AV_MAP it
+ * must be the entry's address. Unchanged for FI_AV_TABLE.
+ */
+static inline fi_addr_t efa_rdm_cq_src_index_to_fi_addr(struct fid_peer_cq *peer_cq,
+							 fi_addr_t src)
+{
+	struct util_cq *util_cq = peer_cq->fid.context;
+	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	return cq->map_av ? efa_av_index_to_fi_addr(cq->map_av, src) : src;
+}
+
+static ssize_t efa_rdm_cq_peer_write(struct fid_peer_cq *peer_cq, void *context,
+				     uint64_t flags, size_t len, void *buf,
+				     uint64_t data, uint64_t tag, fi_addr_t src)
+{
+	struct util_cq *util_cq = peer_cq->fid.context;
+	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	return cq->util_owner_ops->write(peer_cq, context, flags, len, buf, data,
+					 tag, efa_rdm_cq_src_index_to_fi_addr(peer_cq, src));
+}
+
+static ssize_t efa_rdm_cq_peer_writeerr(struct fid_peer_cq *peer_cq,
+					const struct fi_cq_err_entry *err_entry)
+{
+	struct util_cq *util_cq = peer_cq->fid.context;
+	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
+	struct fi_cq_err_entry entry = *err_entry;
+
+	entry.src_addr = (err_entry->src_addr == FI_ADDR_NOTAVAIL)
+				 ? FI_ADDR_NOTAVAIL
+				 : efa_rdm_cq_src_index_to_fi_addr(peer_cq, err_entry->src_addr);
+	return cq->util_owner_ops->writeerr(peer_cq, &entry);
+}
+
+/**
+ * @brief translate peer-CQ completion sources for an endpoint on a FI_AV_MAP AV
+ *
+ * @param[in]	cq	CQ the endpoint is bound to
+ * @param[in]	av	the endpoint's AV
+ */
+void efa_rdm_cq_set_map_av(struct efa_rdm_cq *cq, struct efa_av *av)
+{
+	if (!efa_av_is_map(av) || cq->map_av == av)
+		return;
+	if (cq->map_av)
+		EFA_WARN(FI_LOG_CQ, "CQ is bound to endpoints on more than one FI_AV_MAP AV; "
+				    "shm and util_srx completion sources use the last one\n");
+	cq->map_av = av;
+}
+
+/**
  * @brief create a CQ for EFA RDM provider
  *
  * Note that EFA RDM provider used the util_cq as its CQ
@@ -1449,6 +1509,14 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ret = efa_rdm_cq_init_entry_size(cq, attr->format);
 	if (ret)
 		goto close_util_cq;
+
+	/* wrap the peer CQ writes so completion sources can be translated */
+	cq->map_av = NULL;
+	cq->util_owner_ops = cq->efa_cq.util_cq.peer_cq->owner_ops;
+	cq->owner_ops = *cq->util_owner_ops;
+	cq->owner_ops.write = efa_rdm_cq_peer_write;
+	cq->owner_ops.writeerr = efa_rdm_cq_peer_writeerr;
+	cq->efa_cq.util_cq.peer_cq->owner_ops = &cq->owner_ops;
 
 	ret = efa_cq_open_ibv_cq(
 		attr, rdm_domain->efa_domain.device->ibv_ctx, &cq->efa_cq.ibv_cq,
