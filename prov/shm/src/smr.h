@@ -186,7 +186,14 @@ struct smr_pend_entry {
 	struct iovec			iov[SMR_IOV_LIMIT];
 	size_t				iov_count;
 	struct ofi_mr			*mr[SMR_IOV_LIMIT];
+	struct iovec			src_iov[SMR_IOV_LIMIT];
+	size_t				src_iov_count;
+	struct ofi_mr			*src_mr[SMR_IOV_LIMIT];
+	struct iovec			comp_iov[SMR_IOV_LIMIT];
+	size_t				comp_iov_count;
+	struct ofi_mr			*comp_mr[SMR_IOV_LIMIT];
 	size_t				bytes_done;
+	size_t				tx_bytes_done;
 	void				*comp_ctx;
 	uint64_t			comp_flags;
 	int				sar_dir;
