@@ -7,6 +7,9 @@
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;
 
+int efa_util_prov_initialize(void);
+void efa_util_prov_finalize(void);
+
 #define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
 #define EFA_WARN_ONCE(subsys, ...) FI_WARN_ONCE(&efa_prov, subsys, __VA_ARGS__)
 #define EFA_TRACE(subsys, ...) FI_TRACE(&efa_prov, subsys, __VA_ARGS__)

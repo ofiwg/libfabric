@@ -83,7 +83,7 @@ ofi_mutex_t g_efa_domain_list_lock;
  * efa_util_prov is the util_provider with its
  * info pointing a linked list of info object
  */
-static int efa_util_prov_initialize()
+int efa_util_prov_initialize(void)
 {
 	int i, err;
 	struct fi_info *head, *tail, *prov_info_rdm, *prov_info_dgram, *prov_info_direct;
@@ -117,6 +117,11 @@ static int efa_util_prov_initialize()
 			prov_info_direct->tx_attr->caps |= FI_WR;
 			prov_info_direct->rx_attr->caps |= FI_WR;
 		}
+
+		if (efa_env.tx_size > 0)
+			prov_info_direct->tx_attr->size = MIN(efa_env.tx_size, prov_info_direct->tx_attr->size);
+		if (efa_env.rx_size > 0)
+			prov_info_direct->rx_attr->size = MIN(efa_env.rx_size, prov_info_direct->rx_attr->size);
 
 		if (!head) {
 			head = prov_info_direct;
@@ -182,7 +187,7 @@ static int efa_util_prov_initialize()
 	return 0;
 }
 
-static void efa_util_prov_finalize()
+void efa_util_prov_finalize(void)
 {
 	struct fi_info *prov_info;
 
