@@ -91,6 +91,20 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (OFI_UNLIKELY(app_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
+	/* Path 0 (FI_AV_MAP): the fi_addr is the AV entry, which caches the
+	 * peer of the endpoint that owns its cache. A NULL peer means the owner
+	 * has not stored it yet or is releasing the cache: use the peer map. */
+	if (efa_av_is_map(ep->base_ep.av)) {
+		struct efa_rdm_av_entry *av_entry =
+			(struct efa_rdm_av_entry *) (uintptr_t) app_addr;
+
+		if (OFI_LIKELY(__atomic_load_n(&av_entry->cache_ep, __ATOMIC_ACQUIRE) == ep)) {
+			peer = __atomic_load_n(&av_entry->cache_peer, __ATOMIC_ACQUIRE);
+			if (OFI_LIKELY(peer != NULL))
+				return peer;
+		}
+	}
+
 	/* the peer map is keyed by the util_av index, which is the
 	 * application fi_addr for FI_AV_TABLE */
 	addr = efa_av_fi_addr_to_index(ep->base_ep.av, app_addr);
@@ -150,6 +164,9 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	}
 
 unlock:
+	if (peer && efa_av_is_map(ep->base_ep.av))
+		efa_rdm_av_entry_cache_peer(
+			container_of(entry, struct efa_rdm_av_entry, efa_av_entry), ep, peer);
 	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	return peer;
 }
