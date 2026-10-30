@@ -1169,6 +1169,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 			     uint64_t flags)
 {
 	ssize_t ret = 0;
+	fi_addr_t src_addr;
 
 	assert(msg->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 
@@ -1186,13 +1187,22 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	if (ret)
 		return ret;
 
+	/* util_srx keys its per-source queues (ofi_array) by fi_addr, so it works
+	 * on the util_av index for both AV types. The source address only means
+	 * something with FI_DIRECTED_RECV on the endpoint; without it the
+	 * application may pass anything, so pass FI_ADDR_UNSPEC: util_srx decides
+	 * directed receive from the domain caps and would use the value. */
+	src_addr = (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
+			   ? efa_av_fi_addr_to_index(ep->base_ep.av, msg->addr)
+			   : FI_ADDR_UNSPEC;
+
 	if (op == ofi_op_tagged) {
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
-					     msg->iov_count, msg->addr, msg->context,
+					     msg->iov_count, src_addr, msg->context,
 					     tag, ignore, flags);
 	} else {
 		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
-				            msg->iov_count, msg->addr, msg->context, flags);
+				            msg->iov_count, src_addr, msg->context, flags);
 	}
 
 	efa_perfset_end(ep, perf_efa_recv);

@@ -21,7 +21,18 @@ struct efa_rdm_cq {
 	struct ofi_genlock progress_ep_list_lock;
 	size_t entry_size;
 	bool need_to_scan_ep_list;
+	/*
+	 * FI_AV_MAP: completions written through the peer CQ (by shm and by
+	 * util_srx) carry the util_av index as their source; map_av turns it into
+	 * the application fi_addr. Set when an endpoint bound to a FI_AV_MAP AV is
+	 * enabled on this CQ.
+	 */
+	struct efa_av *map_av;
+	const struct fi_ops_cq_owner *util_owner_ops;
+	struct fi_ops_cq_owner owner_ops;
 };
+
+void efa_rdm_cq_set_map_av(struct efa_rdm_cq *cq, struct efa_av *av);
 
 int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		    struct fid_cq **cq_fid, void *context);
