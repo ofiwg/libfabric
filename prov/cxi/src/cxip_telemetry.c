@@ -196,6 +196,7 @@ int cxip_telemetry_alloc(struct cxip_domain *dom,
 	struct cxip_telemetry *_telemetry;
 	const char *telemetry_token;
 	char *telemetry_copy;
+	char *saveptr;
 	int ret = FI_SUCCESS;
 
 	/* If user defined telemtry string is NULL or RGID does not match,
@@ -226,7 +227,7 @@ int cxip_telemetry_alloc(struct cxip_domain *dom,
 	 * telemetry entry fails to be allocated for a given substring/token,
 	 * this is not considered fatal and parsing will continue.
 	 */
-	telemetry_token = strtok(telemetry_copy, ",");
+	telemetry_token = strtok_r(telemetry_copy, ",", &saveptr);
 	while (telemetry_token != NULL) {
 		ret = cxip_telemetry_entry_alloc(_telemetry, telemetry_token);
 		if (ret)
@@ -236,7 +237,7 @@ int cxip_telemetry_alloc(struct cxip_domain *dom,
 			DOM_INFO(dom, "Telemetry entry allocated for %s\n",
 				 telemetry_token);
 
-		telemetry_token = strtok(NULL, ",");
+		telemetry_token = strtok_r(NULL, ",", &saveptr);
 	}
 
 	free(telemetry_copy);
