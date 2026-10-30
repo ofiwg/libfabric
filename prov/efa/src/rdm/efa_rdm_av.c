@@ -426,6 +426,7 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 			fi_addr = av_entry->implicit_fi_addr;
 		}
 		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+		efa_rdm_av_entry_uncache_peer(av_entry, ep);
 		peer = efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
 		if (peer) {
 			efa_rdm_peer_destruct(peer, ep);
@@ -502,6 +503,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	av_entry->av = rdm_av;
 	av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	efa_rdm_av_entry_cache_init(av_entry);
 	dlist_init(&av_entry->implicit_av_lru_entry);
 	dlist_init(&av_entry->ah_implicit_conn_list_entry);
 
@@ -594,6 +596,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 	av_entry->efa_av_entry.fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->implicit_fi_addr = fi_addr;
 	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	efa_rdm_av_entry_cache_init(av_entry);
 	dlist_init(&av_entry->implicit_av_lru_entry);
 	dlist_init(&av_entry->ah_implicit_conn_list_entry);
 
@@ -1240,6 +1243,8 @@ static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
 			err = efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
 							 fi_addr, peer);
 			assert(!err);
+			if (efa_av_is_map(av))
+				efa_rdm_av_entry_cache_peer(av_entry, ep, peer);
 		}
 		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	}
@@ -1397,6 +1402,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	explicit_av_entry->av = rdm_av;
 	explicit_av_entry->shm_fi_addr = implicit_av_entry->shm_fi_addr;
 	explicit_av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
+	efa_rdm_av_entry_cache_init(explicit_av_entry);
 	dlist_init(&explicit_av_entry->implicit_av_lru_entry);
 	dlist_init(&explicit_av_entry->ah_implicit_conn_list_entry);
 
