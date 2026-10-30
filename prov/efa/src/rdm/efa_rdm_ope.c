@@ -387,28 +387,6 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 }
 
 /**
- * @brief calculate and set the bytes_runt field of a txe
- *
- * bytes_runt is number of bytes for a message to be sent by runting
- *
- * @param[in]		ep			endpoint
- * @param[in,out]	txe	txe to be set
- */
-static inline
-void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
-{
-	assert(txe->type == EFA_RDM_TXE);
-
-	if (txe->bytes_runt > 0)
-		return;
-
-	assert(txe->peer);
-	txe->bytes_runt = efa_rdm_peer_get_runt_size(txe->peer, ep, txe);
-
-	assert(txe->bytes_runt);
-}
-
-/**
  * @brief total data size that will be sent/received via the multiple REQ packets
  *
  * Multi-req protocols send/receive data via multiple REQ packets. Different
@@ -470,10 +448,6 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags,
 					       txe->rma_iov_count);
 
-	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
-		max_data_offset += txe->iov_count * sizeof(struct fi_rma_iov);
-	}
-
 	return ep->mtu_size - max_data_offset;
 }
 
@@ -484,16 +458,13 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
  * sent. If there are more than 1 packet, calculate how many data
  * each packet will carry.
  *
- * For runting read rtm, also set the "runt_size" field.
- *
  * @param[in]		ep		endpoint
  * @param[in,out]	ope		txe that has all information of
  * 					a send operation
  * @param[in]		pkt_type	type of REQ packet
  * @param[in]		pkt_entry_cnt	number of packets to be sent
- * @param[in]		pkt_entry_data_size_vec data size of each packet. This field
- *                                              is used when pkt_entry_cnt > 1.
- *                                              (for DATA, MEDIUM and RUNTREAD)
+ * @param[out]		pkt_entry_data_size_vec	data size of each packet; only
+ * 					meaningful for medium packet types
  * @return
  * On success, return 0
  * If there is not enough available packet entry in TX packet pool, return -FI_EAGAIN
@@ -518,10 +489,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 	if (available_tx_pkts == 0)
 		return -FI_EAGAIN;
 
-	if (efa_rdm_pkt_type_is_medium(pkt_type) || efa_rdm_pkt_type_is_runt(pkt_type)) {
-		if(efa_rdm_pkt_type_is_runt(pkt_type))
-			efa_rdm_txe_set_runt_size(ep, ope);
-
+	if (efa_rdm_pkt_type_is_medium(pkt_type)) {
 		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
 		assert(total_pkt_entry_data_size);
 
