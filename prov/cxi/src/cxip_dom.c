@@ -211,6 +211,41 @@ out_unlock:
 	return ret;
 }
 
+int cxip_domain_emit_dma_flush_put(struct cxip_domain *dom, uint16_t vni,
+				   enum cxi_traffic_class tc,
+				   struct c_full_dma_cmd *dma,
+				   struct c_full_dma_cmd *flush_put,
+				   uint64_t flags)
+{
+	int ret;
+	struct cxip_domain_cmdq *cmdq;
+
+	ofi_genlock_lock(&dom->cmdq_lock);
+
+	ret = cxip_domain_find_cmdq(dom, vni, tc, &cmdq);
+	if (ret) {
+		CXIP_WARN("Failed to find command queue: %d\n", ret);
+		goto out_unlock;
+	}
+
+	ret = cxip_cmdq_emit_dma_flush_put(cmdq->cmdq, dma, flush_put, flags);
+	if (ret) {
+		CXIP_WARN("Failed to emit dma + flush put: %d\n", ret);
+		goto out_unlock;
+	}
+
+	cxi_cq_ring(cmdq->cmdq->dev_cmdq);
+
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return FI_SUCCESS;
+
+out_unlock:
+	ofi_genlock_unlock(&dom->cmdq_lock);
+
+	return ret;
+}
+
 int cxip_domain_emit_idc_amo(struct cxip_domain *dom, uint16_t vni,
 			     enum cxi_traffic_class tc,
 			     const struct c_cstate_cmd *c_state,
