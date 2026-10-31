@@ -48,6 +48,8 @@ void efa_device_list_finalize(void);
 
 void efa_device_destruct(struct efa_device *device);
 
+int efa_device_read_random(struct efa_device *device, void *buf, size_t len);
+
 int efa_device_construct_gid(struct efa_device *efa_device,
 			     struct ibv_device *ibv_device);
 
