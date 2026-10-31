@@ -302,7 +302,17 @@ The CXI provider supports the following Operation flags:
     that data is visible to the target process. To support this, hardware at
     the target performs a zero-byte read operation to flush data across the
     PCIe bus before generating an Ack. Flushing reads are performed
-    unconditionally and will lead to higher latency.
+    unconditionally and will lead to higher latency. A flushed Put that is
+    sent as an unordered (restricted) message is flushed after every packet
+    at the target, which can limit the bandwidth of large RMA writes into
+    memory with a long PCIe read round trip, such as GPU memory behind a CPU
+    root complex. When *FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD* is set,
+    eligible RMA writes larger than that threshold are instead issued as
+    ordered (unrestricted) Puts so the target flushes once per message:
+    Cassini 2 flushes an ordered Put after its last packet, and on Cassini 1
+    the provider follows the unflushed data Put with a zero-byte flushing Put
+    to the same destination. The option is disabled by default; see the
+    environment variable for the eligibility rules.
 
 *FI_MATCH_COMPLETE*
 :   When the 'match complete' completion level is used, the event guarantees
@@ -1041,6 +1051,23 @@ The CXI provider checks for the following environment variables:
     when FI_INJECT is not specified. This can be useful with GPU source buffers
     to avoid the host copy in cases a performant copy can not be used. The default
     is to use IDC for all messages less than IDC size.
+
+*FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD*
+:   DMA RMA writes with FI_DELIVERY_COMPLETE or FI_MATCH_COMPLETE larger than
+    this many bytes are issued as ordered (unrestricted) Puts so that the
+    target performs one flushing PCIe read per message instead of one per
+    2 KiB packet. On Cassini 2 the NIC flushes an ordered Put after its last
+    packet (the default IXE configuration, FLUSH_ONLY_EOM); on Cassini 1 the
+    provider follows the unflushed data Put with a zero-byte flushing Put to
+    the same destination and completes the write after both acknowledgments.
+    Writes with FI_CXI_HRP are never changed, and Cassini 1 keeps the
+    per-packet flush for the cases listed under *ERRATA*.
+    Ordered Puts use connection-based reliability, which holds target
+    connection state, and are not adaptively routed per packet, so the option
+    is disabled by default: with the default of 0 the provider keeps its
+    previous ordered/unordered selection and flush behavior for every write.
+    Set to 2048, one request-packet payload, to apply it to every write
+    larger than one packet.
 
 *FI_CXI_DISABLE_NON_INJECT_RMA_IDC*
 :   Experimental option to disable favoring IDC for transmit of small RMA
@@ -1999,6 +2026,16 @@ current capabilities.
 
 * Fetch and compare type AMOs with FI_DELIVERY_COMPLETE or FI_MATCH_COMPLETE
   completion semantics are not supported with FI_RMA_EVENT.
+
+* On Cassini 1, a Put requesting a flush is flushed after every packet
+  whether or not it is ordered, so the optional single-flush behavior for
+  large FI_DELIVERY_COMPLETE RMA writes (*FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD*)
+  is implemented with a trailing zero-byte flushing Put. That Put would raise
+  a second remote event, so Cassini 1 keeps the per-packet flush for writes
+  with FI_REMOTE_CQ_DATA, for triggered writes, and for writes to MRs with
+  remote events; for client (non-provider) keys the provider cannot see the
+  target MR's events and uses the initiator's FI_RMA_EVENT capability as a
+  proxy.
 
 # Libfabric CXI Provider User Programming and Troubleshooting Guide
 

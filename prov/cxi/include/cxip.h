@@ -194,6 +194,16 @@ extern struct cxip_libcxi_ops cxip_libcxi_ops;
 
 #define CXIP_INJECT_SIZE		C_MAX_IDC_PAYLOAD_UNR
 
+/* Cassini request packets carry at most 2 KiB of payload. An RMA write of at
+ * most one packet is flushed once by hardware already, so the single-flush
+ * ordered path for FI_DELIVERY_COMPLETE writes (see cxip_rma.c) only applies
+ * to writes larger than FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD, and a threshold
+ * of one packet payload covers every multi-packet write. The path is opt-in:
+ * the default threshold of 0 disables it.
+ */
+#define CXIP_RMA_DC_SINGLE_FLUSH_PKT_LEN	2048
+#define CXIP_RMA_DC_SINGLE_FLUSH_THRESHOLD	0
+
 /* Max TX size of 16,384 translate to a 4MiB command queue buffer. */
 #define CXIP_MAX_TX_SIZE		16384U
 #define CXIP_DEFAULT_TX_SIZE		1024U
@@ -332,6 +342,7 @@ struct cxip_environment {
 	int disable_non_inject_msg_idc;
 	int disable_non_inject_rma_idc;
 	int disable_non_inject_amo_idc;
+	size_t rma_dc_single_flush_threshold;
 	int disable_host_register;
 	size_t oflow_buf_size;
 	size_t oflow_buf_min_posted;
@@ -873,6 +884,10 @@ int cxip_cmdq_emit_idc_put(struct cxip_cmdq *cmdq,
 			   size_t len, uint64_t flags);
 int cxip_cmdq_emit_dma(struct cxip_cmdq *cmdq, struct c_full_dma_cmd *dma,
 		       uint64_t flags);
+int cxip_cmdq_emit_dma_flush_put(struct cxip_cmdq *cmdq,
+				 struct c_full_dma_cmd *dma,
+				 struct c_full_dma_cmd *flush_put,
+				 uint64_t flags);
 int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 			   const struct c_cstate_cmd *c_state,
 			   const struct c_idc_amo_cmd *amo, uint64_t flags,
@@ -1099,6 +1114,11 @@ int cxip_domain_emit_idc_put(struct cxip_domain *dom, uint16_t vni,
 int cxip_domain_emit_dma(struct cxip_domain *dom, uint16_t vni,
 			 enum cxi_traffic_class tc, struct c_full_dma_cmd *dma,
 			 uint64_t flags);
+int cxip_domain_emit_dma_flush_put(struct cxip_domain *dom, uint16_t vni,
+				   enum cxi_traffic_class tc,
+				   struct c_full_dma_cmd *dma,
+				   struct c_full_dma_cmd *flush_put,
+				   uint64_t flags);
 int cxip_domain_emit_idc_amo(struct cxip_domain *dom, uint16_t vni,
 			     enum cxi_traffic_class tc,
 			     const struct c_cstate_cmd *c_state,
@@ -1198,6 +1218,12 @@ struct cxip_req_rma {
 	struct cxip_cntr *cntr;
 	/* collectives leaf_rdma_get_callback context data */
 	struct cxip_coll_reduction *reduction;
+	/* Write issued as an unflushed data Put plus a zero-byte flushing Put
+	 * (Cassini 1 single-flush path): two initiator events complete it.
+	 */
+	bool flush_put;
+	uint8_t flush_put_events;
+	unsigned int flush_put_rc;
 };
 
 struct cxip_req_amo {
@@ -2500,6 +2526,12 @@ int cxip_txc_emit_dma(struct cxip_txc *txc, uint16_t vni,
 		      enum cxi_traffic_class_type tc_type,
 		      struct cxip_cntr *trig_cntr, size_t trig_thresh,
 		      struct c_full_dma_cmd *dma, uint64_t flags);
+int cxip_txc_emit_dma_flush_put(struct cxip_txc *txc, uint16_t vni,
+				enum cxi_traffic_class tc,
+				enum cxi_traffic_class_type tc_type,
+				struct c_full_dma_cmd *dma,
+				struct c_full_dma_cmd *flush_put,
+				uint64_t flags);
 int cxip_txc_emit_idc_amo(struct cxip_txc *txc, uint16_t vni,
 			  enum cxi_traffic_class tc,
 			  enum cxi_traffic_class_type tc_type,

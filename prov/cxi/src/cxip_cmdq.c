@@ -555,6 +555,68 @@ err:
 	return ret;
 }
 
+/*
+ * cxip_cmdq_emit_dma_flush_put() - Emit a DMA Put followed by a zero-byte
+ * flushing Put as one unit.
+ *
+ * Used for multi-packet FI_DELIVERY_COMPLETE writes on Cassini 1, where
+ * the target flushes after every packet of a flushed Put, ordered or not.
+ * The data Put is emitted with its flush bit clear and the zero-byte Put
+ * carries the flush bit. Both commands must be unrestricted and share the
+ * ordered communication profile so the target keeps them in order and
+ * processes the flushing Put after the data. Either both commands are
+ * emitted or neither.
+ */
+int cxip_cmdq_emit_dma_flush_put(struct cxip_cmdq *cmdq,
+				 struct c_full_dma_cmd *dma,
+				 struct c_full_dma_cmd *flush_put,
+				 uint64_t flags)
+{
+	int ret;
+
+	/* An optional fence plus two 64-byte commands. Reserve the same 16
+	 * 32-byte slots the fetching AMO flush path reserves, and do so before
+	 * the fence so a deferred operation leaves nothing in the queue.
+	 */
+	if (__cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
+		CXIP_WARN("No space for RMA write with flushing Put\n");
+		ret = -FI_EAGAIN;
+		goto err;
+	}
+
+	if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			CXIP_WARN("Failed to issue fence command: %d:%s\n", ret,
+				  fi_strerror(-ret));
+			ret = -FI_EAGAIN;
+			goto err;
+		}
+	}
+
+	ret = cxi_cq_emit_dma(cmdq->dev_cmdq, dma);
+	if (ret) {
+		CXIP_WARN("Failed to emit dma command: %d:%s\n", ret,
+			  fi_strerror(-ret));
+		ret = -FI_EAGAIN;
+		goto err;
+	}
+
+	/* Space was reserved above, so this cannot fail. */
+	ret = cxi_cq_emit_dma(cmdq->dev_cmdq, flush_put);
+	assert(ret == 0);
+
+	return FI_SUCCESS;
+
+err:
+	/* On error (e.g. command queue full), always ring the CQ to prevent
+	 * FI_MORE deadlock.
+	 */
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	return ret;
+}
+
 int cxip_cmdq_emic_idc_amo(struct cxip_cmdq *cmdq,
 			   const struct c_cstate_cmd *c_state,
 			   const struct c_idc_amo_cmd *amo, uint64_t flags,
