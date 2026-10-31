@@ -629,6 +629,7 @@ struct cxip_environment cxip_env = {
 	.disable_non_inject_msg_idc = 0,
 	.disable_non_inject_rma_idc = 0,
 	.disable_non_inject_amo_idc = 0,
+	.rma_dc_single_flush_threshold = CXIP_RMA_DC_SINGLE_FLUSH_THRESHOLD,
 	.disable_host_register = 0,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_min_posted = CXIP_OFLOW_BUF_MIN_POSTED,
@@ -770,6 +771,20 @@ static void cxip_env_init(void)
 			cxip_env.disable_non_inject_amo_idc);
 	fi_param_get_bool(&cxip_prov, "disable_non_inject_amo_idc",
 			  &cxip_env.disable_non_inject_amo_idc);
+
+	fi_param_define(&cxip_prov, "rma_dc_single_flush_threshold",
+			FI_PARAM_SIZE_T,
+			"RMA writes with FI_DELIVERY_COMPLETE or "
+			"FI_MATCH_COMPLETE larger than this many bytes are "
+			"issued as ordered Puts so the target performs one "
+			"flushing PCIe read per message instead of one per "
+			"packet (Cassini 2 flushes an ordered Put after its "
+			"last packet; on Cassini 1 the provider appends a "
+			"zero-byte flushing Put). Disabled when 0 (default: "
+			"%lu); 2048 covers every multi-packet write.",
+			cxip_env.rma_dc_single_flush_threshold);
+	fi_param_get_size_t(&cxip_prov, "rma_dc_single_flush_threshold",
+			    &cxip_env.rma_dc_single_flush_threshold);
 
 	fi_param_define(&cxip_prov, "disable_host_register", FI_PARAM_BOOL,
 			"Disables host buffer GPU registration (default: %d).",

@@ -607,6 +607,64 @@ int cxip_txc_emit_dma(struct cxip_txc *txc, uint16_t vni,
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_txc_emit_dma_flush_put() - Emit an unflushed DMA Put and its
+ * trailing zero-byte flushing Put (see cxip_cmdq_emit_dma_flush_put()).
+ *
+ * The caller provides unrestricted commands and the ordered traffic class
+ * type. The pair always generates success events and consumes one
+ * outstanding-request slot, which the request tracking both events frees.
+ */
+int cxip_txc_emit_dma_flush_put(struct cxip_txc *txc, uint16_t vni,
+				enum cxi_traffic_class tc,
+				enum cxi_traffic_class_type tc_type,
+				struct c_full_dma_cmd *dma,
+				struct c_full_dma_cmd *flush_put,
+				uint64_t flags)
+{
+	int ret;
+
+	if (!cxip_txc_can_emit_op(txc, false))
+		return -FI_EAGAIN;
+
+	if (txc->ep_obj->av_auth_key) {
+		ret = cxip_domain_emit_dma_flush_put(txc->domain, vni, tc, dma,
+						     flush_put, flags);
+		if (ret)
+			TXC_WARN(txc,
+				 "Failed to emit domain dma + flush put: %d\n",
+				 ret);
+		else
+			cxip_txc_otx_reqs_inc(txc);
+
+		return ret;
+	}
+
+	/* Ensure correct traffic class is used. */
+	ret = cxip_cmdq_cp_set(txc->tx_cmdq, vni, tc, tc_type);
+	if (ret) {
+		TXC_WARN(txc, "Failed to set traffic class: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	ret = cxip_cmdq_emit_dma_flush_put(txc->tx_cmdq, dma, flush_put,
+					   flags);
+	if (ret) {
+		TXC_WARN(txc, "Failed to emit dma + flush put: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	/* Kick the command queue. */
+	cxip_txq_ring(txc->tx_cmdq, !!(flags & FI_MORE),
+		      cxip_txc_otx_reqs_get(txc));
+
+	cxip_txc_otx_reqs_inc(txc);
+
+	return FI_SUCCESS;
+}
+
 int cxip_txc_emit_idc_amo(struct cxip_txc *txc, uint16_t vni,
 			  enum cxi_traffic_class tc,
 			  enum cxi_traffic_class_type tc_type,
