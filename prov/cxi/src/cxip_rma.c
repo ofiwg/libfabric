@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2018,2021-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2021-2023,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -402,8 +402,15 @@ err_free_rma_buf:
 	if (req && req->rma.ibuf)
 		cxip_txc_ibuf_free(txc, req->rma.ibuf);
 err_free_cq_req:
-	if (req)
+	if (req) {
+		/* The completion counter progress count was raised when the
+		 * counter was attached to the request; the completion that
+		 * would lower it will never arrive.
+		 */
+		if (req->rma.cntr)
+			cxip_cntr_progress_dec(req->rma.cntr);
 		cxip_evtq_req_free(req);
+	}
 err:
 	return ret;
 }
@@ -536,8 +543,11 @@ err_free_hmem_buf:
 	if (hmem_buf)
 		cxip_txc_ibuf_free(txc, hmem_buf);
 err_free_cq_req:
-	if (req)
+	if (req) {
+		if (req->rma.cntr)
+			cxip_cntr_progress_dec(req->rma.cntr);
 		cxip_evtq_req_free(req);
+	}
 err:
 	return ret;
 }
