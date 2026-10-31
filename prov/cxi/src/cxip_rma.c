@@ -105,6 +105,92 @@ static struct cxip_req *cxip_rma_read_selective_completion_req(struct cxip_txc *
 	return txc->rma_read_selective_completion_req;
 }
 
+/* How an RMA write with FI_DELIVERY_COMPLETE or FI_MATCH_COMPLETE obtains
+ * its target-side PCIe flush.
+ */
+enum cxip_rma_dc_flush {
+	/* Flush bit on the data Put; the target flushes after every packet.
+	 * This is what restricted Puts get on Cassini 1 and 2, and what
+	 * ordered Puts get on Cassini 1.
+	 */
+	CXIP_RMA_DC_FLUSH_PER_PACKET,
+	/* Ordered Put with the flush bit set; Cassini 2 flushes only after
+	 * the last packet of the message (IXE FLUSH_ONLY_EOM).
+	 */
+	CXIP_RMA_DC_FLUSH_HW_EOM,
+	/* Ordered Put with the flush bit clear followed by a zero-byte
+	 * flushing Put to the same destination (Cassini 1).
+	 */
+	CXIP_RMA_DC_FLUSH_PUT,
+};
+
+/*
+ * cxip_rma_dc_flush_mode() - Select how a write obtains its target flush.
+ *
+ * A single target flush per message requires an ordered (unrestricted) Put:
+ * the target can only identify the last packet of an ordered message, and
+ * only ordered Puts are kept in order at the target so that a trailing
+ * flushing Put follows the data. The caller forces unrestricted mode
+ * whenever this returns anything but PER_PACKET.
+ */
+static enum cxip_rma_dc_flush
+cxip_rma_dc_flush_mode(struct cxip_txc *txc, size_t len, uint64_t key,
+		       uint64_t flags, bool write, bool idc, bool triggered)
+{
+	size_t threshold = cxip_env.rma_dc_single_flush_threshold;
+
+	if (!write || idc || !threshold || len <= threshold)
+		return CXIP_RMA_DC_FLUSH_PER_PACKET;
+
+	if (!(flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
+		return CXIP_RMA_DC_FLUSH_PER_PACKET;
+
+	/* High rate Puts are an explicit request for the unordered path. */
+	if (flags & FI_CXI_HRP)
+		return CXIP_RMA_DC_FLUSH_PER_PACKET;
+
+	if (txc->ep_obj->asic_ver >= CASSINI_2_0)
+		return CXIP_RMA_DC_FLUSH_HW_EOM;
+
+	/* Cassini 1 flushes every packet of a flushed Put, so the flush moves
+	 * to a trailing zero-byte Put. That second Put would raise a second
+	 * remote event on a target MR with remote events (known from a
+	 * provider key, or assumed from the initiator's FI_RMA_EVENT
+	 * capability for client keys) or on a write carrying remote CQ data,
+	 * and triggered operations cannot emit the pair; those keep the
+	 * per-packet flush.
+	 */
+	if (triggered || (flags & FI_REMOTE_CQ_DATA) ||
+	    cxip_generic_is_mr_key_events(txc->ep_obj->caps, key))
+		return CXIP_RMA_DC_FLUSH_PER_PACKET;
+
+	return CXIP_RMA_DC_FLUSH_PUT;
+}
+
+/*
+ * cxip_rma_flush_put_init() - Build the zero-byte flushing Put that trails
+ * an unflushed data Put.
+ *
+ * The Put targets the base of the destination so its flushing read follows
+ * the data writes on the same PCIe path, and it reports to the same event
+ * queue and request as the data Put.
+ */
+static void cxip_rma_flush_put_init(struct c_full_dma_cmd *flush_put,
+				    const struct c_full_dma_cmd *dma)
+{
+	memset(flush_put, 0, sizeof(*flush_put));
+	flush_put->command.opcode = C_CMD_PUT;
+	flush_put->index_ext = dma->index_ext;
+	flush_put->event_send_disable = 1;
+	flush_put->dfa = dma->dfa;
+	flush_put->initiator = dma->initiator;
+	flush_put->remote_offset = dma->remote_offset;
+	flush_put->eq = dma->eq;
+	flush_put->user_ptr = dma->user_ptr;
+	flush_put->match_bits = dma->match_bits;
+	flush_put->flush = 1;
+}
+
 /*
  * cxip_rma_cb() - RMA event callback.
  */
@@ -126,6 +212,36 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 	}
 
+	/* A write issued as a data Put plus a flushing Put generates two
+	 * initiator ACK events in no guaranteed order. The user completion,
+	 * buffer release, and completion counter must wait for both, so the
+	 * counter is updated by software (as _cxip_amo_cb() does for fetching
+	 * AMOs with FI_DELIVERY_COMPLETE). The first failure is reported.
+	 */
+	if (req->rma.flush_put) {
+		req->rma.flush_put_events++;
+
+		event_rc = cxi_init_event_rc(event);
+		if (event_rc != C_RC_OK && req->rma.flush_put_rc == C_RC_OK)
+			req->rma.flush_put_rc = event_rc;
+
+		if (req->rma.flush_put_events != 2)
+			return FI_SUCCESS;
+
+		event_rc = req->rma.flush_put_rc;
+
+		if (req->rma.cntr) {
+			ret = cxip_cntr_mod(req->rma.cntr, 1, false,
+					    event_rc != C_RC_OK);
+			if (ret != FI_SUCCESS) {
+				req->rma.flush_put_events--;
+				return ret;
+			}
+		}
+	} else {
+		event_rc = cxi_init_event_rc(event);
+	}
+
 	req->flags &= (FI_RMA | FI_READ | FI_WRITE);
 
 	if (req->rma.cntr)
@@ -137,7 +253,6 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	if (req->rma.ibuf)
 		cxip_txc_ibuf_free(txc, req->rma.ibuf);
 
-	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
 		if (success_event) {
 			ret = cxip_cq_req_complete(req);
@@ -161,8 +276,14 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 }
 
 static bool cxip_rma_emit_dma_need_req(size_t len, uint64_t flags,
-				       struct cxip_mr *mr)
+				       struct cxip_mr *mr, bool flush_put)
 {
+	/* A data Put paired with a flushing Put needs a request to pair the
+	 * two initiator events.
+	 */
+	if (flush_put)
+		return true;
+
 	/* DMA commands with FI_INJECT always require a request structure to
 	 * track the bounce buffer.
 	 */
@@ -203,12 +324,15 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 			     enum cxi_traffic_class_type tc_type,
 			     bool triggered, uint64_t trig_thresh,
 			     struct cxip_cntr *trig_cntr,
-			     struct cxip_cntr *comp_cntr)
+			     struct cxip_cntr *comp_cntr,
+			     enum cxip_rma_dc_flush dc_flush)
 {
 	struct cxip_req *req = NULL;
 	struct cxip_md *dma_md = NULL;
 	void *dma_buf = NULL;
 	struct c_full_dma_cmd dma_cmd = {};
+	struct c_full_dma_cmd flush_put;
+	bool use_flush_put = dc_flush == CXIP_RMA_DC_FLUSH_PUT;
 	int ret;
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cntr *cntr;
@@ -216,11 +340,14 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	uint64_t access = write ? CXI_MAP_READ : CXI_MAP_WRITE;
 	uint64_t match_key = key;
 
+	/* A triggered operation cannot emit the data and flushing Put pair. */
+	assert(!(use_flush_put && triggered));
+
 	/* MR desc cannot be value unless hybrid MR desc is enabled. */
 	if (!dom->hybrid_mr_desc)
 		mr = NULL;
 
-	if (cxip_rma_emit_dma_need_req(len, flags, mr)) {
+	if (cxip_rma_emit_dma_need_req(len, flags, mr, use_flush_put)) {
 		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req) {
 			ret = -FI_EAGAIN;
@@ -236,6 +363,11 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		req->rma.txc = txc;
 		req->type = CXIP_REQ_RMA;
 		req->trig_cntr = trig_cntr;
+		req->rma.flush_put = use_flush_put;
+		/* C_RC_OK is not zero; the merged return code must start out
+		 * as success.
+		 */
+		req->rma.flush_put_rc = C_RC_OK;
 	}
 
 	if (len) {
@@ -351,8 +483,14 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		 */
 		cntr = triggered ? comp_cntr : txc->write_cntr;
 		if (cntr) {
-			dma_cmd.event_ct_ack = 1;
-			dma_cmd.ct = cntr->ct->ctn;
+			/* With a flushing Put the request sees two ACK events
+			 * and updates the counter in software once both have
+			 * arrived.
+			 */
+			if (!use_flush_put) {
+				dma_cmd.event_ct_ack = 1;
+				dma_cmd.ct = cntr->ct->ctn;
+			}
 
 			if (req) {
 				req->rma.cntr = cntr;
@@ -360,7 +498,9 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 			}
 		}
 
-		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+		if (use_flush_put)
+			cxip_rma_flush_put_init(&flush_put, &dma_cmd);
+		else if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			dma_cmd.flush = 1;
 	} else {
 		dma_cmd.command.opcode = C_CMD_GET;
@@ -387,9 +527,15 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		dma_cmd.request_len = len;
 	}
 
-	ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(tclass),
-				tc_type, trig_cntr, trig_thresh,
-				&dma_cmd, flags);
+	if (use_flush_put)
+		ret = cxip_txc_emit_dma_flush_put(txc, vni,
+						  cxip_ofi_to_cxi_tc(tclass),
+						  tc_type, &dma_cmd, &flush_put,
+						  flags);
+	else
+		ret = cxip_txc_emit_dma(txc, vni, cxip_ofi_to_cxi_tc(tclass),
+					tc_type, trig_cntr, trig_thresh,
+					&dma_cmd, flags);
 	if (ret) {
 		TXC_WARN(txc, "Failed to emit dma command: %d:%s\n", ret,
 			 fi_strerror(-ret));
@@ -656,6 +802,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	bool write = op == FI_OP_WRITE;
 	bool unr;
 	bool idc;
+	enum cxip_rma_dc_flush dc_flush;
 	int ret;
 	uint16_t vni;
 
@@ -695,6 +842,14 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write, flags);
 	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr, flags);
+
+	/* A single target flush per delivery-complete write needs an ordered
+	 * Put (see cxip_rma_dc_flush_mode()).
+	 */
+	dc_flush = cxip_rma_dc_flush_mode(txc, len, key, flags, write, idc,
+					  triggered);
+	if (dc_flush != CXIP_RMA_DC_FLUSH_PER_PACKET)
+		unr = true;
 
 	/* Build target network address. */
 	ret = cxip_av_lookup_addr(txc->ep_obj->av, tgt_addr, &caddr);
@@ -736,7 +891,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 					vni, addr, key, data, flags, context,
 					write, unr, tclass, tc_type,
 					triggered, trig_thresh,
-					trig_cntr, comp_cntr);
+					trig_cntr, comp_cntr, dc_flush);
 	ofi_genlock_unlock(&txc->ep_obj->lock);
 
 	if (ret)
@@ -747,9 +902,13 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			 buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
 	else
 		TXC_DBG(txc,
-			"%s %s RMA %s emitted: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u\n",
+			"%s %s RMA %s%s emitted: buf=%p len=%lu rkey=%#lx "
+			"roffset=%#lx nic=%#x pid=%u pid_idx=%u\n",
 			unr ? "Ordered" : "Un-ordered",
 			idc ? "IDC" : "DMA", write ? "write" : "read",
+			dc_flush == CXIP_RMA_DC_FLUSH_PUT ? " (flush put)" :
+			dc_flush == CXIP_RMA_DC_FLUSH_HW_EOM ?
+			" (EOM flush)" : "",
 			buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
 
 	return ret;
