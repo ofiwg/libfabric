@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2018 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include <stdio.h>
@@ -2547,4 +2547,557 @@ Test(rnr_rma, simple_write)
 Test(rnr_rma, simple_read)
 {
 	simple_read();
+}
+
+/* With FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD set, multi-packet
+ * FI_DELIVERY_COMPLETE writes are flushed once per message: Cassini 2 flushes
+ * an ordered Put after its last packet and Cassini 1 gets a trailing zero-byte
+ * flushing Put. The path is opt-in, so the fixture sets the threshold to one
+ * packet payload before the provider is initialized, and it disables
+ * FI_RMA_EVENT so that client-key MRs are eligible for the Cassini 1 path.
+ *
+ * The flush counts come from C_CNTR_IXE_DMAWR_FLUSH_REQS, a device-wide
+ * counter: a test is skipped when the counter moves while the endpoint is
+ * idle (another process is using the NIC), and the exact counts are not
+ * checked under netsim, which counts a flush for every packet carrying the
+ * flush bit and does not model the Cassini 2 end-of-message flush.
+ */
+#define SINGLE_FLUSH_WIN_LEN (64 * 1024)
+
+/* Largest request-packet payload: a write flushed per packet causes
+ * len / SINGLE_FLUSH_PKT_LEN flushing reads.
+ */
+#define SINGLE_FLUSH_PKT_LEN CXIP_RMA_DC_SINGLE_FLUSH_PKT_LEN
+
+/* Idle window for the device-wide flush counter check. */
+#define SINGLE_FLUSH_IDLE_US 100000
+
+static void single_flush_enable(void)
+{
+	char val[16];
+	int ret;
+
+	snprintf(val, sizeof(val), "%d", SINGLE_FLUSH_PKT_LEN);
+	ret = setenv("FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD", val, 1);
+	cr_assert_eq(ret, 0, "setenv failed");
+}
+
+static void single_flush_disable(void)
+{
+	unsetenv("FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD");
+}
+
+static void single_flush_setup(void)
+{
+	single_flush_enable();
+	cxit_setup_rma_disable_fi_rma_event();
+}
+
+static void single_flush_teardown(void)
+{
+	cxit_teardown_rma();
+	single_flush_disable();
+}
+
+TestSuite(rma_single_flush, .init = single_flush_setup,
+	  .fini = single_flush_teardown, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+static void single_flush_read_cntr(uint64_t *flushes)
+{
+	int ret;
+
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_DMAWR_FLUSH_REQS, flushes, NULL,
+				 true);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+}
+
+/* Sample the flush counter before the measured writes; skip the test when
+ * it moves while the endpoint is idle.
+ */
+static void single_flush_cntr_start(uint64_t *flushes)
+{
+	uint64_t idle;
+
+	single_flush_read_cntr(&idle);
+	usleep(SINGLE_FLUSH_IDLE_US);
+	single_flush_read_cntr(flushes);
+	if (*flushes != idle)
+		cr_skip_test("IXE flush counter moved while idle: "
+			     "the NIC is in use by another process");
+}
+
+static void single_flush_check(uint64_t flushes, uint64_t expected)
+{
+	struct cxip_ep *cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+
+	if (is_netsim(cxi_ep->ep_obj)) {
+		printf("flush count %lu (expected %lu) not checked on netsim\n",
+		       flushes, expected);
+		return;
+	}
+
+	cr_assert_eq(flushes, expected, "expected %lu flushing reads, got %lu",
+		     expected, flushes);
+}
+
+static void single_flush_msg_init(struct fi_msg_rma *msg, struct iovec *iov,
+				  struct fi_rma_iov *rma, void *buf,
+				  size_t len, uint64_t key)
+{
+	iov->iov_base = buf;
+	iov->iov_len = len;
+	rma->addr = 0;
+	rma->len = len;
+	rma->key = key;
+	memset(msg, 0, sizeof(*msg));
+	msg->msg_iov = iov;
+	msg->iov_count = 1;
+	msg->rma_iov = rma;
+	msg->rma_iov_count = 1;
+	msg->addr = cxit_ep_fi_addr;
+}
+
+/* Wait for one successful write completion, reporting any error entry. */
+static void single_flush_await(int idx)
+{
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err = {};
+	int ret;
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	if (ret == -FI_EAVAIL) {
+		fi_cq_readerr(cxit_tx_cq, &err, 0);
+		cr_assert_fail("write %d failed: err=%d prov_errno=%d (%s)",
+			       idx, err.err, err.prov_errno,
+			       cxi_rc_to_str(err.prov_errno));
+	}
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+}
+
+/* Issue count FI_DELIVERY_COMPLETE writes of len bytes to a fresh window.
+ * flags (FI_COMPLETION and/or FI_MORE; FI_MORE is dropped from the last
+ * write) are added to every write. Completions are collected from the CQ
+ * when FI_COMPLETION is set, otherwise only from the write counter when
+ * use_cntr is set (selective completion). The data is verified and the
+ * number of target flushing reads the writes caused is returned; *key_opt
+ * (optional) reports whether the window used an optimized MR key.
+ */
+static uint64_t single_flush_writes(size_t len, int count, uint64_t flags,
+				    bool use_cntr, bool *key_opt)
+{
+	int ret;
+	int i;
+	uint8_t *send_buf;
+	struct mem_region mem_window;
+	uint64_t key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg;
+	struct iovec iov;
+	struct fi_rma_iov rma;
+	uint64_t cntr_start = 0;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+
+	cr_assert(len <= SINGLE_FLUSH_WIN_LEN);
+	cr_assert(use_cntr || (flags & FI_COMPLETION));
+
+	send_buf = malloc(len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+	for (i = 0; i < (int)len; i++)
+		send_buf[i] = (uint8_t)(i * 7 + 3);
+
+	mr_create(SINGLE_FLUSH_WIN_LEN, FI_REMOTE_WRITE, 0, &key_val,
+		  &mem_window);
+	if (key_opt)
+		*key_opt = cxip_generic_is_mr_key_opt(key_val);
+
+	if (use_cntr)
+		cntr_start = fi_cntr_read(cxit_write_cntr);
+
+	single_flush_cntr_start(&flushes_start);
+	single_flush_msg_init(&msg, &iov, &rma, send_buf, len, key_val);
+
+	for (i = 0; i < count; i++) {
+		do {
+			ret = fi_writemsg(cxit_ep, &msg,
+					  FI_DELIVERY_COMPLETE |
+					  (i + 1 < count ? flags :
+					   (flags & ~FI_MORE)));
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+	}
+
+	if (flags & FI_COMPLETION)
+		for (i = 0; i < count; i++)
+			single_flush_await(i);
+
+	if (use_cntr) {
+		/* Completed in software when a flushing Put is used. */
+		ret = fi_cntr_wait(cxit_write_cntr, cntr_start + count, 1000);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_wait failed %d", ret);
+		cr_assert_eq(fi_cntr_read(cxit_write_cntr), cntr_start + count);
+		cr_assert_eq(fi_cntr_readerr(cxit_write_cntr), 0);
+	}
+
+	if (!(flags & FI_COMPLETION)) {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN, "unexpected CQ entry: %d", ret);
+	}
+
+	for (i = 0; i < (int)len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	single_flush_read_cntr(&flushes_end);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+
+	return flushes_end - flushes_start;
+}
+
+/* A 64 KiB write spans 32 packets but must cause one flushing read. */
+Test(rma_single_flush, multi_packet)
+{
+	uint64_t flushes = single_flush_writes(SINGLE_FLUSH_WIN_LEN, 1,
+					       FI_COMPLETION, false, NULL);
+
+	single_flush_check(flushes, 1);
+}
+
+/* A write of at most one packet keeps the existing single hardware flush. */
+Test(rma_single_flush, single_packet)
+{
+	uint64_t flushes = single_flush_writes(1024, 1, FI_COMPLETION, false,
+					       NULL);
+
+	single_flush_check(flushes, 1);
+}
+
+/* The write counter is updated once per write, including on Cassini 1 where
+ * the request waits for both the data Put and the flushing Put.
+ */
+Test(rma_single_flush, write_cntr)
+{
+	uint64_t flushes = single_flush_writes(SINGLE_FLUSH_WIN_LEN, 4,
+					       FI_COMPLETION, true, NULL);
+
+	single_flush_check(flushes, 4);
+}
+
+/* Writes batched with FI_MORE each complete and each flush once. */
+Test(rma_single_flush, fi_more)
+{
+	uint64_t flushes = single_flush_writes(16 * 1024, 8,
+					       FI_MORE | FI_COMPLETION, true,
+					       NULL);
+
+	single_flush_check(flushes, 8);
+}
+
+/* A write to an MR key that is not registered fails once: on Cassini 1 both
+ * the data Put and the flushing Put are rejected, but the request reports a
+ * single error completion and a single counter error, and the endpoint keeps
+ * working afterwards.
+ */
+Test(rma_single_flush, invalid_key_single_error)
+{
+	int ret;
+	uint8_t *send_buf;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err = {};
+	struct fi_msg_rma msg;
+	struct iovec iov;
+	struct fi_rma_iov rma;
+	uint64_t cntr_err_start = fi_cntr_readerr(cxit_write_cntr);
+	uint64_t flushes;
+	uint64_t deadline;
+
+	send_buf = calloc(1, SINGLE_FLUSH_WIN_LEN);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	/* Optimized key with no MR behind it. */
+	single_flush_msg_init(&msg, &iov, &rma, send_buf, SINGLE_FLUSH_WIN_LEN,
+			      0x10);
+
+	do {
+		ret = fi_writemsg(cxit_ep, &msg,
+				  FI_DELIVERY_COMPLETE | FI_COMPLETION);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, -FI_EAVAIL, "expected an error entry, got %d", ret);
+
+	ret = fi_cq_readerr(cxit_tx_cq, &err, 0);
+	cr_assert_eq(ret, 1, "fi_cq_readerr failed %d", ret);
+	cr_assert_eq(err.flags, FI_RMA | FI_WRITE, "bad error flags %#lx",
+		     err.flags);
+
+	deadline = ofi_gettime_ms() + 1000;
+	while (fi_cntr_readerr(cxit_write_cntr) != cntr_err_start + 1)
+		cr_assert(ofi_gettime_ms() < deadline,
+			  "counter error not reported, error count %lu",
+			  fi_cntr_readerr(cxit_write_cntr));
+
+	/* The second ACK of the pair must not complete or count again; keep
+	 * progressing and sampling for a while rather than checking once.
+	 */
+	deadline = ofi_gettime_ms() + 20;
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN,
+			     "unexpected second completion: %d", ret);
+		cr_assert_eq(fi_cntr_readerr(cxit_write_cntr),
+			     cntr_err_start + 1,
+			     "counter error counted more than once");
+	} while (ofi_gettime_ms() < deadline);
+
+	free(send_buf);
+
+	/* Resources of the failed write were released. */
+	flushes = single_flush_writes(SINGLE_FLUSH_WIN_LEN, 1, FI_COMPLETION,
+				      false, NULL);
+	single_flush_check(flushes, 1);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert_eq(ret, -FI_EAGAIN, "unexpected trailing completion: %d",
+		     ret);
+	cr_assert_eq(fi_cntr_readerr(cxit_write_cntr), cntr_err_start + 1);
+}
+
+/* With selective completion and no FI_COMPLETION, the write counter is the
+ * only completion channel; it must still be driven by the paired events on
+ * Cassini 1 without any CQ reads.
+ */
+Test(rma_no_init, single_flush_cntr_only)
+{
+	uint64_t flushes;
+
+	cxit_tx_cq_bind_flags |= FI_SELECTIVE_COMPLETION;
+	single_flush_setup();
+
+	flushes = single_flush_writes(SINGLE_FLUSH_WIN_LEN, 4, 0, true, NULL);
+	single_flush_check(flushes, 4);
+
+	single_flush_teardown();
+	cxit_tx_cq_bind_flags &= ~FI_SELECTIVE_COMPLETION;
+}
+
+/* Writes queued with FI_MORE up to the TX credit limit must not deadlock:
+ * the write that is deferred for credits rings the queue, so the queued
+ * writes complete and release their credits while the caller retries.
+ */
+Test(rma_no_init, single_flush_fi_more_credits)
+{
+	int ret;
+	int i;
+	int tx_size = 32;
+	int completions = 0;
+	uint8_t *send_buf;
+	struct mem_region mem_window;
+	uint64_t key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg;
+	struct iovec iov;
+	struct fi_rma_iov rma;
+	size_t len = 4096;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+	uint64_t deadline;
+
+	/* The threshold is read when the provider initializes, which
+	 * cxit_setup_getinfo() triggers; enable the path before it.
+	 */
+	single_flush_enable();
+	cxit_setup_getinfo();
+	cxit_fi_hints->tx_attr->size = tx_size;
+	cxit_setup_rma_disable_fi_rma_event();
+	cr_assert_eq(cxit_fi->tx_attr->size, tx_size, "tx_attr->size");
+
+	send_buf = malloc(len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+	for (i = 0; i < (int)len; i++)
+		send_buf[i] = (uint8_t)(i * 5 + 1);
+
+	mr_create(SINGLE_FLUSH_WIN_LEN, FI_REMOTE_WRITE, 0, &key_val,
+		  &mem_window);
+	single_flush_cntr_start(&flushes_start);
+	single_flush_msg_init(&msg, &iov, &rma, send_buf, len, key_val);
+
+	/* Consume every credit without ringing the queue. */
+	for (i = 0; i < tx_size; i++) {
+		ret = fi_writemsg(cxit_ep, &msg,
+				  FI_DELIVERY_COMPLETE | FI_COMPLETION |
+				  FI_MORE);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg %d failed %d", i,
+			     ret);
+	}
+
+	/* Nothing has been rung, so the next write is deferred for credits. */
+	ret = fi_writemsg(cxit_ep, &msg, FI_DELIVERY_COMPLETE | FI_COMPLETION);
+	cr_assert_eq(ret, -FI_EAGAIN, "expected -FI_EAGAIN, got %d", ret);
+
+	/* The deferral rang the queue; completions now arrive and free
+	 * credits. Fail instead of hanging if they do not.
+	 */
+	deadline = ofi_gettime_ms() + 5000;
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		if (ret == 1) {
+			validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+			completions++;
+		} else {
+			cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read failed %d",
+				     ret);
+		}
+
+		ret = fi_writemsg(cxit_ep, &msg,
+				  FI_DELIVERY_COMPLETE | FI_COMPLETION);
+		cr_assert(ofi_gettime_ms() < deadline,
+			  "queued FI_MORE writes never completed");
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	while (completions < tx_size + 1) {
+		single_flush_await(completions);
+		completions++;
+	}
+
+	for (i = 0; i < (int)len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	single_flush_read_cntr(&flushes_end);
+	single_flush_check(flushes_end - flushes_start, (uint64_t)tx_size + 1);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+	single_flush_teardown();
+}
+
+/* The path is off by default. Without FI_CXI_RMA_DC_SINGLE_FLUSH_THRESHOLD
+ * the provider keeps its previous selection: a restricted write (optimized
+ * key, no write-after-write ordering) is flushed per packet on both
+ * generations, and an unrestricted write is flushed once on Cassini 2 and per
+ * packet on Cassini 1.
+ */
+Test(rma_no_init, single_flush_default_off)
+{
+	bool key_opt;
+	bool restricted;
+	struct cxip_ep *cxi_ep;
+	uint64_t expected;
+	uint64_t flushes;
+
+	single_flush_disable();
+	cxit_setup_rma_disable_fi_rma_event();
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+
+	flushes = single_flush_writes(SINGLE_FLUSH_WIN_LEN, 1, FI_COMPLETION,
+				      false, &key_opt);
+
+	restricted = key_opt &&
+		!(cxit_fi->tx_attr->msg_order &
+		  (FI_ORDER_WAW | FI_ORDER_RMA_WAW));
+	if (!restricted && cxi_ep->ep_obj->asic_ver >= CASSINI_2_0)
+		expected = 1;
+	else
+		expected = SINGLE_FLUSH_WIN_LEN / SINGLE_FLUSH_PKT_LEN;
+
+	single_flush_check(flushes, expected);
+
+	cxit_teardown_rma();
+}
+
+/* With FI_RMA_EVENT and a remote counter on the target MR, the counter must
+ * increment exactly once per write. Cassini 2 still flushes once (ordered Put,
+ * hardware end-of-message flush); Cassini 1 cannot use the trailing flushing
+ * Put, which would increment the remote counter a second time, and keeps the
+ * per-packet flush.
+ */
+Test(rma_no_init, single_flush_remote_cntr)
+{
+	int ret;
+	uint8_t *send_buf;
+	size_t len = SINGLE_FLUSH_WIN_LEN;
+	struct mem_region mem_window;
+	uint64_t key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg;
+	struct iovec iov;
+	struct fi_rma_iov rma;
+	struct cxip_ep *cxi_ep;
+	uint64_t rem_start;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+	uint64_t deadline;
+
+	single_flush_enable();
+	cxit_setup_rma();
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	rem_start = fi_cntr_read(cxit_rem_cntr);
+
+	send_buf = calloc(1, len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(len, FI_REMOTE_WRITE, 0x5a, &key_val, &mem_window);
+	single_flush_cntr_start(&flushes_start);
+
+	/* Default op_flags carry FI_TRANSMIT_COMPLETE; use writemsg for DC. */
+	do {
+		ret = fi_write(cxit_ep, send_buf, len, NULL, cxit_ep_fi_addr, 0,
+			       key_val, NULL);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_write failed %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	ret = fi_cntr_wait(cxit_rem_cntr, rem_start + 1, 1000);
+	cr_assert_eq(ret, FI_SUCCESS, "remote fi_cntr_wait failed %d", ret);
+
+	rem_start = fi_cntr_read(cxit_rem_cntr);
+
+	single_flush_msg_init(&msg, &iov, &rma, send_buf, len, key_val);
+	do {
+		ret = fi_writemsg(cxit_ep, &msg,
+				  FI_DELIVERY_COMPLETE | FI_COMPLETION);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	ret = fi_cntr_wait(cxit_rem_cntr, rem_start + 1, 1000);
+	cr_assert_eq(ret, FI_SUCCESS, "remote fi_cntr_wait failed %d", ret);
+
+	/* A second remote event from a trailing Put would land shortly after
+	 * the first; keep sampling fresh counter values for a while.
+	 */
+	deadline = ofi_gettime_ms() + 20;
+	do {
+		cr_assert_eq(fi_cntr_read(cxit_rem_cntr), rem_start + 1,
+			     "remote counter incremented more than once "
+			     "per write");
+	} while (ofi_gettime_ms() < deadline);
+
+	single_flush_read_cntr(&flushes_end);
+
+	if (cxi_ep->ep_obj->asic_ver >= CASSINI_2_0)
+		single_flush_check(flushes_end - flushes_start, 1);
+	else
+		single_flush_check(flushes_end - flushes_start,
+				   len / SINGLE_FLUSH_PKT_LEN);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+	cxit_teardown_rma();
+	single_flush_disable();
 }
