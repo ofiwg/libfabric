@@ -465,17 +465,28 @@ static bool cxip_txc_can_emit_op(struct cxip_txc *txc,
 {
 	if (cxip_evtq_saturated(&txc->tx_evtq)) {
 		TXC_WARN(txc, "TX HW EQ saturated\n");
-		return false;
+		goto defer;
 	}
 
 	/* If taking a successful completion, limit outstanding operations */
 	if (!event_success_disabled &&
 	    (cxip_txc_otx_reqs_get(txc) >= txc->attr.size)) {
 		TXC_WARN(txc, "TXC attr size saturated\n");
-		return false;
+		goto defer;
 	}
 
 	return true;
+
+defer:
+	/* Commands queued with FI_MORE have not been rung. The resources
+	 * this operation is waiting for are released only by their
+	 * completions, so ring the queue before deferring (the command-queue
+	 * full path already does the same to prevent an FI_MORE deadlock).
+	 */
+	if (txc->tx_cmdq)
+		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
+
+	return false;
 }
 
 int cxip_txc_emit_idc_put(struct cxip_txc *txc, uint16_t vni,
