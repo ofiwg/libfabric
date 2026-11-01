@@ -4689,7 +4689,7 @@ struct fi_av_attr {
     vector. The type specifies how an application views data stored in
     the AV, including how it may be accessed. Valid values are:
 
-\- *FI_AV_MAP* (deprecated)
+\- *FI_AV_MAP*
 :   Addresses which are inserted into an AV are mapped to a native
     fabric address for use by the application. The use of FI_AV_MAP
     requires that an application store the returned fi_addr_t value that
@@ -4697,13 +4697,10 @@ struct fi_av_attr {
     FI_AV_MAP is that the returned fi_addr_t value may contain encoded
     address data, which is immediately available when processing data
     transfer requests. This can eliminate or reduce the number of memory
-    lookups needed when initiating a transfer. The disadvantage of
-    FI_AV_MAP is the increase in memory usage needed to store the
-    returned addresses. Addresses are stored in the AV using a provider
-    specific mechanism, including, but not limited to a tree, hash
-    table, or maintained on the heap. This option is deprecated, and
-    providers are encouraged to align the behavior of FI_AV_MAP with
-    FI_AV_TABLE.
+    lookups needed when initiating a transfer. All providers must
+    support FI_AV_TABLE. Because the returned fi_addr_t values are
+    opaque, a provider may implement FI_AV_MAP using the same
+    index-based values as FI_AV_TABLE.
 
 \- *FI_AV_TABLE*
 :   Addresses which are inserted into an AV of type FI_AV_TABLE are
@@ -4862,15 +4859,16 @@ specified in the addr_format field of the fi_info struct provided when
 opening the corresponding domain. When using the `FI_ADDR_STR` format,
 the `addr` parameter should reference an array of strings (char \*\*).
 
-**Deprecated**: For AV's of type FI_AV_MAP, once inserted addresses have
-been mapped, the mapped values are written into the buffer referenced by
-fi_addr. The fi_addr buffer must remain valid until the AV insertion has
-completed and an event has been generated to an associated event queue.
-The value of the returned fi_addr should be considered opaque by the
-application for AVs of type FI_AV_MAP. The returned value may point to
-an internal structure or a provider specific encoding of low-level
-addressing data, for example. In the latter case, use of FI_AV_MAP may
-be able to avoid memory references during data transfer operations.
+For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
+the mapped values are written into the buffer referenced by fi_addr. If
+the AV was opened with the deprecated FI_EVENT flag, the fi_addr buffer
+must remain valid until the AV insertion has completed and an event has
+been generated to an associated event queue. The value of the returned
+fi_addr should be considered opaque by the application for AVs of type
+FI_AV_MAP. The returned value may point to an internal structure or a
+provider specific encoding of low-level addressing data, for example. In
+the latter case, use of FI_AV_MAP may be able to avoid memory references
+during data transfer operations.
 
 For AV's of type FI_AV_TABLE, addresses are placed into the table in
 order. An address is inserted at the lowest index that corresponds to an
@@ -8419,7 +8417,7 @@ Specifies the type of address vectors that are usable with this domain.
 For additional details on AV type, see [`fi_av`(3)](fi_av.3.html). The
 following values may be specified.
 
-*FI_AV_MAP* (deprecated)
+*FI_AV_MAP*
 :   Only address vectors of type AV map are requested or supported.
 
 *FI_AV_TABLE*
