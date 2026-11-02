@@ -36,7 +36,7 @@ static int cxip_dmabuf_hints(enum fi_hmem_iface iface, void *iov_base,
 				     &offset);
 	if (!ret) {
 		hints->dmabuf_fd = dmabuf_fd;
-		hints->dmabuf_offset = offset;
+		hints->dmabuf_offset = offset + ((uintptr_t)iov_base - base);
 		hints->dmabuf_valid = true;
 
 		/* Need to cache DMA buf FD to release later. */
