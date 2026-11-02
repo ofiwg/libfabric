@@ -154,6 +154,37 @@ int efa_test_rtm_pkt_type(enum efa_test_rtm_variant variant);
 
 int efa_test_get_tx_min_credits(void);
 
+enum efa_test_rta_path {
+	EFA_TEST_RTA_WRITE,
+	EFA_TEST_RTA_DC_WRITE,
+	EFA_TEST_RTA_FETCH,
+	EFA_TEST_RTA_COMPARE,
+};
+
+struct efa_test_rta_responder_result {
+	ssize_t ret;
+	ssize_t eq_read_ret;
+	int eq_err;
+	int eq_prov_errno;
+	int response_valid;
+	uint8_t target[2];
+	uint8_t response;
+	size_t ope_count;
+	size_t tx_pkt_pool_used;
+	size_t rxe_pool_used;
+	size_t atomrsp_pool_used;
+	size_t unexp_pool_used;
+	size_t outstanding_tx_ops;
+	size_t peer_outstanding_tx_ops;
+};
+
+int efa_test_rta_responder(struct fid_ep *ep, struct fid_domain *domain,
+			   fi_addr_t peer_addr, enum efa_test_rta_path path,
+			   enum fi_op atomic_op, uint64_t mr_access,
+			   int invalid_key, size_t iov_count,
+			   struct efa_test_rta_responder_result *out);
+int efa_test_rta_rma_addr_prov_errno(void);
+
 /* --- TX sent / send-completion handler bridge --- */
 enum efa_test_rtm_sent_op {
 	EFA_TEST_RTM_OP_SENT,

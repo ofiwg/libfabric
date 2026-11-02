@@ -1,14 +1,17 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
-#include "efa_gtest_common_helpers.h"
 #include "efa_gtest_rdm_pke_utils.h"
 #include "efa.h"
 #include "efa_env.h"
+#include "efa_errno.h"
+#include "efa_gtest_common_helpers.h"
 #include "ofi_mem.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
+#include "rdm/efa_rdm_pke_cmd.h"
+#include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
@@ -583,4 +586,185 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	} else {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
+}
+
+static size_t efa_test_bufpool_used_count(struct ofi_bufpool *pool)
+{
+	return pool->entry_cnt - efa_test_bufpool_free_count(pool);
+}
+
+static ssize_t efa_test_rta_process_request(struct efa_rdm_pke *request,
+					    enum efa_test_rta_path path)
+{
+	switch (path) {
+	case EFA_TEST_RTA_WRITE:
+		return efa_rdm_pke_proc_write_rta(request);
+	case EFA_TEST_RTA_DC_WRITE:
+		return efa_rdm_pke_proc_dc_write_rta(request);
+	case EFA_TEST_RTA_FETCH:
+		return efa_rdm_pke_proc_fetch_rta(request);
+	case EFA_TEST_RTA_COMPARE:
+		return efa_rdm_pke_proc_compare_rta(request);
+	}
+
+	return -FI_EINVAL;
+}
+
+static void
+efa_test_rta_fill_resource_state(struct efa_rdm_ep *ep,
+				 struct efa_rdm_peer *peer,
+				 struct efa_test_rta_responder_result *out)
+{
+	out->ope_count = efa_test_ope_list_count(&ep->base_ep.util_ep.ep_fid);
+	out->tx_pkt_pool_used =
+		efa_test_bufpool_used_count(ep->efa_tx_pkt_pool);
+	out->rxe_pool_used = efa_test_bufpool_used_count(ep->base_ep.rxe_pool);
+	out->atomrsp_pool_used =
+		efa_test_bufpool_used_count(ep->rx_atomrsp_pool);
+	out->unexp_pool_used =
+		efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool);
+	out->outstanding_tx_ops = ep->efa_outstanding_tx_ops;
+	out->peer_outstanding_tx_ops = peer->efa_outstanding_tx_ops;
+}
+
+int efa_test_rta_responder(struct fid_ep *ep_fid, struct fid_domain *domain,
+			   fi_addr_t peer_addr, enum efa_test_rta_path path,
+			   enum fi_op atomic_op, uint64_t mr_access,
+			   int invalid_key, size_t iov_count,
+			   struct efa_test_rta_responder_result *out)
+{
+	struct efa_rdm_ep *ep =
+		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	struct efa_rdm_pke *request = NULL;
+	struct efa_rdm_pke *response;
+	struct efa_rdm_rta_hdr *rta_hdr;
+	struct efa_rdm_atomrsp_pkt *atomrsp;
+	struct fi_eq_err_entry eq_err = {0};
+	struct fid_mr *mr = NULL;
+	uint8_t target[2] = {1, 4};
+	uint8_t source[2] = {2, 3};
+	uint8_t compare[2] = {1, 4};
+	char *data;
+	size_t hdr_size;
+	size_t payload_size;
+	size_t unexp_pool_used_before;
+	int pkt_type;
+	int close_ret;
+	int ret;
+	size_t i;
+
+	memset(out, 0, sizeof(*out));
+	if (!peer || iov_count == 0 || iov_count > 2)
+		return -FI_EINVAL;
+
+	switch (path) {
+	case EFA_TEST_RTA_WRITE:
+		pkt_type = EFA_RDM_WRITE_RTA_PKT;
+		break;
+	case EFA_TEST_RTA_DC_WRITE:
+		pkt_type = EFA_RDM_DC_WRITE_RTA_PKT;
+		break;
+	case EFA_TEST_RTA_FETCH:
+		pkt_type = EFA_RDM_FETCH_RTA_PKT;
+		break;
+	case EFA_TEST_RTA_COMPARE:
+		pkt_type = EFA_RDM_COMPARE_RTA_PKT;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	ret = fi_mr_reg(domain, target, sizeof(target),
+			FI_SEND | FI_RECV | mr_access, 0, 0, 0, &mr, NULL);
+	if (ret)
+		return ret;
+
+	unexp_pool_used_before =
+		efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool);
+	request = efa_rdm_pke_alloc(ep, ep->rx_unexp_pkt_pool,
+				    EFA_RDM_PKE_FROM_UNEXP_POOL);
+	if (!request) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	request->peer = peer;
+
+	payload_size = iov_count;
+	if (path == EFA_TEST_RTA_COMPARE)
+		payload_size *= 2;
+
+	rta_hdr = (struct efa_rdm_rta_hdr *) request->wiredata;
+	memset(rta_hdr, 0,
+	       sizeof(*rta_hdr) + iov_count * sizeof(struct efa_rma_iov) +
+		       payload_size);
+	rta_hdr->type = pkt_type;
+	rta_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	rta_hdr->flags = EFA_RDM_REQ_ATOMIC;
+	rta_hdr->rma_iov_count = iov_count;
+	rta_hdr->atomic_datatype = FI_UINT8;
+	rta_hdr->atomic_op = atomic_op;
+	if (path == EFA_TEST_RTA_DC_WRITE)
+		rta_hdr->send_id = 0x1234;
+	else
+		rta_hdr->recv_id = 0x1234;
+	for (i = 0; i < iov_count; ++i) {
+		rta_hdr->rma_iov[i].addr = (uintptr_t) &target[i];
+		rta_hdr->rma_iov[i].len = 1;
+		rta_hdr->rma_iov[i].key = fi_mr_key(mr);
+	}
+	if (invalid_key)
+		rta_hdr->rma_iov[iov_count - 1].key = FI_KEY_NOTAVAIL;
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(request);
+	data = request->wiredata + hdr_size;
+	memcpy(data, source, iov_count);
+	if (path == EFA_TEST_RTA_COMPARE)
+		memcpy(data + iov_count, compare, iov_count);
+	request->pkt_size = hdr_size + payload_size;
+
+	out->ret = efa_test_rta_process_request(request, path);
+	if (efa_test_bufpool_used_count(ep->rx_unexp_pkt_pool) ==
+	    unexp_pool_used_before)
+		request = NULL;
+
+	if (!out->ret &&
+	    (path == EFA_TEST_RTA_FETCH || path == EFA_TEST_RTA_COMPARE)) {
+		if (ep->send_pkt_entry_vec_size != 1 ||
+		    !ep->send_pkt_entry_vec[0]) {
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
+		response = ep->send_pkt_entry_vec[0];
+		atomrsp = (struct efa_rdm_atomrsp_pkt *) response->wiredata;
+		out->response_valid =
+			atomrsp->hdr.type == EFA_RDM_ATOMRSP_PKT &&
+			atomrsp->hdr.seg_length == iov_count;
+		out->response = atomrsp->data[0];
+		efa_rdm_pke_handle_send_completion(response);
+	}
+
+	memcpy(out->target, target, sizeof(target));
+	out->eq_read_ret =
+		fi_eq_readerr(&ep->base_ep.util_ep.eq->eq_fid, &eq_err, 0);
+	if (out->eq_read_ret > 0) {
+		out->eq_err = eq_err.err;
+		out->eq_prov_errno = eq_err.prov_errno;
+	}
+	efa_test_rta_fill_resource_state(ep, peer, out);
+	ret = 0;
+
+out:
+	if (request)
+		efa_rdm_pke_release_rx(request);
+	close_ret = fi_close(&mr->fid);
+	if (!ret && close_ret)
+		ret = close_ret;
+	return ret;
+}
+
+int efa_test_rta_rma_addr_prov_errno(void)
+{
+	return FI_EFA_ERR_RMA_ADDR;
 }
