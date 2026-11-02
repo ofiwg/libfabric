@@ -110,8 +110,24 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 	rxe->atomic_hdr.datatype = rta_hdr->atomic_datatype;
 
 	rxe->iov_count = rta_hdr->rma_iov_count;
-	efa_rdm_rma_verified_copy_iov(pkt_entry->ep, rta_hdr->rma_iov, rxe->iov_count,
-				      FI_REMOTE_READ, rxe->iov, rxe->desc);
+	return rxe;
+}
+
+static int efa_rdm_pke_prepare_atomic_response_rxe(
+	struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe, uint32_t access)
+{
+	struct efa_rdm_rta_hdr *rta_hdr;
+	int err;
+
+	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
+	err = efa_rdm_rma_verified_copy_iov(pkt_entry->ep, rta_hdr->rma_iov,
+					    rxe->iov_count, access, rxe->iov,
+					    rxe->desc);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ, "RMA address verification failed.\n");
+		return err;
+	}
+
 	rxe->total_len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
 	/*
 	 * prepare a buffer to hold response data.
@@ -129,11 +145,23 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 	if (!rxe->atomrsp_data) {
 		EFA_WARN(FI_LOG_CQ,
 			"atomic repsonse buffer pool exhausted.\n");
-		efa_rdm_rxe_release(rxe);
-		return NULL;
+		return -FI_ENOBUFS;
 	}
+	return 0;
+}
 
-	return rxe;
+static int efa_rdm_pke_rta_handle_error(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *rxe, int err,
+					int prov_errno){
+	efa_rdm_rxe_handle_error(rxe, -err, prov_errno);
+	efa_rdm_pke_release_rx(pkt_entry);
+	if (rxe->atomrsp_data) {
+		ofi_buf_free(rxe->atomrsp_data);
+		rxe->atomrsp_data = NULL;
+	}
+	assert(rxe->efa_outstanding_tx_ops == 0);
+	efa_rdm_rxe_release(rxe);
+	return err;
 }
 
 /**
@@ -218,7 +246,15 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	data = pkt_entry->wiredata + hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
-	efa_rdm_rma_verified_copy_iov(pkt_entry->ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov, desc);
+	err = efa_rdm_rma_verified_copy_iov(pkt_entry->ep, rta_hdr->rma_iov,
+					    iov_count, FI_REMOTE_WRITE, iov, desc);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ, "RMA address verification failed.\n");
+		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, -err,
+					   FI_EFA_ERR_RMA_ADDR);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return err;
+	}
 
 	offset = 0;
 	for (i = 0; i < iov_count; ++i) {
@@ -296,6 +332,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 	ret = efa_rdm_pke_proc_write_rta(pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "Error while processing the write rta packet\n");
+		efa_rdm_rxe_release(rxe);
 		return ret;
 	}
 
@@ -374,6 +411,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	struct efa_mr *efa_mr;
 	char *data;
 	int op, dt, i;
+	uint32_t access;
 	size_t offset, dtsize;
 	ssize_t err;
 	enum fi_hmem_iface hmem_iface;
@@ -384,12 +422,22 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	if(OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
 	rxe->tx_id = efa_rdm_pke_get_rta_hdr(pkt_entry)->recv_id;
 	op = rxe->atomic_hdr.atomic_op;
 	dt = rxe->atomic_hdr.datatype;
+	access = FI_REMOTE_READ;
+	if (op != FI_ATOMIC_READ)
+		access |= FI_REMOTE_WRITE;
+
+	err = efa_rdm_pke_prepare_atomic_response_rxe(pkt_entry, rxe, access);
+	if (OFI_UNLIKELY(err))
+		return efa_rdm_pke_rta_handle_error(
+			pkt_entry, rxe, err, err == -FI_ENOBUFS ? FI_EFA_ERR_RXE_POOL_EXHAUSTED : FI_EFA_ERR_RMA_ADDR);
+
 	dtsize = ofi_datatype_size(rxe->atomic_hdr.datatype);
 	if (OFI_UNLIKELY(!dtsize)) {
 		return -errno;
@@ -521,6 +569,14 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	rxe->tx_id = efa_rdm_pke_get_rta_hdr(pkt_entry)->recv_id;
 	op = rxe->atomic_hdr.atomic_op;
 	dt = rxe->atomic_hdr.datatype;
+	err = efa_rdm_pke_prepare_atomic_response_rxe(
+		pkt_entry, rxe, FI_REMOTE_READ | FI_REMOTE_WRITE);
+	if (OFI_UNLIKELY(err))
+		return efa_rdm_pke_rta_handle_error(
+			pkt_entry, rxe, err,
+			err == -FI_ENOBUFS ? FI_EFA_ERR_RXE_POOL_EXHAUSTED :
+					     FI_EFA_ERR_RMA_ADDR);
+
 	dtsize = ofi_datatype_size(rxe->atomic_hdr.datatype);
 	if (OFI_UNLIKELY(!dtsize)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, errno, FI_EFA_ERR_INVALID_DATATYPE);
