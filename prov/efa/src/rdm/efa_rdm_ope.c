@@ -14,6 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_proto.h"
 #include "protocols/efa_rdm_proto_atomic.h"
 
 void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
@@ -459,18 +460,12 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
  */
 size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
 {
-	uint16_t header_flags = 0;
+	uint16_t header_flags;
 	int max_data_offset;
 
 	assert(pkt_type >= EFA_RDM_REQ_PKT_BEGIN);
 
-	if (efa_rdm_peer_need_raw_addr_hdr(txe->peer))
-		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	else if (efa_rdm_peer_need_connid(txe->peer))
-		header_flags |= EFA_RDM_PKT_CONNID_HDR;
-
-	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
-		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+	header_flags = efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags);
 
 	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags,
 					       txe->rma_iov_count);

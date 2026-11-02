@@ -225,11 +225,11 @@ efa_rdm_proto_handle_tx_pkes_posted_no_op(struct efa_rdm_ep *ep,
 /**
  * @brief The option headers a REQ packet for this operation will carry.
  *
- * Must agree with efa_rdm_pke_init_req_hdr_common(), which is what actually
- * writes them: a REQ carries the raw address header on the first message to a
- * peer, or the connid header once a handshake has said the peer wants one -
- * never both - plus the CQ data header when the operation carries remote CQ
- * data.
+ * Both REQ sizing and efa_rdm_pke_init_req_hdr_common(), which writes the
+ * headers, use these flags: a REQ carries the raw address header on the first
+ * message to a peer, or the connid header once a handshake has said the peer
+ * wants one - never both - plus the CQ data header when the operation carries
+ * remote CQ data.
  *
  * @param[in] peer	peer the REQ is addressed to
  * @param[in] flags	effective operation flags, i.e. what txe->fi_flags holds

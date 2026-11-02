@@ -11,6 +11,7 @@
 #include "efa_rdm_pke_rtw.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_rdm_proto.h"
 
 /**
  * @brief initialize the packet header of a REQ packet entry
@@ -32,34 +33,14 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->type = pkt_type;
 	base_hdr->version = EFA_RDM_PROTOCOL_VERSION;
-	base_hdr->flags = 0;
+	/*
+	 * A REQ carries either the raw address header (first contact with the
+	 * peer, so it can insert this endpoint into its address vector) or the
+	 * connid header (the peer verifies our identity with it), never both.
+	 */
+	base_hdr->flags = efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags);
 
 	ep = txe->ep;
-
-	if (efa_rdm_peer_need_raw_addr_hdr(txe->peer)) {
-		/*
-		 * This is the first communication with this peer on this
-		 * endpoint, so send the core's address for this EP in the REQ
-		 * so the remote side can insert it into its address vector.
-		 */
-		base_hdr->flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	} else if (efa_rdm_peer_need_connid(txe->peer)) {
-		/*
-		 * After receiving handshake packet, we will know the peer's capability.
-		 *
-		 * If the peer need connid, we will include the optional connid
-		 * header in the req packet header.The peer will use it
-		 * to verify my identity.
-		 *
-		 * This logic means that a req packet cannot have both
-		 * the optional raw address header and the optional connid header.
-		 */
-		base_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
-	}
-
-	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
-		base_hdr->flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
-	}
 
 	/* init the opt header */
 	opt_hdr = (char *)base_hdr + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);

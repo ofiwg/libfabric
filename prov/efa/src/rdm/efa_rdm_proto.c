@@ -342,7 +342,7 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 						  struct efa_rdm_proto **proto)
 {
 	struct efa_rdm_proto *selected_proto;
-	uint16_t header_flags = 0;
+	uint16_t header_flags;
 	int req_pkt_type, iface, i;
 	bool mr_attempted = false;
 
@@ -350,13 +350,7 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			((struct efa_mr *) txe->desc[0])->iface :
 			FI_HMEM_SYSTEM;
 
-	if (efa_rdm_peer_need_raw_addr_hdr(peer))
-		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	else if (efa_rdm_peer_need_connid(peer))
-		header_flags |= EFA_RDM_PKT_CONNID_HDR;
-
-	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
-		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+	header_flags = efa_rdm_proto_req_header_flags(peer, txe->fi_flags);
 
 	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_write_protocols); ++i) {
 		selected_proto = efa_rdm_emulated_write_protocols[i];
@@ -402,20 +396,14 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 						 struct efa_rdm_proto **proto)
 {
 	struct efa_rdm_proto *selected_proto;
-	uint16_t header_flags = 0;
+	uint16_t header_flags;
 	int req_pkt_type, iface, i;
 
 	iface = txe->desc[0] ?
 			((struct efa_mr *) txe->desc[0])->iface :
 			FI_HMEM_SYSTEM;
 
-	if (efa_rdm_peer_need_raw_addr_hdr(peer))
-		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	else if (efa_rdm_peer_need_connid(peer))
-		header_flags |= EFA_RDM_PKT_CONNID_HDR;
-
-	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
-		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+	header_flags = efa_rdm_proto_req_header_flags(peer, txe->fi_flags);
 
 	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_read_protocols); ++i) {
 		selected_proto = efa_rdm_emulated_read_protocols[i];
