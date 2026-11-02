@@ -153,7 +153,12 @@ static int efa_rdm_pke_prepare_atomic_response_rxe(
 static int efa_rdm_pke_rta_handle_error(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *rxe, int err,
 					int prov_errno){
-	efa_rdm_rxe_handle_error(rxe, -err, prov_errno);
+	/*With no EQ, efa_rdm_rxe_handle_error() reaches efa_base_ep_write_eq_error(),
+	 * which abort()s. A forged RTA must not kill that process.
+	 */
+	if (pkt_entry->ep->base_ep.util_ep.eq)
+		efa_rdm_rxe_handle_error(rxe, -err, prov_errno);
+
 	efa_rdm_pke_release_rx(pkt_entry);
 	if (rxe->atomrsp_data) {
 		ofi_buf_free(rxe->atomrsp_data);
@@ -250,8 +255,10 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 					    iov_count, FI_REMOTE_WRITE, iov, desc);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "RMA address verification failed.\n");
-		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, -err,
-					   FI_EFA_ERR_RMA_ADDR);
+		/* No EQ: do not abort(). Drop the rejected WRITE_RTA. */
+		if (pkt_entry->ep->base_ep.util_ep.eq)
+			efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, -err,
+						   FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return err;
 	}
