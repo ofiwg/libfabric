@@ -844,3 +844,58 @@ Test(hsa, dmabuf_stress)
 	cr_assert_eq(hsa_ret, HSA_STATUS_SUCCESS, "hsaFree  failed: %d",
 		     hsa_ret);
 }
+
+/* Regression tests for the uncached device-memory registration path. With
+ * the MR cache disabled (FI_MR_CACHE_MAX_COUNT=0), or the ROCR monitor
+ * disabled so ROCR buffers bypass the cache (FI_MR_ROCR_CACHE_MONITOR_ENABLED=0),
+ * cxip_map_nocache() registers the caller's sub-range address while the
+ * dma-buf hint used to describe the whole allocation; the NIC then addressed
+ * base + (offset mod page size), and a sub-range spanning more pages than the
+ * scatter list covered faulted with NO_TRANSLATION. The offsets are fixed
+ * rather than random so that every run exercises the cases that matter: a
+ * page multiple, a page multiple plus one word, a payload that straddles a
+ * page boundary, and a large page multiple.
+ */
+static void hsa_nocache_offset_runner(const char *knob, size_t buf_size,
+				      size_t buf_offset)
+{
+	int ret;
+
+	ret = setenv("FI_HMEM_ROCR_USE_DMABUF", "1", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	ret = setenv(knob, "0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
+
+	hsa_dev_memory_test(buf_size, buf_offset, false, true, COARSE);
+}
+
+Test(hsa, nocache_devMemory_offset_page)
+{
+	hsa_nocache_offset_runner("FI_MR_CACHE_MAX_COUNT", 8192, 4096);
+}
+
+Test(hsa, nocache_devMemory_offset_page_plus_word)
+{
+	hsa_nocache_offset_runner("FI_MR_CACHE_MAX_COUNT", 1024, 4104);
+}
+
+Test(hsa, nocache_devMemory_offset_page_straddle)
+{
+	hsa_nocache_offset_runner("FI_MR_CACHE_MAX_COUNT", 1024, 4088);
+}
+
+Test(hsa, nocache_devMemory_offset_128k)
+{
+	hsa_nocache_offset_runner("FI_MR_CACHE_MAX_COUNT", 8192, 131072);
+}
+
+Test(hsa, rocrMonitorDisabled_devMemory_offset_page)
+{
+	hsa_nocache_offset_runner("FI_MR_ROCR_CACHE_MONITOR_ENABLED", 8192, 4096);
+}
+
+Test(hsa, rocrMonitorDisabled_devMemory_offset_page_straddle)
+{
+	hsa_nocache_offset_runner("FI_MR_ROCR_CACHE_MONITOR_ENABLED", 1024, 4088);
+}
