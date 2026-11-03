@@ -87,7 +87,11 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	longcts_rtm = (delivery_complete_requested) ? EFA_RDM_DC_LONGCTS_MSGRTM_PKT + tagged
 						    : EFA_RDM_LONGCTS_MSGRTM_PKT + tagged;
 
-	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
+	eager_rtm_max_data_size = efa_rdm_proto_max_req_data_capacity(
+		efa_rdm_ep, efa_rdm_pkt_type_get_req_hdr_size(
+				    eager_rtm,
+				    efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+				    txe->rma_iov_count));
 
 	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
 

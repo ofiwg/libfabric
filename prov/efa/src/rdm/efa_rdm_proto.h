@@ -251,20 +251,17 @@ efa_rdm_proto_req_header_flags(struct efa_rdm_peer *peer, uint64_t flags)
 }
 
 /**
- * @brief How much application data one REQ packet of this type can carry.
+ * @brief How much application data one REQ packet can carry after its header.
  *
  * @param[in] ep		endpoint, for the MTU
- * @param[in] req_pkt_type	REQ packet type that will be written
- * @param[in] header_flags	as returned by efa_rdm_proto_req_header_flags()
+ * @param[in] req_hdr_size	bytes the packet uses before its data: the REQ
+ *				header plus anything a protocol places after it
  */
 static inline size_t
-efa_rdm_proto_max_req_data_capacity(struct efa_rdm_ep *ep, int req_pkt_type,
-				    uint16_t header_flags)
+efa_rdm_proto_max_req_data_capacity(struct efa_rdm_ep *ep, size_t req_hdr_size)
 {
-	/* A two-sided send carries no RMA iov in its header. */
-	return ep->mtu_size - efa_rdm_pkt_type_get_req_hdr_size(
-				      req_pkt_type, header_flags,
-				      0 /* rma_iov_count */);
+	assert(req_hdr_size < ep->mtu_size);
+	return ep->mtu_size - req_hdr_size;
 }
 
 /**

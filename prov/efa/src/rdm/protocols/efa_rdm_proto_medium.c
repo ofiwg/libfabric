@@ -144,8 +144,10 @@ ssize_t efa_rdm_proto_medium_plan_tx_pkes(struct efa_rdm_ep *ep,
 	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
 
 	max_data_size = efa_rdm_proto_max_req_data_capacity(
-		ep, req_pkt_type,
-		efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags));
+		ep, efa_rdm_pkt_type_get_req_hdr_size(
+			    req_pkt_type,
+			    efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+			    0 /* rma_iov_count */));
 
 	return efa_rdm_proto_split_req_data(ep, txe, txe->total_len,
 					    max_data_size, pkt_entry_cnt,

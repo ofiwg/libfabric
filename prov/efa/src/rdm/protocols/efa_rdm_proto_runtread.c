@@ -271,7 +271,7 @@ static ssize_t efa_rdm_proto_runtread_plan_tx_pkes(struct efa_rdm_ep *ep,
 						   size_t *pkt_entry_cnt,
 						   size_t *pkt_entry_data_size_vec)
 {
-	size_t max_data_size;
+	size_t hdr_size, max_data_size;
 
 	assert(efa_rdm_pkt_type_is_runtread(req_pkt_type));
 	assert(ep->efa_max_outstanding_tx_ops >=
@@ -284,9 +284,12 @@ static ssize_t efa_rdm_proto_runtread_plan_tx_pkes(struct efa_rdm_ep *ep,
 	efa_rdm_proto_runtread_set_runt_size(ep, txe);
 
 	/* Leave room in every packet for the read iov array. */
-	max_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe,
-							  req_pkt_type) -
-			txe->iov_count * sizeof(struct fi_rma_iov);
+	hdr_size = efa_rdm_pkt_type_get_req_hdr_size(
+			   req_pkt_type,
+			   efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+			   0 /* rma_iov_count */) +
+		   txe->iov_count * sizeof(struct fi_rma_iov);
+	max_data_size = efa_rdm_proto_max_req_data_capacity(ep, hdr_size);
 
 	return efa_rdm_proto_split_req_data(ep, txe, txe->bytes_runt,
 					    max_data_size, pkt_entry_cnt,
