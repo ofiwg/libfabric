@@ -212,6 +212,7 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
 extern size_t rxm_rma_read_bounce_size;
+extern size_t rxm_rma_write_bounce_size;
 extern size_t rxm_cq_eq_fairness;
 extern int rxm_passthru;
 extern int force_auto_progress;
