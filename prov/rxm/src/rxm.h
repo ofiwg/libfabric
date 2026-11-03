@@ -211,6 +211,7 @@ enum {
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
+extern size_t rxm_rma_read_bounce_size;
 extern size_t rxm_cq_eq_fairness;
 extern int rxm_passthru;
 extern int force_auto_progress;
@@ -557,6 +558,10 @@ struct rxm_tx_buf {
 		struct {
 			struct fid_mr *mr[RXM_IOV_LIMIT];
 			uint8_t count;
+			/* bounced read only: user iov to copy pkt.data into;
+			 * iov_count != 0 means the read was bounced */
+			struct iovec iov[RXM_IOV_LIMIT];
+			uint8_t iov_count;
 		} rma;
 		struct rxm_iov atomic_result;
 	};

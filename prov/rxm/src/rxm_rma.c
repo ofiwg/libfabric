@@ -99,6 +99,38 @@ rxm_ep_rma_write_is_inline(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg)
 					      msg->iov_count, &device) == FI_HMEM_SYSTEM;
 }
 
+static bool
+rxm_ep_rma_can_bounce(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
+		      size_t len)
+{
+	uint64_t device;
+
+	return len && len <= rxm_rma_read_bounce_size &&
+	       rxm_ep->msg_mr_local && !rxm_ep->rdm_mr_local &&
+	       rxm_iov_desc_to_hmem_iface_dev(msg->msg_iov, msg->desc,
+					      msg->iov_count, &device) ==
+	       FI_HMEM_SYSTEM;
+}
+
+/* Point the read at pkt.data, which is already registered, and keep the user
+ * iov for rxm_finish_rma() to copy into. */
+static void
+rxm_ep_format_bounce_read(struct rxm_tx_buf *rma_buf, struct fi_msg_rma *msg,
+			  struct iovec *bounce_iov, size_t len)
+{
+	assert(msg->iov_count <= RXM_IOV_LIMIT);
+	memcpy(rma_buf->rma.iov, msg->msg_iov,
+	       sizeof(*msg->msg_iov) * msg->iov_count);
+	rma_buf->rma.iov_count = (uint8_t) msg->iov_count;
+	rma_buf->pkt.hdr.size = len;
+
+	bounce_iov->iov_base = &rma_buf->pkt.data;
+	bounce_iov->iov_len = len;
+	msg->msg_iov = bounce_iov;
+	msg->desc = &rma_buf->hdr.desc;
+	msg->iov_count = 1;
+}
+
 static ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		  uint64_t flags, ssize_t (*rma_msg)(struct fid_ep *ep_fid,
@@ -109,7 +141,9 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	struct fi_msg_rma msg_rma = *msg;
 	struct rxm_conn *rxm_conn;
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
+	struct iovec bounce_iov;
 	uint64_t msg_flags;
+	size_t len;
 	ssize_t ret;
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
@@ -131,13 +165,19 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
 	rma_buf->rma.count = 0;
+	rma_buf->rma.iov_count = 0;
+	msg_flags = flags;
 
+	len = ofi_total_iov_len(msg_rma.msg_iov, msg_rma.iov_count);
 	if ((comp_flags & FI_WRITE) &&
 	    rxm_ep_rma_write_is_inline(rxm_ep, &msg_rma)) {
 		/* rma_buf->flags keeps the caller's flags, so the write still
 		 * completes as a normal write in rxm_finish_rma() */
 		msg_rma.desc = NULL;
-		msg_flags = flags | FI_INJECT;
+		msg_flags |= FI_INJECT;
+	} else if ((comp_flags & FI_READ) &&
+		   rxm_ep_rma_can_bounce(rxm_ep, &msg_rma, len)) {
+		rxm_ep_format_bounce_read(rma_buf, &msg_rma, &bounce_iov, len);
 	} else {
 		ret = rxm_ep_rma_reg_iov(rxm_ep, msg_rma.msg_iov, msg_rma.desc,
 					 mr_desc, msg_rma.iov_count,
@@ -147,7 +187,6 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 			goto release;
 
 		msg_rma.desc = mr_desc;
-		msg_flags = flags;
 	}
 	msg_rma.context = rma_buf;
 
