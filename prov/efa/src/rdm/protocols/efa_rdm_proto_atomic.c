@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_peer.h"
 #include "efa_rdm_pke_rta.h"
+#include "efa_rdm_proto.h"
 #include <ofi_proto.h>
 #include <rdma/fi_errno.h>
 #include <stdint.h>
@@ -193,8 +194,11 @@ static ssize_t efa_rdm_proto_atomic_construct_tx_pke(struct efa_rdm_ope *txe){
 	err = txe->atomic_proto->get_req_data_size(txe, &req_data_size);
 	if (OFI_UNLIKELY(err))
 		return err;
-	max_payload =
-		efa_rdm_txe_max_req_data_capacity(ep, txe, txe->req_pkt_type);
+	max_payload = efa_rdm_proto_max_req_data_capacity(
+		ep, efa_rdm_pkt_type_get_req_hdr_size(
+			    txe->req_pkt_type,
+			    efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+			    txe->rma_iov_count));
 	if (OFI_UNLIKELY(req_data_size > max_payload))
 		return -FI_EMSGSIZE;
 	if (txe->op != ofi_op_atomic &&

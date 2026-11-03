@@ -416,42 +416,6 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 }
 
 /**
- * @brief return the maximum data capacity of a REQ packet for an send operation
- *
- * The REQ packet header length is a variable that depends on a number of factors,
- * including:
- *
- *   packet_type, peer_type, cq_data and number of rma iov.
- *
- * As a result the maximum data capacity of a REQ packet for a send operation,(
- * which is the number of bytes of data can be saved in a REQ packet) is different.
- *
- * This function is used to caculate the maxium data capacity.
- *
- * @param[in]		ep			endpoint
- * @param[in]		txe	txe that has all information of
- * 					a send operation
- * @param[in]		pkt_type	type of REQ packet
- *
- * @return		maxiumum number of bytes of data can be save in a REQ packet
- * 			for given send operation and REQ packet type.
- */
-size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
-{
-	uint16_t header_flags;
-	int max_data_offset;
-
-	assert(pkt_type >= EFA_RDM_REQ_PKT_BEGIN);
-
-	header_flags = efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags);
-
-	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags,
-					       txe->rma_iov_count);
-
-	return ep->mtu_size - max_data_offset;
-}
-
-/**
  * @brief prepare ope to send the give pkt type
  *
  * For given packet type, calculate how many packets are going to be
@@ -493,7 +457,11 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
 		assert(total_pkt_entry_data_size);
 
-		single_pkt_entry_max_data_size = efa_rdm_txe_max_req_data_capacity(ep, ope, pkt_type);
+		single_pkt_entry_max_data_size = efa_rdm_proto_max_req_data_capacity(
+			ep, efa_rdm_pkt_type_get_req_hdr_size(
+				    pkt_type,
+				    efa_rdm_proto_req_header_flags(ope->peer, ope->fi_flags),
+				    ope->rma_iov_count));
 		assert(single_pkt_entry_max_data_size);
 
 		iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->iface : FI_HMEM_SYSTEM;

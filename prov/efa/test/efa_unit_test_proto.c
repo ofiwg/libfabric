@@ -1426,8 +1426,12 @@ void test_proto_atomic_write_post_and_complete(void **state)
 	probe.ep = ctx.ep;
 	probe.peer = ctx.peer;
 	probe.rma_iov_count = 1;
-	exact = efa_rdm_txe_max_req_data_capacity(
-		ctx.ep, &probe, EFA_RDM_WRITE_RTA_PKT);
+	exact = efa_rdm_proto_max_req_data_capacity(
+		ctx.ep, efa_rdm_pkt_type_get_req_hdr_size(
+				EFA_RDM_WRITE_RTA_PKT,
+				efa_rdm_proto_req_header_flags(probe.peer,
+							       probe.fi_flags),
+				probe.rma_iov_count));
 	assert_true(exact > 0);
 	assert_true(exact + 1 <= ctx.send_buff.size);
 	memset(ctx.send_buff.buff, 0x5a, ctx.send_buff.size);
@@ -1839,8 +1843,12 @@ void test_proto_atomic_fetch_compare_request(void **state) {
 	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
 
 	for (i = 0; i < ARRAY_SIZE(ops); i++) {
-		capacity = efa_rdm_txe_max_req_data_capacity(ctx.ep, &probe,
-							     pkt_types[i]);
+		capacity = efa_rdm_proto_max_req_data_capacity(
+			ctx.ep, efa_rdm_pkt_type_get_req_hdr_size(
+					pkt_types[i],
+					efa_rdm_proto_req_header_flags(
+						probe.peer, probe.fi_flags),
+					probe.rma_iov_count));
 		count = i ? capacity / 2 : capacity;
 		memset(source, 0x10 + i, count);
 		memset(compare, 0x20 + i, count);
