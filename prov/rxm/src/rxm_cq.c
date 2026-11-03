@@ -223,8 +223,20 @@ rxm_cq_write_tx_comp(struct rxm_ep *rxm_ep, uint64_t comp_flags,
 static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_tx_buf *rma_buf,
 			  uint64_t comp_flags)
 {
+	size_t len __attribute__((unused));
+
 	assert(((comp_flags & FI_WRITE) && !(comp_flags & FI_READ)) ||
 	       ((comp_flags & FI_READ) && !(comp_flags & FI_WRITE)));
+
+	/* The data must be in the user buffer before the completion or the
+	 * counter tells the app it is there. */
+	if ((comp_flags & FI_READ) && rma_buf->rma.iov_count) {
+		len = ofi_copy_to_iov(rma_buf->rma.iov,
+				      rma_buf->rma.iov_count, 0,
+				      rma_buf->pkt.data,
+				      rma_buf->pkt.hdr.size);
+		assert(len == rma_buf->pkt.hdr.size);
+	}
 
 	rxm_cq_write_tx_comp(rxm_ep, comp_flags, rma_buf->app_context,
 			     rma_buf->flags);
