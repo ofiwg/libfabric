@@ -101,15 +101,14 @@ rxm_ep_rma_write_is_inline(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg)
 
 static bool
 rxm_ep_rma_can_bounce(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
-		      size_t len)
+		      size_t len, size_t bounce_size)
 {
 	uint64_t device;
 
-	return len && len <= rxm_rma_read_bounce_size &&
+	return len && len <= bounce_size &&
 	       rxm_ep->msg_mr_local && !rxm_ep->rdm_mr_local &&
 	       rxm_iov_desc_to_hmem_iface_dev(msg->msg_iov, msg->desc,
-					      msg->iov_count, &device) ==
-	       FI_HMEM_SYSTEM;
+					      msg->iov_count, &device) == FI_HMEM_SYSTEM;
 }
 
 /* Point the read at pkt.data, which is already registered, and keep the user
@@ -122,6 +121,26 @@ rxm_ep_format_bounce_read(struct rxm_tx_buf *rma_buf, struct fi_msg_rma *msg,
 	memcpy(rma_buf->rma.iov, msg->msg_iov,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
 	rma_buf->rma.iov_count = (uint8_t) msg->iov_count;
+	rma_buf->pkt.hdr.size = len;
+
+	bounce_iov->iov_base = &rma_buf->pkt.data;
+	bounce_iov->iov_len = len;
+	msg->msg_iov = bounce_iov;
+	msg->desc = &rma_buf->hdr.desc;
+	msg->iov_count = 1;
+}
+
+/* Copy the write into pkt.data, which is already registered, and send it from
+ * there.  rma.iov_count stays 0, so rxm_finish_rma() copies nothing back. */
+static void
+rxm_ep_format_bounce_write(struct rxm_tx_buf *rma_buf, struct fi_msg_rma *msg,
+			   struct iovec *bounce_iov, size_t len)
+{
+	size_t copied __attribute__((unused));
+
+	copied = ofi_copy_from_iov(&rma_buf->pkt.data, len, msg->msg_iov,
+				   msg->iov_count, 0);
+	assert(copied == len);
 	rma_buf->pkt.hdr.size = len;
 
 	bounce_iov->iov_base = &rma_buf->pkt.data;
@@ -175,8 +194,15 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		 * completes as a normal write in rxm_finish_rma() */
 		msg_rma.desc = NULL;
 		msg_flags |= FI_INJECT;
+	} else if ((comp_flags & FI_WRITE) &&
+		   rxm_ep_rma_can_bounce(rxm_ep, &msg_rma, len,
+					 rxm_rma_write_bounce_size)) {
+		/* the caller's flags are kept, so this completes as the write
+		 * it is, but the buffer is reusable on return */
+		rxm_ep_format_bounce_write(rma_buf, &msg_rma, &bounce_iov, len);
 	} else if ((comp_flags & FI_READ) &&
-		   rxm_ep_rma_can_bounce(rxm_ep, &msg_rma, len)) {
+		   rxm_ep_rma_can_bounce(rxm_ep, &msg_rma, len,
+					 rxm_rma_read_bounce_size)) {
 		rxm_ep_format_bounce_read(rma_buf, &msg_rma, &bounce_iov, len);
 	} else {
 		ret = rxm_ep_rma_reg_iov(rxm_ep, msg_rma.msg_iov, msg_rma.desc,
