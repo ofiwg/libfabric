@@ -17282,9 +17282,11 @@ and registration by virtual address works with every EFA device.
 
 *FI_OPT_EFA_RNR_RETRY*
 :   Defines the number of RNR retry. The application can use it to reset
-    RNR retry counter via the call to fi_setopt. Note that this option
-    must be set before the endpoint is enabled. Otherwise, the call will
-    fail. Also note that this option only applies to RDM endpoint.
+    RNR retry counter via the call to fi_setopt. Valid values are 0 (no
+    retry) to 7 (retry indefinitely). The default is 3 on the `efa`
+    fabric and 7 on the `efa-direct` fabric. Note that this option must
+    be set before the endpoint is enabled. Also note that this option
+    only applies to RDM endpoints.
 
 *FI_OPT_EFA_EMULATED_READ, FI_OPT_EFA_EMULATED_WRITE, FI_OPT_EFA_EMULATED_ATOMICS - bool*
 :   These options only apply to the fi_getopt() call. They are used to
