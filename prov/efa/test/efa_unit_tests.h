@@ -935,4 +935,5 @@ void test_proto_atomic_read_responder_accepts_read_only_mr(void **state);
 void test_proto_select_runtread_for_large_msg(void **state);
 void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
 void test_proto_bounds_env_mapping(void **state);
+void test_proto_bounds_keep_inject_size(void **state);
 #endif

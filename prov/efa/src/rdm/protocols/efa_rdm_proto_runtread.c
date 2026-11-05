@@ -348,8 +348,8 @@ int efa_rdm_proto_runtread_construct_tx_pkes(struct efa_rdm_ep *ep,
 	*pke_send_flags = 0;
 
 	/*
-	 * An injected send always fits in a single eager packet, and eager is
-	 * tried first, so FI_INJECT cannot reach this protocol.
+	 * A valid injected send fits the eager protocol, so FI_INJECT cannot
+	 * reach this protocol.
 	 */
 	assert(!(txe->fi_flags & FI_INJECT));
 

@@ -74,7 +74,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
 	&efa_rdm_proto_longread,
-	/* Long CTS takes any send the others above decline, so it is last. */
+	/* Long CTS is the final fallback for messages within its size bounds. */
 	&efa_rdm_proto_longcts,
 };
 
@@ -389,7 +389,9 @@ ssize_t efa_rdm_proto_split_req_data(struct efa_rdm_ep *ep,
 
 	cnt = (total_data_size - 1) / max_data_size + 1;
 	data_size = (total_data_size - 1) / cnt + 1;
-	data_size &= ~(memory_alignment - 1);
+	/* A single packet may be smaller than the memory alignment. */
+	if (cnt > 1)
+		data_size &= ~(memory_alignment - 1);
 	assert(data_size);
 
 	full_cnt = total_data_size / data_size;

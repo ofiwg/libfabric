@@ -78,7 +78,8 @@ static ssize_t efa_rdm_proto_longcts_write_init_rtw(struct efa_rdm_pke *pkt_entr
 
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_proto_longcts_write_init_rtw_hdr(pkt_entry, EFA_RDM_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
+						      rtw_hdr->rma_iov);
 }
 
 /**
@@ -101,7 +102,8 @@ static ssize_t efa_rdm_proto_longcts_write_init_dc_rtw(struct efa_rdm_pke *pkt_e
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_proto_longcts_write_init_rtw_hdr(pkt_entry, EFA_RDM_DC_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
+						      rtw_hdr->rma_iov);
 }
 
 /**
@@ -224,6 +226,8 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_proto *proto,
 						uint16_t header_flags, int iface,
 						bool use_p2p)
 {
+	size_t max_data_offset;
+
 	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
 		return false;
 
@@ -231,10 +235,9 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_proto *proto,
 	if (iface == FI_HMEM_SYNAPSEAI)
 		return false;
 
-	assert(txe->total_len > txe->ep->mtu_size -
-	       efa_rdm_pkt_type_get_req_hdr_size(req_pkt_type, header_flags,
-						 txe->rma_iov_count));
-	return true;
+	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(
+		req_pkt_type, header_flags, txe->rma_iov_count);
+	return txe->total_len > txe->ep->mtu_size - max_data_offset;
 }
 
 EFA_RDM_PROTO_DEF(longcts_write,

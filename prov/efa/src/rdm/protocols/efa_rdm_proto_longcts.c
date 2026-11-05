@@ -11,6 +11,7 @@
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_rdm_proto_eager.h"
 
 /*
  * List of packet types used by this protocol
@@ -111,10 +112,7 @@ void efa_rdm_proto_longcts_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
 				 data_hdr->seg_length);
 }
 
-/**
- * @brief Long CTS takes any send the protocols before it decline, so it is
- * last in the registry.
- */
+/** @brief Check whether the message is within the Long CTS size bounds. */
 static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_proto *proto,
 						   struct efa_rdm_ope *txe,
 						   int req_pkt_type,
@@ -124,8 +122,35 @@ static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_proto *proto,
 	return efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len);
 }
 
+static bool efa_rdm_proto_longcts_set_bounds(struct efa_rdm_proto *proto,
+					     enum fi_hmem_iface target_iface,
+					     enum fi_hmem_iface bounds_profile_iface){
+	size_t max_one_packet_size;
+
+	assert(g_efa_selected_device_list);
+	assert(g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz >
+	       sizeof(struct efa_rdm_longcts_msgrtm_hdr));
+
+	max_one_packet_size =
+		g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz -
+		sizeof(struct efa_rdm_longcts_msgrtm_hdr);
+
+	/*
+	 * The untagged base header gives the largest possible long CTS REQ
+	 * payload. When the eager maximum is lowered below that capacity,
+	 * require a larger message so every selected long CTS transfer leaves
+	 * data for the CTS phase.
+	 */
+	if (efa_rdm_proto_eager.max_size[target_iface] <
+	    max_one_packet_size)
+		proto->min_size[target_iface] = max_one_packet_size + 1;
+
+	return true;
+}
+
 EFA_RDM_PROTO_DEF(longcts,
 	.wants_mr = true,
+	.set_bounds = &efa_rdm_proto_longcts_set_bounds,
 	.can_use_protocol = &efa_rdm_proto_longcts_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_construct_req_pke,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,
