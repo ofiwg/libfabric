@@ -492,8 +492,6 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(void **s
 void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_no_runt(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_do_runt(void **state);
 void test_efa_rdm_pke_get_available_copy_methods_align128(void **state);
 
 /* begin efa_unit_test_domain.c */
@@ -903,6 +901,7 @@ void test_proto_select_eager_for_zero_len_msg(void **state);
 void test_proto_eager_construct_pkes_single_pke(void **state);
 void test_proto_zero_copy_construct_pkes(void **state);
 void test_proto_zero_copy_reselected_after_handshake(void **state);
+void test_proto_zero_copy_send_end_to_end(void **state);
 void test_proto_eager_queue_dequeue_handshake(void **state);
 void test_proto_eager_send_completion_releases_txe(void **state);
 void test_proto_eager_assigns_msg_id(void **state);
