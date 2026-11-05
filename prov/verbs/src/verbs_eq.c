@@ -1222,6 +1222,9 @@ void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid)
 	struct vrb_eq_entry *entry;
 
 	assert(ofi_mutex_held(&eq->event_lock));
+	/* eq->lock guards list_head against vrb_eq_read_event() and
+	 * vrb_eq_write_event(). */
+	ofi_mutex_lock(&eq->lock);
 	while ((item =
 		dlistfd_remove_first_match(&eq->list_head,
 					   vrb_eq_match_event, fid))) {
@@ -1230,6 +1233,7 @@ void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid)
 			fi_freeinfo(entry->cm_entry.info);
 		free(entry);
 	}
+	ofi_mutex_unlock(&eq->lock);
 }
 
 struct vrb_eq_entry  *
