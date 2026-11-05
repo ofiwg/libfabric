@@ -88,6 +88,10 @@ bin_PROGRAMS += \
 	component/dmabuf-rdma/xe_memcopy
 endif HAVE_ZE_DEVEL
 
+if HAVE_NEURON
+bin_PROGRAMS += pytest/efa/neuron_efa_bdf
+endif HAVE_NEURON
+
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
 	scripts/runfabtests.py \
@@ -562,6 +566,10 @@ component_sock_test_LDADD = libfabtests.la
 
 component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
+
+if HAVE_NEURON
+pytest_efa_neuron_efa_bdf_SOURCES = pytest/efa/neuron_efa_bdf.c
+endif HAVE_NEURON
 
 component_dmabuf_rdma_cuda_check_dmabuf_SOURCES = \
 	component/dmabuf-rdma/check_cuda_dmabuf.c
