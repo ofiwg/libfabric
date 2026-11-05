@@ -75,12 +75,16 @@ efa_rdm_proto_runtread_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
  * based arm of the old RTM selector and the runt arm of the old read based
  * selector, both of which this series deletes.
  */
-static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_proto *proto,
+						    struct efa_rdm_ope *txe,
 						    int req_pkt_type,
 						    uint16_t header_flags,
 						    int iface, bool use_p2p)
 {
 	int i;
+
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
 
 	/*
 	 * The device reads the source buffer directly, so it must be reachable
@@ -96,9 +100,6 @@ static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 	for (i = 0; i < txe->iov_count; ++i)
 		if (!txe->desc[i])
 			return false;
-
-	if (txe->total_len < g_efa_hmem_info[iface].min_read_msg_size)
-		return false;
 
 	if (!efa_rdm_interop_rdma_read(txe->ep, txe->peer))
 		return false;
@@ -130,6 +131,9 @@ static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(runtread,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_max_bound,
+	.min_bound_param = &efa_rdm_proto_inter_min_read_message_size,
 	.can_use_protocol = &efa_rdm_proto_runtread_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_runtread_construct_tx_pkes,
 	/*

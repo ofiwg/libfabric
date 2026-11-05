@@ -30,16 +30,21 @@
  * The whole read is returned in a single response packet, so short RTR is only
  * usable when the requested data fits in one READRSP packet after its header.
  */
-static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_proto *proto,
+					    struct efa_rdm_ope *txe,
 					    int req_pkt_type,
 					    uint16_t header_flags, int iface,
 					    bool use_p2p)
 {
+	(void) proto;
+
 	return txe->total_len <
 	       txe->ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr);
 }
 
 EFA_RDM_PROTO_DEF(short_rtr,
+	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_short_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_short_rtr_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_SHORT_RTR_PKT,

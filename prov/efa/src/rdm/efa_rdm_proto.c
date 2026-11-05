@@ -18,38 +18,57 @@
 #include "protocols/efa_rdm_proto_short_rtr.h"
 #include "efa_rdm_msg.h"
 
-/**
- * @brief Undo the memory registrations the selection loop made.
- *
- * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
- * protocol can be evaluated. Hand those registrations back when no protocol
- * can carry the operation.
- */
-static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
-{
-	int i, err;
+int efa_rdm_proto_set_min_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value){
+	assert(proto && (int) iface >= 0 && iface < OFI_HMEM_MAX);
 
-	for (i = 0; i < txe->iov_count; ++i) {
-		if (!txe->mr[i])
-			continue;
+	if (value > proto->bounds[iface].max)
+		return -FI_EINVAL;
 
-		err = fi_close((struct fid *) txe->mr[i]);
-		if (OFI_UNLIKELY(err))
-			EFA_WARN(FI_LOG_EP_DATA,
-				 "mr dereg failed during protocol selection. err=%d\n",
-				 err);
-
-		txe->mr[i] = NULL;
-		txe->desc[i] = NULL;
-	}
+	proto->bounds[iface].min = value;
+	return FI_SUCCESS;
 }
+
+int efa_rdm_proto_set_max_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value){
+	assert(proto && (int) iface >= 0 && iface < OFI_HMEM_MAX);
+
+	if (value < proto->bounds[iface].min)
+		return -FI_EINVAL;
+
+	proto->bounds[iface].max = value;
+	return FI_SUCCESS;
+}
+
+int efa_rdm_proto_set_bound_unsupported(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value){
+	(void) proto;
+	(void) iface;
+	(void) value;
+	return -FI_EOPNOTSUPP;
+}
+
+// TODO double-check for ROCr
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
+static size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void){
+	static bool computed = false;
+	static size_t size = 0;
+
+	if (!computed) {
+		assert(g_efa_selected_device_list);
+		size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
+		computed = true;
+	}
+
+	return size;
+}
+#else
+static size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void){
+	return 0;
+}
+#endif
+
 
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
  * The first protocol that can be used for the TX operation will be used.
- *
- * Only efa_rdm_proto_select_send_protocol() below walks this array, so it is
- * internal to this file and its length is whatever the initializer holds.
  */
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
@@ -76,6 +95,262 @@ static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
 	&efa_rdm_proto_short_rtr,
 	&efa_rdm_proto_longcts_rtr,
 };
+
+/*
+ * Every protocol registry. The bound params are defined, and the bounds are
+ * initialized, saved and restored, for the protocols listed here.
+ */
+static const struct {
+	struct efa_rdm_proto * const *protos;
+	size_t count;
+} efa_rdm_proto_registries[] = {
+	{ efa_rdm_protocols, ARRAY_SIZE(efa_rdm_protocols) },
+	{ efa_rdm_emulated_write_protocols, ARRAY_SIZE(efa_rdm_emulated_write_protocols) },
+	{ efa_rdm_emulated_read_protocols, ARRAY_SIZE(efa_rdm_emulated_read_protocols) },
+};
+
+/* Number of protocols in efa_rdm_proto_registries */
+#define EFA_RDM_PROTO_COUNT \
+	(ARRAY_SIZE(efa_rdm_protocols) + \
+	 ARRAY_SIZE(efa_rdm_emulated_write_protocols) + \
+	 ARRAY_SIZE(efa_rdm_emulated_read_protocols))
+
+/* proto->min_bound_param & proto->max_bound_param so it is 2 times the number of protocols */
+#define EFA_RDM_PROTO_BOUND_PARAM_CAPACITY (2 * EFA_RDM_PROTO_COUNT)
+
+/**
+ * @brief Return the protocol at @p idx when the registries are walked in order.
+ *
+ * @return the protocol, or NULL once @p idx is past the last protocol
+ */
+static struct efa_rdm_proto *efa_rdm_proto_registry_get(size_t idx){
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_proto_registries); i++) {
+		if (idx < efa_rdm_proto_registries[i].count)
+			return efa_rdm_proto_registries[i].protos[idx];
+		idx -= efa_rdm_proto_registries[i].count;
+	}
+
+	return NULL;
+}
+
+static size_t efa_rdm_proto_inter_max_medium_message_size_default(enum fi_hmem_iface policy_iface){
+	/* Only eager and the read based protocols carry device memory */
+	return policy_iface == FI_HMEM_SYSTEM ? EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE : 0;
+}
+
+static size_t efa_rdm_proto_read_min_default(enum fi_hmem_iface policy_iface, size_t system_default){
+	switch (policy_iface) {
+	case FI_HMEM_SYSTEM:
+		return system_default;
+	case FI_HMEM_SYNAPSEAI:
+		/* Sends always use long read, see efa_rdm_proto_select_send_protocol() */
+		return 1;
+	default:
+		/* Only eager and the read based protocols carry device memory */
+		return efa_rdm_proto_max_eager_msg_size_with_largest_header() + 1;
+	}
+}
+
+static size_t efa_rdm_proto_inter_min_read_message_size_default(enum fi_hmem_iface policy_iface){
+	return efa_rdm_proto_read_min_default(policy_iface, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE);
+}
+
+static size_t efa_rdm_proto_inter_min_read_write_size_default(enum fi_hmem_iface policy_iface){
+	return efa_rdm_proto_read_min_default(policy_iface, EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE);
+}
+
+const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_medium_message_size = {
+	.param = "inter_max_medium_message_size",
+	.env = "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE",
+	.help = "The maximum message size for inter EFA medium message protocol (Default 65536).",
+	.host_policy_only = true,
+	.policy_default = &efa_rdm_proto_inter_max_medium_message_size_default,
+};
+
+const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_message_size = {
+	.param = "inter_min_read_message_size",
+	.env = "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE",
+	.help = "The minimum message size in bytes for inter EFA read message "
+		"protocol. If instance support RDMA read, messages whose size is "
+		"larger than this value will be sent by read message protocol (Default 1048576).",
+	.policy_default = &efa_rdm_proto_inter_min_read_message_size_default,
+};
+
+const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_write_size = {
+	.param = "inter_min_read_write_size",
+	.env = "FI_EFA_INTER_MIN_READ_WRITE_SIZE",
+	.help = "The minimum message size for inter EFA write to use read write protocol. "
+		"If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, "
+		"write requests whose size is larger than this value will use the read write protocol (Default 65536). "
+		"If the efa device supports RDMA write, device RDMA write will always be used.",
+	.policy_default = &efa_rdm_proto_inter_min_read_write_size_default,
+};
+
+static bool efa_rdm_proto_bound_param_seen(
+	const struct efa_rdm_proto_bound_param *param,
+	const struct efa_rdm_proto_bound_param *const *seen,
+	size_t seen_count){
+	size_t i;
+
+	for (i = 0; i < seen_count; i++)
+		if (seen[i] == param)
+			return true;
+
+	return false;
+}
+
+void efa_rdm_proto_define_bound_params(void){
+	const struct efa_rdm_proto_bound_param* seen[EFA_RDM_PROTO_BOUND_PARAM_CAPACITY] = {0};
+	const struct efa_rdm_proto_bound_param *params[2];
+	struct efa_rdm_proto *proto;
+	size_t seen_count = 0;
+	size_t i, j;
+
+	for (i = 0; (proto = efa_rdm_proto_registry_get(i)); i++) {
+		/* A bound param needs a setter that can apply it */
+		assert(!proto->min_bound_param || (proto->set_min_bound && proto->set_min_bound != &efa_rdm_proto_set_bound_unsupported));
+		assert(!proto->max_bound_param || (proto->set_max_bound && proto->set_max_bound != &efa_rdm_proto_set_bound_unsupported));
+
+		params[0] = proto->min_bound_param;
+		params[1] = proto->max_bound_param;
+
+		for (j = 0; j < ARRAY_SIZE(params); j++) {
+			if (!params[j] || efa_rdm_proto_bound_param_seen(params[j], seen, seen_count))
+				continue;
+
+			fi_param_define(&efa_prov, params[j]->param,
+					FI_PARAM_SIZE_T, "%s", params[j]->help);
+			seen[seen_count++] = params[j];
+		}
+	}
+}
+
+static void efa_rdm_proto_set_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t min, size_t max){
+	proto->bounds[iface].min = min;
+	proto->bounds[iface].max = max;
+}
+
+/* The bound @p param sets for @p policy_iface before the environment override, or @p unbounded when it sets none */
+static size_t efa_rdm_proto_bound_param_default(const struct efa_rdm_proto_bound_param *param, enum fi_hmem_iface policy_iface, size_t unbounded){
+	return (param && param->policy_default) ? param->policy_default(policy_iface) : unbounded;
+}
+
+static void efa_rdm_proto_apply_bound_param(
+	struct efa_rdm_proto *proto,
+	const struct efa_rdm_proto_bound_param *param, bool is_min,
+	enum fi_hmem_iface target_iface, enum fi_hmem_iface policy_iface,
+	const struct efa_rdm_proto_bound_param **ignored,
+	size_t *ignored_count){
+	size_t value;
+	int ret;
+
+	if (!param || fi_param_get_size_t(&efa_prov, param->param, &value))
+		return;
+
+	/* SynapseAI always uses long read, and the HMEM policies only use
+	 * eager and read based protocols.
+	 */
+	if (policy_iface == FI_HMEM_SYNAPSEAI ||
+	    (param->host_policy_only && policy_iface != FI_HMEM_SYSTEM)) {
+		if (!efa_rdm_proto_bound_param_seen(param, ignored, *ignored_count)) {
+			EFA_WARN(FI_LOG_CORE, "%s is ignored for %s\n", param->env,
+				 fi_tostr(&target_iface, FI_TYPE_HMEM_IFACE));
+			ignored[(*ignored_count)++] = param;
+		}
+		return;
+	}
+
+	ret = is_min ?
+		proto->set_min_bound(proto, target_iface, value) :
+		proto->set_max_bound(proto, target_iface, value);
+	if (ret)
+		EFA_WARN(FI_LOG_CORE,
+			 "Ignoring rejected %s=%zu for %s on %s: %s\n",
+			 param->env, value, proto->name,
+			 fi_tostr(&target_iface, FI_TYPE_HMEM_IFACE),
+			 fi_strerror(-ret));
+}
+
+void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface policy_iface){
+	const struct efa_rdm_proto_bound_param
+		*ignored[EFA_RDM_PROTO_BOUND_PARAM_CAPACITY] = {0};
+	struct efa_rdm_proto *proto;
+	size_t ignored_count = 0;
+	size_t i;
+
+	assert((int) target_iface >= 0 && target_iface < OFI_HMEM_MAX);
+
+	switch (policy_iface) {
+	case FI_HMEM_SYSTEM:
+	case FI_HMEM_CUDA:
+	case FI_HMEM_ROCR:
+	case FI_HMEM_NEURON:
+	case FI_HMEM_SYNAPSEAI:
+		break;
+	default:
+		EFA_WARN(FI_LOG_CORE, "No protocol bounds policy for %s\n",
+			 fi_tostr(&policy_iface, FI_TYPE_HMEM_IFACE));
+		return;
+	}
+
+	/* Each protocol starts at [0, SIZE_MAX], takes its params' defaults, then their environment overrides */
+	for (i = 0; (proto = efa_rdm_proto_registry_get(i)); i++) {
+		efa_rdm_proto_set_bounds(proto, target_iface, efa_rdm_proto_bound_param_default(proto->min_bound_param, policy_iface, 0), efa_rdm_proto_bound_param_default(proto->max_bound_param, policy_iface, SIZE_MAX));
+		efa_rdm_proto_apply_bound_param(
+			proto, proto->min_bound_param, true,
+			target_iface, policy_iface, ignored, &ignored_count);
+		efa_rdm_proto_apply_bound_param(
+			proto, proto->max_bound_param, false,
+			target_iface, policy_iface, ignored, &ignored_count);
+	}
+}
+
+static struct efa_rdm_proto_bounds efa_rdm_proto_saved_bounds[EFA_RDM_PROTO_COUNT][OFI_HMEM_MAX];
+
+void efa_rdm_proto_bounds_snapshot(void){
+	struct efa_rdm_proto *proto;
+	size_t i;
+
+	for (i = 0; (proto = efa_rdm_proto_registry_get(i)); i++)
+		memcpy(efa_rdm_proto_saved_bounds[i], proto->bounds, sizeof(efa_rdm_proto_saved_bounds[i]));
+}
+
+void efa_rdm_proto_bounds_restore(void){
+	struct efa_rdm_proto *proto;
+	size_t i;
+
+	for (i = 0; (proto = efa_rdm_proto_registry_get(i)); i++)
+		memcpy(proto->bounds, efa_rdm_proto_saved_bounds[i], sizeof(efa_rdm_proto_saved_bounds[i]));
+}
+
+/**
+ * @brief Undo the memory registrations the selection loop made.
+ *
+ * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
+ * protocol can be evaluated. Hand those registrations back when no protocol
+ * can carry the operation.
+ */
+static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
+{
+	int i, err;
+
+	for (i = 0; i < txe->iov_count; ++i) {
+		if (!txe->mr[i])
+			continue;
+
+		err = fi_close((struct fid *) txe->mr[i]);
+		if (OFI_UNLIKELY(err))
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "mr dereg failed during protocol selection. err=%d\n",
+				 err);
+
+		txe->mr[i] = NULL;
+		txe->desc[i] = NULL;
+	}
+}
+
 
 void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 {
@@ -282,7 +557,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     use_p2p)) {
 			*proto = selected_proto;
@@ -371,7 +647,8 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     use_p2p)) {
 			*proto = selected_proto;
@@ -382,9 +659,12 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No emulated write protocol matched. This is not expected; the caller
-	 * reports an error.
+	 * No emulated write protocol matched, so release any MRs that were
+	 * registered. The caller reports an error.
 	 */
+	if (mr_attempted)
+		efa_rdm_proto_release_selection_mrs(txe);
+
 	*proto = NULL;
 	txe->proto = NULL;
 }
@@ -416,7 +696,8 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, txe->op, txe->fi_flags, peer);
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     false /* use_p2p */)) {
 			*proto = selected_proto;

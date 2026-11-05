@@ -218,11 +218,15 @@ err:
  * nor can use the read based protocol. SynapseAI is served by the read based
  * protocol, so it is rejected here.
  */
-static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_proto *proto,
+						struct efa_rdm_ope *txe,
 						int req_pkt_type,
 						uint16_t header_flags, int iface,
 						bool use_p2p)
 {
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
+
 	/* TODO: remove interface-specific run-time checks for protocol usage */
 	if (iface == FI_HMEM_SYNAPSEAI)
 		return false;
@@ -230,13 +234,13 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_ope *txe,
 	assert(txe->total_len > txe->ep->mtu_size -
 	       efa_rdm_pkt_type_get_req_hdr_size(req_pkt_type, header_flags,
 						 txe->rma_iov_count));
-	assert(!efa_rdm_rma_should_write_using_longread(txe->ep, txe, txe->peer,
-							use_p2p));
 	return true;
 }
 
 EFA_RDM_PROTO_DEF(longcts_write,
 	.wants_mr = false,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longcts_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_write_construct_tx_pkes,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

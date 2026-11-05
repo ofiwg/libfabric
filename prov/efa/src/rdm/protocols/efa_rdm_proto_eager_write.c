@@ -228,12 +228,16 @@ void efa_rdm_proto_eager_write_handle_dc_rtw_recv(struct efa_rdm_pke *pkt_entry)
  * the payload fits after the header. Unlike a two-sided send, the header also
  * holds the remote memory region, which grows it.
  */
-static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_proto *proto,
+					      struct efa_rdm_ope *txe,
 					      int req_pkt_type,
 					      uint16_t header_flags, int iface,
 					      bool use_p2p)
 {
 	size_t max_data_offset, max_rtw_data_capacity;
+
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
 
 	/* TODO: remove interface-specific run-time checks for protocol usage */
 	if (iface == FI_HMEM_SYNAPSEAI)
@@ -248,6 +252,8 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(eager_write,
 	.wants_mr = false,
+	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
+	.set_max_bound = &efa_rdm_proto_set_max_bound,
 	.can_use_protocol = &efa_rdm_proto_eager_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_eager_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_RTW_PKT,

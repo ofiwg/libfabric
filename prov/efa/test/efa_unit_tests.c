@@ -22,9 +22,12 @@ static int efa_unit_test_mocks_group_setup(void **state)
 
 	orig_efa_env = efa_env;
 
-	/* run fi_getinfo to populate g_efa_hmem_info and copy it */
+	/* run fi_getinfo to populate g_efa_hmem_info and the protocol bounds, and copy them */
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
 	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
+	/* Protocol bounds are global and efa_hmem_info_initialize() rewrites them, so
+	 * they are backed up and restored together with g_efa_hmem_info. */
+	efa_rdm_proto_bounds_snapshot();
 	fi_freeinfo(info);
 
 	/* Initialize the random number generator */
@@ -57,8 +60,9 @@ static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
 
-	/* Reset the contents of g_efa_hmem_info from backup */
+	/* Reset the contents of g_efa_hmem_info and the protocol bounds from backup */
 	memcpy(g_efa_hmem_info, g_efa_hmem_info_backup, sizeof(g_efa_hmem_info));
+	efa_rdm_proto_bounds_restore();
 
 	/* Provide default mock return values for CQ operations during teardown */
 	if (g_efa_unit_test_mocks.efa_ibv_cq_start_poll) {
@@ -958,6 +962,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_atomic_read_responder_accepts_read_only_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_select_runtread_for_large_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_runtread_construct_pkes_carries_read_iov, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_bounds_env_mapping, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

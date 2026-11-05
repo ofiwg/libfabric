@@ -50,12 +50,16 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
  * Returns true if the message fits in a single MTU-sized packet after
  * accounting for the request header size.
  */
-static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_proto *proto,
+						 struct efa_rdm_ope *txe,
 						 int req_pkt_type,
 						 uint16_t header_flags,
 						 int iface, bool use_p2p)
 {
 	size_t max_data_offset, max_rtm_data_capacity;
+
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
 
 	/* TODO: For emulated read and atomics, need to consider RMA
 	 * IOVs in the header
@@ -70,6 +74,8 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(eager,
 	.wants_mr = false,
+	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
+	.set_max_bound = &efa_rdm_proto_set_max_bound,
 	.can_use_protocol = &efa_rdm_proto_eager_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_eager_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT,

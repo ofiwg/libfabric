@@ -48,7 +48,8 @@ efa_rdm_proto_medium_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
  * and 0 - i.e. never - for every HMEM interface, which use the read based
  * protocols instead).
  */
-static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_proto *proto,
+						  struct efa_rdm_ope *txe,
 						  int req_pkt_type,
 						  uint16_t header_flags,
 						  int iface, bool use_p2p)
@@ -56,11 +57,14 @@ static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
 	/* A zero sized message should use eager protocol */
 	assert(txe->total_len > 0);
 
-	return txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size;
+	return efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len);
 }
 
 EFA_RDM_PROTO_DEF(medium,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_max_bound,
+	.max_bound_param = &efa_rdm_proto_inter_max_medium_message_size,
 	.can_use_protocol = &efa_rdm_proto_medium_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_medium_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT,

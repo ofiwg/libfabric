@@ -151,17 +151,24 @@ err:
  * The peer RDMA-reads the source buffer, so this is usable when the transfer
  * is large enough and the peer supports RDMA read over p2p.
  */
-static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_proto *proto,
+						 struct efa_rdm_ope *txe,
 						 int req_pkt_type,
 						 uint16_t header_flags, int iface,
 						 bool use_p2p)
 {
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
+
 	return efa_rdm_rma_should_write_using_longread(txe->ep, txe, txe->peer,
 						       use_p2p);
 }
 
 EFA_RDM_PROTO_DEF(longread_write,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
+	.min_bound_param = &efa_rdm_proto_inter_min_read_write_size,
 	.can_use_protocol = &efa_rdm_proto_longread_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longread_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_LONGREAD_RTW_PKT,

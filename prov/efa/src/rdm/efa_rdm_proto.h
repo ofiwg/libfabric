@@ -62,6 +62,22 @@
  * restrictive (long CTS) so the most efficient protocol is always
  * selected.
  */
+struct efa_rdm_proto_bounds {
+	size_t min;
+	size_t max;
+};
+
+struct efa_rdm_proto_bound_param {
+	const char *param;
+	const char *env;
+	const char *help;
+	bool host_policy_only;
+	/* Bound for an HMEM policy before the environment override. NULL
+	 * leaves the bound unlimited.
+	 */
+	size_t (*policy_default)(enum fi_hmem_iface policy_iface);
+};
+
 struct efa_rdm_proto {
 	/* Human readable protocol name, e.g. "eager". Used for tracing the
 	 * outcome of protocol selection and in unit test assertions.
@@ -72,13 +88,34 @@ struct efa_rdm_proto {
 	 * being registered */
 	bool wants_mr;
 
+	/* Inclusive message size window, per HMEM interface, in which the
+	 * protocol may be selected. can_use_protocol() enforces it together
+	 * with the protocol's other eligibility checks.
+	 */
+	struct efa_rdm_proto_bounds bounds[OFI_HMEM_MAX];
+
+	/* Optional environment variables that set each direction, with the
+	 * default for each HMEM policy. Protocol registration drives both
+	 * parameter definition and bound initialization.
+	 */
+	const struct efa_rdm_proto_bound_param *min_bound_param;
+	const struct efa_rdm_proto_bound_param *max_bound_param;
+
+	/* Bound setters. A direction the protocol does not support uses
+	 * efa_rdm_proto_set_bound_unsupported(). A failed call leaves the
+	 * bounds unchanged.
+	 */
+	int (*set_min_bound)(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
+	int (*set_max_bound)(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
 	 * TX operation. use_p2p reports whether peer-to-peer access is
 	 * available; the read based protocols need it.
 	 */
-	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+	bool (*can_use_protocol)(struct efa_rdm_proto *proto,
+				 struct efa_rdm_ope *txe,
 				 int req_pkt_type, uint16_t header_flags,
 				 int iface, bool use_p2p);
 
@@ -131,17 +168,69 @@ struct efa_rdm_proto {
 	int req_pkt_type_tagged_dc;
 };
 
+#define EFA_RDM_PROTO_DEFAULT_BOUNDS \
+	{ \
+		[FI_HMEM_SYSTEM] = { .min = 0, .max = SIZE_MAX }, \
+		[FI_HMEM_CUDA] = { .min = 0, .max = SIZE_MAX }, \
+		[FI_HMEM_ROCR] = { .min = 0, .max = SIZE_MAX }, \
+		[FI_HMEM_ZE] = { .min = 0, .max = SIZE_MAX }, \
+		[FI_HMEM_NEURON] = { .min = 0, .max = SIZE_MAX }, \
+		[FI_HMEM_SYNAPSEAI] = { .min = 0, .max = SIZE_MAX }, \
+	}
+
 #define EFA_RDM_PROTO_DEF(_name, ...) \
 	struct efa_rdm_proto efa_rdm_proto_##_name = { \
 		.name = #_name, \
+		.bounds = EFA_RDM_PROTO_DEFAULT_BOUNDS, \
 		__VA_ARGS__ \
 	}
+
+int efa_rdm_proto_set_min_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
+int efa_rdm_proto_set_max_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
+int efa_rdm_proto_set_bound_unsupported(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
+
+extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_medium_message_size;
+extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_message_size;
+extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_write_size;
+
+void efa_rdm_proto_define_bound_params(void);
+
+/**
+ * @brief Install the protocol bounds for an HMEM interface.
+ *
+ * Writes the defaults of the @p policy_iface profile into the @p target_iface
+ * slot of every registered protocol, then applies the bound environment
+ * variables that the profile honors through the protocols' setters.
+ *
+ * @param[in] target_iface	interface whose bounds are written
+ * @param[in] policy_iface	interface whose defaults apply; FI_HMEM_SYSTEM
+ *				when p2p is unavailable for @p target_iface
+ */
+void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface policy_iface);
+
+/**
+ * @brief Save the bounds of every registered protocol.
+ *
+ * The bounds are global, so the unit tests that change them save them here
+ * and put them back with efa_rdm_proto_bounds_restore().
+ */
+void efa_rdm_proto_bounds_snapshot(void);
+
+/** @brief Restore the bounds that efa_rdm_proto_bounds_snapshot() saved. */
+void efa_rdm_proto_bounds_restore(void);
+
+static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t len)
+{
+	assert(proto && (int) iface >= 0 && iface < OFI_HMEM_MAX);
+	return len >= proto->bounds[iface].min && len <= proto->bounds[iface].max;
+}
 
 /**
  * @brief Select the appropriate send protocol for a TX operation.
  *
- * Iterates through registered protocols in priority order and selects
- * the first one whose can_use_protocol() returns true.
+ * Iterates through registered protocols in priority order and selects the
+ * first one whose inclusive bounds contain the message size and whose
+ * can_use_protocol() returns true.
  *
  * It will also handle memory registration of user buffers. If read based
  * protocols are appropriate but MR fails, it will automatically switch to a
