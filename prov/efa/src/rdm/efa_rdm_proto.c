@@ -161,6 +161,13 @@ static size_t efa_rdm_proto_inter_min_read_write_size_default(enum fi_hmem_iface
 	return efa_rdm_proto_read_min_default(policy_iface, EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE);
 }
 
+const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_eager_message_size = {
+	.param = "inter_max_eager_message_size",
+	.env = "FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE",
+	.help = "The inclusive maximum message size eligible for the inter EFA "
+		"eager message protocol (Default: unlimited).",
+};
+
 const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_medium_message_size = {
 	.param = "inter_max_medium_message_size",
 	.env = "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE",
@@ -176,6 +183,13 @@ const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_message_size
 		"protocol. If instance support RDMA read, messages whose size is "
 		"larger than this value will be sent by read message protocol (Default 1048576).",
 	.policy_default = &efa_rdm_proto_inter_min_read_message_size_default,
+};
+
+const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_eager_write_size = {
+	.param = "inter_max_eager_write_size",
+	.env = "FI_EFA_INTER_MAX_EAGER_WRITE_SIZE",
+	.help = "The inclusive maximum write size eligible for the inter EFA "
+		"eager write protocol (Default: unlimited).",
 };
 
 const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_write_size = {

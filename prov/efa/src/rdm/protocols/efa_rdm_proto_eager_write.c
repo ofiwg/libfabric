@@ -48,7 +48,7 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov, txe->total_len);
 }
 
 /**
@@ -75,7 +75,7 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
 	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
-					  dc_eager_rtw_hdr->rma_iov);
+					  dc_eager_rtw_hdr->rma_iov, txe->total_len);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
 	return ret;
 }
@@ -236,7 +236,8 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_proto *proto,
 {
 	size_t max_data_offset, max_rtw_data_capacity;
 
-	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+	/* A valid injected write fits eager write, so the bounds must not reject it. */
+	if (!(txe->fi_flags & FI_INJECT) && !efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
 		return false;
 
 	/* TODO: remove interface-specific run-time checks for protocol usage */
@@ -254,6 +255,7 @@ EFA_RDM_PROTO_DEF(eager_write,
 	.wants_mr = false,
 	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
 	.set_max_bound = &efa_rdm_proto_set_max_bound,
+	.max_bound_param = &efa_rdm_proto_inter_max_eager_write_size,
 	.can_use_protocol = &efa_rdm_proto_eager_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_eager_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_RTW_PKT,

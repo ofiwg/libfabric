@@ -3,6 +3,7 @@
  * rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_prov_info.h"
 #include "ofi_atomic.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_pke_rta.h"
@@ -2888,8 +2889,10 @@ void test_proto_runtread_construct_pkes_carries_read_iov(void **state)
 
 /* The bound environment variables and the values the bounds tests give them */
 static const char *const test_proto_bound_envs[][2] = {
+	{ "FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE", "4000" },
 	{ "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE", "1000" },
 	{ "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE", "2000" },
+	{ "FI_EFA_INTER_MAX_EAGER_WRITE_SIZE", "5000" },
 	{ "FI_EFA_INTER_MIN_READ_WRITE_SIZE", "3000" },
 };
 
@@ -2898,8 +2901,9 @@ static const char *const test_proto_bound_envs[][2] = {
  *        environment variables set the bounds they map to, as the
  *        per-interface thresholds did: HMEM with p2p ignores the medium
  *        variable, HMEM without p2p takes the host policy in its own slot, and
- *        SynapseAI ignores every variable. efa_unit_test_mocks_teardown()
- *        restores the bounds.
+ *        SynapseAI ignores every variable. The eager MAX variables apply
+ *        everywhere but SynapseAI. efa_unit_test_mocks_teardown() restores the
+ *        bounds.
  */
 void test_proto_bounds_env_mapping(void **state)
 {
@@ -2914,10 +2918,14 @@ void test_proto_bounds_env_mapping(void **state)
 		struct efa_rdm_proto *proto;
 		size_t min, max;
 	} cases[] = {
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_eager, 0, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_eager_write, 0, SIZE_MAX },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_medium, 0, EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_runtread, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE, SIZE_MAX },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_longread, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE, SIZE_MAX },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_longread_write, EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_eager, 0, 4000 },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_eager_write, 0, 5000 },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_medium, 0, 1000 },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_runtread, 2000, SIZE_MAX },
 		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_longread, 2000, SIZE_MAX },
@@ -2925,10 +2933,13 @@ void test_proto_bounds_env_mapping(void **state)
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_medium, 0, 0 },
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_longread, rm, SIZE_MAX },
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_longread_write, rm, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_eager, 0, 4000 },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_eager_write, 0, 5000 },
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_medium, 0, 0 },
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_runtread, 2000, SIZE_MAX },
 		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_longread_write, 3000, SIZE_MAX },
 		{ FI_HMEM_CUDA, FI_HMEM_SYSTEM, true, &efa_rdm_proto_medium, 0, 1000 },
+		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_eager, 0, SIZE_MAX },
 		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_medium, 0, 0 },
 		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_longread, 1, SIZE_MAX },
 		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_longread_write, 1, SIZE_MAX },
@@ -2950,4 +2961,52 @@ void test_proto_bounds_env_mapping(void **state)
 		assert_int_equal(cases[i].proto->bounds[cases[i].target].min, cases[i].min);
 		assert_int_equal(cases[i].proto->bounds[cases[i].target].max, cases[i].max);
 	}
+}
+
+/*
+ * Check the inject size of the RDM prov info built with the current bounds, and
+ * that an endpoint opened with it reports it for every inject option.
+ */
+static void test_proto_assert_inject_size(struct efa_resource *resource, size_t expected)
+{
+	const int optnames[] = { FI_OPT_INJECT_MSG_SIZE, FI_OPT_INJECT_TAGGED_SIZE, FI_OPT_INJECT_RMA_SIZE };
+	struct fi_info *info;
+	struct fid_ep *ep;
+	size_t i, val, len;
+
+	assert_int_equal(efa_prov_info_alloc_for_rdm(&info, &g_efa_selected_device_list[0]), 0);
+	assert_int_equal(info->tx_attr->inject_size, expected);
+	fi_freeinfo(info);
+
+	info = fi_dupinfo(resource->info);
+	assert_non_null(info);
+	info->tx_attr->inject_size = expected;
+	assert_int_equal(fi_endpoint(resource->domain, info, &ep, NULL), 0);
+	for (i = 0; i < ARRAY_SIZE(optnames); i++) {
+		len = sizeof(val);
+		assert_int_equal(fi_getopt(&ep->fid, FI_OPT_ENDPOINT, optnames[i], &val, &len), 0);
+		assert_int_equal(val, expected);
+	}
+	assert_int_equal(fi_close(&ep->fid), 0);
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Test that the eager and eager_write MAX bounds leave the advertised
+ *        inject size alone, since an FI_INJECT operation ignores them.
+ */
+void test_proto_bounds_keep_inject_size(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *info;
+	size_t inject_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_int_equal(efa_prov_info_alloc_for_rdm(&info, &g_efa_selected_device_list[0]), 0);
+	inject_size = info->tx_attr->inject_size;
+	fi_freeinfo(info);
+
+	efa_rdm_proto_eager.bounds[FI_HMEM_SYSTEM].max = 0;
+	efa_rdm_proto_eager_write.bounds[FI_HMEM_SYSTEM].max = 0;
+	test_proto_assert_inject_size(resource, inject_size);
 }

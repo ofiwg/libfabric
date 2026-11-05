@@ -16,7 +16,9 @@
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_eager_write.h"
 #include "rdm/protocols/efa_rdm_proto_longcts.h"
+#include "rdm/protocols/efa_rdm_proto_longcts_write.h"
 #include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "rdm/protocols/efa_rdm_proto_medium.h"
 #include "rdm/protocols/efa_rdm_proto_runtread.h"
@@ -768,6 +770,94 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 				 proto);
 
 	ofi_buf_free(txe);
+	efa_test_proto_teardown_buf(&ctx);
+	return 0;
+}
+
+static void efa_test_proto_set_system_bounds(struct efa_rdm_proto *proto, size_t min, size_t max)
+{
+	proto->bounds[FI_HMEM_SYSTEM].min = min;
+	proto->bounds[FI_HMEM_SYSTEM].max = max;
+}
+
+int efa_test_proto_bounds_select(struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain, enum efa_test_proto_bounds_case test_case, struct efa_test_proto_select_result *out)
+{
+	const size_t len = EFA_TEST_PROTO_BOUNDS_LEN;
+	bool write = test_case >= EFA_TEST_PROTO_BOUNDS_WRITE_LONGCTS;
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *proto = NULL;
+	uint64_t flags = 0, pke_send_flags;
+	struct efa_rdm_ope *txe;
+	struct fi_msg msg;
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	/* Keep eager and eager_write below the size; the default bounds of the others take it */
+	efa_test_proto_set_system_bounds(&efa_rdm_proto_eager, 0, len - 1);
+	efa_test_proto_set_system_bounds(&efa_rdm_proto_eager_write, 0, len - 1);
+	switch (test_case) {
+	case EFA_TEST_PROTO_BOUNDS_OVERLAP:
+		efa_test_proto_set_system_bounds(&efa_rdm_proto_eager, 0, len);
+		break;
+	case EFA_TEST_PROTO_BOUNDS_MEDIUM_MIN:
+		efa_test_proto_set_system_bounds(&efa_rdm_proto_medium, len, SIZE_MAX);
+		break;
+	case EFA_TEST_PROTO_BOUNDS_GAP:
+		efa_test_proto_set_system_bounds(&efa_rdm_proto_medium, len + 1, SIZE_MAX);
+		efa_test_proto_set_system_bounds(&efa_rdm_proto_longcts, len + 1, SIZE_MAX);
+		break;
+	case EFA_TEST_PROTO_BOUNDS_LONGCTS:
+		efa_test_proto_set_system_bounds(&efa_rdm_proto_medium, 0, len - 1);
+		break;
+	case EFA_TEST_PROTO_BOUNDS_INJECT:
+	case EFA_TEST_PROTO_BOUNDS_WRITE_INJECT:
+		flags = FI_INJECT;
+		break;
+	default:
+		break;
+	}
+
+	err = efa_test_proto_setup(ep, av, domain, 0, 0, len, &ctx);
+	if (err)
+		return err;
+
+	efa_test_proto_build_msg(&ctx, 1, &msg, &iov, &desc);
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	if (write) {
+		/* As efa_rdm_rma_post_write() has the txe when it picks an emulated write protocol */
+		efa_rdm_txe_construct(txe, ctx.ep, ctx.peer, &msg, ofi_op_write, flags, 0);
+		txe->rma_iov_count = 1;
+		txe->rma_iov[0].len = len;
+		efa_rdm_proto_select_emulated_write_protocol(ctx.ep, ctx.peer, txe, false, &proto);
+		out->ret = proto ? 0 : -FI_EOPNOTSUPP;
+	} else {
+		out->ret = efa_rdm_proto_select_send_protocol(ctx.ep, ctx.peer, &msg, ofi_op_msg, flags, txe, &proto);
+	}
+	efa_test_proto_copy_name(out->proto_name, sizeof(out->proto_name), proto);
+
+	if (proto == &efa_rdm_proto_longcts)
+		efa_rdm_proto_txe_fill(txe, ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+
+	if (proto == &efa_rdm_proto_longcts || proto == &efa_rdm_proto_longcts_write) {
+		out->ret = proto->construct_tx_pkes(ctx.ep, txe, &pke_send_flags);
+		if (!out->ret) {
+			out->payload_size = ctx.ep->send_pkt_entry_vec[0]->payload_size;
+			efa_rdm_pke_release_tx(ctx.ep->send_pkt_entry_vec[0]);
+		}
+	}
+
+	if (write || proto == &efa_rdm_proto_longcts)
+		efa_rdm_txe_release(txe);
+	else
+		ofi_buf_free(txe);
 	efa_test_proto_teardown_buf(&ctx);
 	return 0;
 }

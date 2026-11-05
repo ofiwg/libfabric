@@ -58,7 +58,8 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_proto *proto,
 {
 	size_t max_data_offset, max_rtm_data_capacity;
 
-	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+	/* A valid injected send fits eager, so the bounds must not reject it. */
+	if (!(txe->fi_flags & FI_INJECT) && !efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
 		return false;
 
 	/* TODO: For emulated read and atomics, need to consider RMA
@@ -76,6 +77,7 @@ EFA_RDM_PROTO_DEF(eager,
 	.wants_mr = false,
 	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
 	.set_max_bound = &efa_rdm_proto_set_max_bound,
+	.max_bound_param = &efa_rdm_proto_inter_max_eager_message_size,
 	.can_use_protocol = &efa_rdm_proto_eager_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_eager_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT,

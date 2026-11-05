@@ -648,7 +648,7 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 
 	/* update tx_attr */
 	{
-		int min_pkt_size;
+		int max_inject_size;
 		/*
 		 * EFA RDM endpoint supports ordered two-sided/atomic by putting messages by
 		 * software reorder buffer, hence set tx_attr->message order accordingly.
@@ -672,15 +672,15 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 *    pkt_entry_size - maximum_header_size.
 		 */
 		if (efa_env.enable_shm_transfer)
-			min_pkt_size = MIN(device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size(),
+			max_inject_size = MIN(device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size(),
 					   SHM_MAX_INJECT_SIZE);
 		else
-			min_pkt_size = device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
+			max_inject_size = device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
 
-		if (min_pkt_size < efa_rdm_pkt_type_get_max_hdr_size()) {
+		if (max_inject_size < efa_rdm_pkt_type_get_max_hdr_size()) {
 			prov_info_rdm->tx_attr->inject_size = 0;
 		} else {
-			prov_info_rdm->tx_attr->inject_size = min_pkt_size;
+			prov_info_rdm->tx_attr->inject_size = max_inject_size;
 		}
 
 		/*

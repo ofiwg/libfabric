@@ -189,8 +189,10 @@ int efa_rdm_proto_set_min_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface 
 int efa_rdm_proto_set_max_bound(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
 int efa_rdm_proto_set_bound_unsupported(struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t value);
 
+extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_eager_message_size;
 extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_medium_message_size;
 extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_message_size;
+extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_max_eager_write_size;
 extern const struct efa_rdm_proto_bound_param efa_rdm_proto_inter_min_read_write_size;
 
 void efa_rdm_proto_define_bound_params(void);
