@@ -185,8 +185,8 @@ int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep);
 int efa_test_proto_device_supports_rdma_read(void);
 
 /**
- * @brief Save the host hmem thresholds and the device generation that the read
- * protocol tests override.
+ * @brief Save the host hmem settings and device generation that the protocol
+ * tests override.
  */
 void efa_test_proto_save_globals(void);
 

@@ -72,13 +72,30 @@ struct efa_rdm_proto {
 	 * being registered */
 	bool wants_mr;
 
+	/* Inclusive message size window for each HMEM interface. */
+	size_t min_size[OFI_HMEM_MAX];
+	size_t max_size[OFI_HMEM_MAX];
+
+	/* Optional provider arguments that override the message size window. */
+	const char *min_param_name;
+	const char *max_param_name;
+
+	/*
+	* Use the target interface's bounds profile when P2P is available,
+	* otherwise, use the target hmem iface's min/max settings.
+	*/
+	bool (*set_bounds)(struct efa_rdm_proto *proto,
+			   enum fi_hmem_iface target_iface,
+			   enum fi_hmem_iface bounds_profile_iface);
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
 	 * TX operation. use_p2p reports whether peer-to-peer access is
 	 * available; the read based protocols need it.
 	 */
-	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+	bool (*can_use_protocol)(struct efa_rdm_proto *proto,
+				 struct efa_rdm_ope *txe,
 				 int req_pkt_type, uint16_t header_flags,
 				 int iface, bool use_p2p);
 
@@ -131,17 +148,29 @@ struct efa_rdm_proto {
 	int req_pkt_type_tagged_dc;
 };
 
+#define EFA_RDM_PROTO_ANY_POLICY ((enum fi_hmem_iface) OFI_HMEM_MAX)
+
 #define EFA_RDM_PROTO_DEF(_name, ...) \
 	struct efa_rdm_proto efa_rdm_proto_##_name = { \
 		.name = #_name, \
 		__VA_ARGS__ \
 	}
 
+size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void);
+
+void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface);
+
+static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t len)
+{
+	return len >= proto->min_size[iface] && len <= proto->max_size[iface];
+}
+
 /**
  * @brief Select the appropriate send protocol for a TX operation.
  *
- * Iterates through registered protocols in priority order and selects
- * the first one whose can_use_protocol() returns true.
+ * Iterates through registered protocols in priority order and selects the
+ * first one whose can_use_protocol() returns true. Each protocol predicate
+ * enforces its own bounds along with its other eligibility requirements.
  *
  * It will also handle memory registration of user buffers. If read based
  * protocols are appropriate but MR fails, it will automatically switch to a

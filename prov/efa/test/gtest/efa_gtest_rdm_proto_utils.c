@@ -149,7 +149,7 @@ int efa_test_proto_medium_len_in_band(struct fid_ep *ep, size_t len)
 	struct efa_rdm_ep *efa_rdm_ep = efa_test_proto_ep(ep);
 
 	return len > efa_rdm_ep->mtu_size &&
-	       len <= g_efa_hmem_info[FI_HMEM_SYSTEM].max_medium_msg_size;
+	       len <= efa_rdm_proto_medium.max_size[FI_HMEM_SYSTEM];
 }
 
 int efa_test_proto_peer_abort_prov_errno(void)
@@ -683,7 +683,7 @@ int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep)
 
 	return EFA_TEST_PROTO_LARGE_LEN > efa_rdm_ep->mtu_size &&
 	       EFA_TEST_PROTO_LARGE_LEN >
-		       g_efa_hmem_info[FI_HMEM_SYSTEM].max_medium_msg_size;
+		       efa_rdm_proto_medium.max_size[FI_HMEM_SYSTEM];
 }
 
 int efa_test_proto_device_supports_rdma_read(void)
@@ -702,6 +702,7 @@ void efa_test_proto_save_globals(void)
 void efa_test_proto_restore_globals(void)
 {
 	g_efa_hmem_info[FI_HMEM_SYSTEM] = efa_test_proto_saved_system_hmem_info;
+	efa_rdm_proto_init_bounds_for_iface(FI_HMEM_SYSTEM, FI_HMEM_SYSTEM);
 	if (g_efa_selected_device_cnt > 0)
 		g_efa_selected_device_list[0].ibv_attr.vendor_part_id =
 			efa_test_proto_saved_vendor_part_id;
@@ -718,7 +719,8 @@ static void efa_test_proto_enable_read(struct efa_test_proto_ctx *ctx,
 	ctx->ep->use_device_rdma = true;
 
 	info->runt_size = runt_size;
-	info->min_read_msg_size = EFA_TEST_PROTO_LARGE_LEN;
+	efa_rdm_proto_runtread.min_size[FI_HMEM_SYSTEM] = EFA_TEST_PROTO_LARGE_LEN;
+	efa_rdm_proto_longread.min_size[FI_HMEM_SYSTEM] = EFA_TEST_PROTO_LARGE_LEN;
 }
 
 static int efa_test_proto_setup(struct fid_ep *ep, struct fid_av *av,

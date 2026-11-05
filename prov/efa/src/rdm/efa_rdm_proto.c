@@ -44,12 +44,30 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 	}
 }
 
+// TODO double-check for ROCr
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
+size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void){
+	static bool computed = false;
+	static size_t size = 0;
+
+	if (!computed) {
+		assert(g_efa_selected_device_list);
+		size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
+		computed = true;
+	}
+
+	return size;
+}
+#else
+size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void){
+	return 0;
+}
+#endif
+
+
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
  * The first protocol that can be used for the TX operation will be used.
- *
- * Only efa_rdm_proto_select_send_protocol() below walks this array, so it is
- * internal to this file and its length is whatever the initializer holds.
  */
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
@@ -76,6 +94,35 @@ static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
 	&efa_rdm_proto_short_rtr,
 	&efa_rdm_proto_longcts_rtr,
 };
+
+static void efa_rdm_proto_init_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){
+	bool apply_param = true;
+
+	proto->min_size[target_iface] = 0;
+	proto->max_size[target_iface] = SIZE_MAX;
+	if (proto->set_bounds)
+		apply_param = proto->set_bounds(proto, target_iface, bounds_profile_iface);
+
+	/* Keep defaults unless a set env override applies to this bounds profile. */
+	if (!apply_param)
+		return;
+
+	if (proto->min_param_name)
+		fi_param_get_size_t(&efa_prov, proto->min_param_name, &proto->min_size[target_iface]);
+	if (proto->max_param_name)
+		fi_param_get_size_t(&efa_prov, proto->max_param_name, &proto->max_size[target_iface]);
+}
+
+void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i)
+		efa_rdm_proto_init_bounds(efa_rdm_protocols[i], target_iface, bounds_profile_iface);
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_write_protocols); ++i)
+		efa_rdm_proto_init_bounds(efa_rdm_emulated_write_protocols[i], target_iface, bounds_profile_iface);
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_read_protocols); ++i)
+		efa_rdm_proto_init_bounds(efa_rdm_emulated_read_protocols[i], target_iface, bounds_profile_iface);
+}
 
 void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 {
@@ -248,8 +295,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			txe->req_pkt_type = efa_rdm_proto_req_pkt_type(
 				selected_proto, op, effective_flags, peer);
 			EFA_INFO(FI_LOG_EP_DATA,
-				"Forced the %s protocol for a %zu byte send\n",
-				selected_proto->name, txe->total_len);
+				 "Forced the %s protocol for a %zu byte send\n",
+				 selected_proto->name, txe->total_len);
 			return FI_SUCCESS;
 		}
 
@@ -282,7 +329,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     use_p2p)) {
 			*proto = selected_proto;
@@ -421,7 +469,8 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     use_p2p)) {
 			*proto = selected_proto;
@@ -460,7 +509,8 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, txe->op, txe->fi_flags, peer);
 
-		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+		if (selected_proto->can_use_protocol(selected_proto, txe,
+						     req_pkt_type,
 						     header_flags, iface,
 						     false /* use_p2p */)) {
 			*proto = selected_proto;
