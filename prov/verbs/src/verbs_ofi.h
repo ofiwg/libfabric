@@ -307,10 +307,14 @@ struct vrb_eq_entry {
 	struct dlist_entry	item;
 	uint32_t		event;
 	size_t			len;
+	/* The event is copied here by value, len bytes. eq_entry and
+	 * cm_entry give typed access to that copy. The entry is allocated
+	 * with offsetof(struct vrb_eq_entry, data) + len bytes, so only the
+	 * first len bytes of the union are valid. */
 	union {
-		struct fi_eq_entry 	*eq_entry;
-		struct fi_eq_cm_entry	*cm_entry;
-		uint8_t 		data[0];
+		struct fi_eq_entry	eq_entry;
+		struct fi_eq_cm_entry	cm_entry;
+		uint8_t			data[0];
 	};
 };
 
