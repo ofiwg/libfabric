@@ -492,8 +492,6 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(void **s
 void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_no_runt(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_do_runt(void **state);
 void test_efa_rdm_pke_get_available_copy_methods_align128(void **state);
 
 /* begin efa_unit_test_domain.c */
@@ -936,4 +934,6 @@ void test_proto_atomic_fetch_compare_responder_rejects_invalid_op_datatype(
 void test_proto_atomic_read_responder_accepts_read_only_mr(void **state);
 void test_proto_select_runtread_for_large_msg(void **state);
 void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
+void test_proto_bounds_env_mapping(void **state);
+void test_proto_bounds_cap_inject_size(void **state);
 #endif

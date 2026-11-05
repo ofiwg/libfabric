@@ -43,10 +43,7 @@ struct efa_hmem_info {
 	bool dmabuf_fallback_enabled;
 	enum efa_dmabuf_support dmabuf_supported_by_device;	/* do we support dmabuf with this device */
 
-	size_t max_medium_msg_size;
 	size_t runt_size;
-	size_t min_read_msg_size;
-	size_t min_read_write_size;
 };
 
 #define DMABUF_IS_SUPPORTED(info) \

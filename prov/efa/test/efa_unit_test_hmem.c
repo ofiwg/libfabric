@@ -3,6 +3,7 @@
  * rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "protocols/efa_rdm_proto_medium.h"
 
 #if HAVE_NEURON
 /**
@@ -121,6 +122,11 @@ void test_efa_hmem_info_disable_p2p_cuda(void **state)
 	assert_int_equal(ret, 0);
 	assert_true(g_efa_hmem_info[FI_HMEM_CUDA].initialized);
 	assert_false(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
+
+	/* Without p2p, CUDA uses the host protocol bounds */
+	assert_int_equal(efa_rdm_proto_medium.bounds[FI_HMEM_CUDA].max, EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE);
+	assert_int_equal(efa_rdm_proto_longread.bounds[FI_HMEM_CUDA].min, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE);
+	assert_int_equal(efa_rdm_proto_longread_write.bounds[FI_HMEM_CUDA].min, EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE);
 }
 #else
 void test_efa_hmem_info_disable_p2p_cuda(void **state)

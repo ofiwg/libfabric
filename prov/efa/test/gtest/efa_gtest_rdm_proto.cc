@@ -202,6 +202,10 @@ INSTANTIATE_TEST_SUITE_P(
 				   {5952, 6048}},
 	       EfaRdmProtoPlanCase{"cuda_align128_12000", FI_HMEM_CUDA, 1, 12000,
 				   0, 0, 2, {5888, 6112}},
+	       /* One packet below the alignment, as when eager.MAX keeps a small message from eager */
+	       EfaRdmProtoPlanCase{"host_4", FI_HMEM_SYSTEM, 0, 4, 0, 0, 1, {4}},
+	       EfaRdmProtoPlanCase{"host_align128_100", FI_HMEM_SYSTEM, 1, 100, 0, 0, 1, {100}},
+	       EfaRdmProtoPlanCase{"cuda_32", FI_HMEM_CUDA, 0, 32, 0, 0, 1, {32}},
 	       EfaRdmProtoPlanCase{"declines_without_enough_tx_pkts",
 				   FI_HMEM_SYSTEM, 0, 9000, 1, -FI_EAGAIN, 0,
 				   {}}),
@@ -324,88 +328,81 @@ TEST_F(EfaRdmProtoMediumCompletionTest, peer_abort_completes_txe_once)
 	EXPECT_EQ(res.final_prov_errno, efa_test_proto_peer_abort_prov_errno());
 }
 
-struct EfaRdmProtoForceCase {
+/* MIN > MAX and an unsupported direction are rejected and change nothing. */
+TEST(EfaRdmProtoSetBoundTest, supported_and_rejected_updates)
+{
+	struct efa_test_proto_set_bound_result res = {};
+
+	efa_test_proto_set_bound(&res);
+	EXPECT_EQ(res.set_ret, 0);
+	EXPECT_EQ(res.set_min, 64u);
+	EXPECT_EQ(res.inverted_ret, -FI_EINVAL);
+	EXPECT_TRUE(res.inverted_unchanged);
+	EXPECT_EQ(res.unsupported_ret, -FI_EOPNOTSUPP);
+	EXPECT_TRUE(res.unsupported_unchanged);
+}
+
+struct EfaRdmProtoBoundsCase {
 	const char *name;
-	/* FI_EFA_RDM_FORCE_SEND_PROTO, nullptr when unset. */
-	const char *forced;
-	size_t len;
-	/* Protocol expected, nullptr when the send must fail instead. */
+	enum efa_test_proto_bounds_case input;
+	ssize_t expected_ret;
+	/* Protocol expected, empty when no protocol matches. */
 	const char *expected_proto;
+	/* REQ payload when a long CTS protocol is expected, else 0. */
+	size_t expected_payload;
 };
 
-class EfaRdmProtoForceTest : public TestWithParam<EfaRdmProtoForceCase>
+class EfaRdmProtoBoundsTest : public TestWithParam<EfaRdmProtoBoundsCase>
 {
 	protected:
 	struct efa_resource resource = {};
+	bool globals_saved = false;
 
 	void SetUp() override
 	{
 		memset(&resource, 0, sizeof(resource));
-		efa_test_resource_construct(
-			&resource, efa_test_alloc_default_hints(
-					   FI_EP_RDM, EFA_FABRIC_NAME));
+		efa_test_resource_construct(&resource, efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME));
 		ASSERT_NE(resource.ep, nullptr);
+		efa_test_proto_save_globals();
+		globals_saved = true;
 	}
 
 	void TearDown() override
 	{
+		if (globals_saved)
+			efa_test_proto_restore_globals();
 		efa_test_resource_destruct(&resource);
 	}
 };
 
 /**
- * @brief FI_EFA_RDM_FORCE_SEND_PROTO replaces the size decision with a name
- * match, so the named protocol is selected whether or not the size suits it,
- * and a name no registered protocol answers to fails the send.
- *
- * Overriding the size decision is the point: no threshold can steer a message
- * that fits in one packet away from eager, which claims it first.
+ * @brief Bounds are inclusive and overlaps keep the registry order. A size
+ * no protocol takes fails, also for an inject that only eager or eager_write
+ * could carry. A small message sent with long CTS still leaves data for the
+ * CTS phase.
  */
-TEST_P(EfaRdmProtoForceTest, forced_name_replaces_the_size_decision)
+TEST_P(EfaRdmProtoBoundsTest, selection)
 {
-	const EfaRdmProtoForceCase &c = GetParam();
-	struct efa_test_proto_force_result res = {};
+	const EfaRdmProtoBoundsCase &c = GetParam();
+	struct efa_test_proto_select_result res = {};
 
-	ASSERT_EQ(efa_test_proto_force_select_send(resource.ep, resource.av,
-						   resource.domain, c.forced,
-						   c.len, &res),
-		  0);
-
-	// TODO: after all protocols are migrated, protocol selection should
-	// fail with -FI_EINVAL
-	if (!c.expected_proto) {
-		EXPECT_EQ(res.ret, FI_SUCCESS);
-		EXPECT_STREQ(res.proto_name, "");
-		return;
-	}
-
-	ASSERT_EQ(res.ret, 0);
+	ASSERT_EQ(efa_test_proto_bounds_select(resource.ep, resource.av, resource.domain, c.input, &res), 0);
+	EXPECT_EQ(res.ret, c.expected_ret);
 	EXPECT_STREQ(res.proto_name, c.expected_proto);
+	EXPECT_EQ(res.payload_size, c.expected_payload);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-	, EfaRdmProtoForceTest,
-	Values(EfaRdmProtoForceCase{"unset_picks_eager", nullptr, 64, "eager"},
-	       EfaRdmProtoForceCase{"eager_picks_eager", "eager", 64, "eager"},
-	       EfaRdmProtoForceCase{"medium_beats_eager", "medium", 64, "medium"},
-	       /* Both of these decline under can_use_protocol(). */
-	       EfaRdmProtoForceCase{"eager_ignores_multi_packet_size", "eager",
-				    EFA_TEST_PROTO_MEDIUM_LEN, "eager"},
-	       EfaRdmProtoForceCase{"medium_ignores_zero_length", "medium", 0,
-				    "medium"},
-	       /* A read protocol's predicate would decline a 64 byte send. */
-	       EfaRdmProtoForceCase{"runtread_picks_runtread", "runtread", 64,
-				    "runtread"},
-	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
-				    "longread"},
-	       EfaRdmProtoForceCase{"longcts_picks_longcts", "longcts", 64,
-				    "longcts"},
-	       /* A write protocol's name is not a send protocol's name. */
-	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
-				    nullptr},
-	       EfaRdmProtoForceCase{"unknown_name_fails", "no_such_proto", 64,
-				    nullptr}),
-	[](const testing::TestParamInfo<EfaRdmProtoForceCase> &info) {
+	, EfaRdmProtoBoundsTest,
+	Values(EfaRdmProtoBoundsCase{"overlap_prefers_eager", EFA_TEST_PROTO_BOUNDS_OVERLAP, 0, "eager", 0},
+	       EfaRdmProtoBoundsCase{"eager_max_lets_medium_win", EFA_TEST_PROTO_BOUNDS_MEDIUM_MIN, 0, "medium", 0},
+	       EfaRdmProtoBoundsCase{"gap", EFA_TEST_PROTO_BOUNDS_GAP, -FI_EOPNOTSUPP, "", 0},
+	       EfaRdmProtoBoundsCase{"inject_cannot_fall_through", EFA_TEST_PROTO_BOUNDS_INJECT_GAP, -FI_EOPNOTSUPP, "", 0},
+	       /* MIN(mtu - hdr, len - 1), rounded down to the 8 byte host alignment */
+	       EfaRdmProtoBoundsCase{"small_longcts", EFA_TEST_PROTO_BOUNDS_LONGCTS, 0, "longcts", 56},
+	       EfaRdmProtoBoundsCase{"small_longcts_write", EFA_TEST_PROTO_BOUNDS_WRITE_LONGCTS, 0, "longcts_write", EFA_TEST_PROTO_BOUNDS_LEN - 1},
+	       EfaRdmProtoBoundsCase{"inject_write_cannot_fall_through", EFA_TEST_PROTO_BOUNDS_WRITE_INJECT, -FI_EOPNOTSUPP, "", 0}),
+	[](const testing::TestParamInfo<EfaRdmProtoBoundsCase> &info) {
 		return std::string(info.param.name);
 	});
 

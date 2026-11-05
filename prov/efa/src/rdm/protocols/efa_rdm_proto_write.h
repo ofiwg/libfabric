@@ -16,6 +16,7 @@
  * @param[in,out]	pkt_entry	RTW packet entry
  * @param[in]		txe		TX entry that has RMA write information
  * @param[in]		rma_iov		the "rma_iov" field in RTW packet header
+ * @param[in]		max_data_size	most payload the packet may carry
  *
  * @returns
  * 0 on success
@@ -24,7 +25,8 @@
 static inline
 ssize_t efa_rdm_proto_write_rtw_pke_init_common(struct efa_rdm_pke *pkt_entry,
 				    struct efa_rdm_ope *txe,
-				    struct efa_rma_iov *rma_iov)
+				    struct efa_rma_iov *rma_iov,
+				    size_t max_data_size)
 {
 	size_t hdr_size;
 	size_t data_size;
@@ -37,7 +39,7 @@ ssize_t efa_rdm_proto_write_rtw_pke_init_common(struct efa_rdm_pke *pkt_entry,
 	}
 
 	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
-	data_size = MIN(txe->ep->mtu_size - hdr_size, txe->total_len);
+	data_size = MIN(txe->ep->mtu_size - hdr_size, max_data_size);
 	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0, data_size);
 }
 

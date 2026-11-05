@@ -8,7 +8,7 @@ from efa.efa_common import has_rdma
 @pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.cuda_memory
-@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE")])
+@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE"), ("fi_rma_bw", "FI_EFA_INTER_MIN_READ_WRITE_SIZE")])
 def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_var):
     """
     Verify that the read protocol is used for a 1024 byte message when the env variable
@@ -16,10 +16,13 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     """
     import copy
     from common import has_cuda, has_hmem_support
-    from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value
+    from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value, has_cuda_p2p
 
     if not has_rdma(cmdline_args, "read"):
         pytest.skip("RDMA read not supported, cannot test read protocol")
+
+    if fabtest_name == "fi_rma_bw" and has_rdma(cmdline_args, "write"):
+        pytest.skip("longread_write is only used for emulated writes")
 
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("No read for intra-node communication")
@@ -31,18 +34,21 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     if not has_cuda(cmdline_args.client_id) or not has_cuda(cmdline_args.server_id):
         pytest.skip("Client and server both need a Cuda device")
 
+    if not has_cuda_p2p(cmdline_args.client_id, cmdline_args.environments) or not has_cuda_p2p(cmdline_args.server_id, cmdline_args.environments):
+        pytest.skip("Client and server both need CUDA P2P")
+
     message_size = 1024
+    eager_max_env_var = "FI_EFA_INTER_MAX_EAGER_WRITE_SIZE" if fabtest_name == "fi_rma_bw" else "FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE"
 
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
-    cmdline_args_copy.append_environ(f"FI_EFA_RDM_FORCE_SEND_PROTO=longread")
+    cmdline_args_copy.append_environ(f"{eager_max_env_var}={message_size - 1}")
     cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=0")
 
-    # TODO: Remove cntrl_env_var after all protocols moved to new code path
     cmdline_args_copy.append_environ(f"{cntrl_env_var}=1000")
 
     # Sync out-of-band (-b) so ft_finalize_ep uses a socket instead of a
-    # libfabric send. The forced read protocol would otherwise route that
+    # libfabric send. The read protocol would otherwise route that
     # handshake over RDMA read too, adding its bytes to rdma_read_bytes.
     cmdline_args_copy.additional_server_arguments = "-b"
     cmdline_args_copy.additional_client_arguments = "-b"

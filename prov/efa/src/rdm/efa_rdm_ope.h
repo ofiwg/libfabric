@@ -93,7 +93,7 @@ struct efa_rdm_ope {
 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_proto *proto; /**< protocol used by the refactored send path; NULL in the old code path */
+	struct efa_rdm_proto *proto; /**< protocol selected for the operation; NULL when it uses none */
 	const struct efa_rdm_atomic_proto *atomic_proto;
 
 	uint32_t tx_id;
@@ -676,9 +676,6 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 					 size_t *pkt_entry_data_size_vec);
 
 ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
-
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err);
 
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 

@@ -78,7 +78,8 @@ static ssize_t efa_rdm_proto_longcts_write_init_rtw(struct efa_rdm_pke *pkt_entr
 
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_proto_longcts_write_init_rtw_hdr(pkt_entry, EFA_RDM_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	/* The REQ leaves data for the CTS phase */
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov, txe->total_len - 1);
 }
 
 /**
@@ -101,7 +102,8 @@ static ssize_t efa_rdm_proto_longcts_write_init_dc_rtw(struct efa_rdm_pke *pkt_e
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_proto_longcts_write_init_rtw_hdr(pkt_entry, EFA_RDM_DC_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	/* The REQ leaves data for the CTS phase */
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov, txe->total_len - 1);
 }
 
 /**
@@ -214,9 +216,9 @@ err:
 /**
  * @brief Check if the long CTS write protocol can handle this operation.
  *
- * Long CTS write is the fallback for writes that neither fit in a single packet
- * nor can use the read based protocol. SynapseAI is served by the read based
- * protocol, so it is rejected here.
+ * Long CTS write is the fallback for writes that neither eager_write nor the
+ * read based protocol takes. SynapseAI is served by the read based protocol,
+ * so it is rejected here.
  */
 static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_ope *txe,
 						int req_pkt_type,
@@ -227,16 +229,13 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_ope *txe,
 	if (iface == FI_HMEM_SYNAPSEAI)
 		return false;
 
-	assert(txe->total_len > txe->ep->mtu_size -
-	       efa_rdm_pkt_type_get_req_hdr_size(req_pkt_type, header_flags,
-						 txe->rma_iov_count));
-	assert(!efa_rdm_rma_should_write_using_longread(txe->ep, txe, txe->peer,
-							use_p2p));
 	return true;
 }
 
 EFA_RDM_PROTO_DEF(longcts_write,
 	.wants_mr = false,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longcts_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_write_construct_tx_pkes,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

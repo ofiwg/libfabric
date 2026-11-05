@@ -139,23 +139,17 @@ int efa_test_proto_peer_abort_prov_errno(void);
 /** @brief EFA_RDM_MEDIUM_MSGRTM_PKT, whose enum is not includable from C++. */
 int efa_test_proto_medium_msgrtm_pkt_type(void);
 
-struct efa_test_proto_force_result {
-	ssize_t ret;
-	/** Name of the protocol selection picked, empty when it picked none. */
-	char proto_name[32];
+struct efa_test_proto_set_bound_result {
+	int set_ret;
+	size_t set_min;
+	int inverted_ret;
+	int inverted_unchanged;
+	int unsupported_ret;
+	int unsupported_unchanged;
 };
 
-/**
- * @brief Select a send protocol for a @p len byte host message with
- * FI_EFA_RDM_FORCE_SEND_PROTO set to @p forced.
- *
- * @param[in]	forced	FI_EFA_RDM_FORCE_SEND_PROTO value, NULL for unset
- * @return	0 if @p out was filled, negative on setup failure
- */
-int efa_test_proto_force_select_send(struct fid_ep *ep, struct fid_av *av,
-				     struct fid_domain *domain,
-				     const char *forced, size_t len,
-				     struct efa_test_proto_force_result *out);
+/** @brief Set MIN == MAX on medium, then MAX < MIN on medium and MIN on eager. */
+void efa_test_proto_set_bound(struct efa_test_proto_set_bound_result *out);
 
 #define EFA_TEST_PROTO_LARGE_LEN 131072
 #define EFA_TEST_PROTO_RUNT_SIZE 32768
@@ -167,8 +161,8 @@ int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep);
 int efa_test_proto_device_supports_rdma_read(void);
 
 /**
- * @brief Save the host hmem thresholds and the device generation that the read
- * protocol tests override.
+ * @brief Save the host hmem settings, the protocol bounds and the device
+ * generation that the protocol tests override.
  */
 void efa_test_proto_save_globals(void);
 
@@ -179,6 +173,8 @@ struct efa_test_proto_select_result {
 	ssize_t ret;
 	/** Name of the protocol selection picked, empty when it picked none. */
 	char proto_name[32];
+	/** Payload of the REQ that efa_test_proto_bounds_select() built, if any. */
+	size_t payload_size;
 };
 
 /**
@@ -196,6 +192,26 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 			  struct fid_domain *domain, int read_peer,
 			  size_t runt_size, int with_desc, uint64_t flags,
 			  struct efa_test_proto_select_result *out);
+
+#define EFA_TEST_PROTO_BOUNDS_LEN 64
+
+/* Host bounds set up for an EFA_TEST_PROTO_BOUNDS_LEN byte transfer */
+enum efa_test_proto_bounds_case {
+	EFA_TEST_PROTO_BOUNDS_OVERLAP,		/* eager and medium both take it */
+	EFA_TEST_PROTO_BOUNDS_MEDIUM_MIN,	/* eager.MAX below it, medium.MIN at it */
+	EFA_TEST_PROTO_BOUNDS_GAP,		/* no send protocol takes it */
+	EFA_TEST_PROTO_BOUNDS_INJECT_GAP,	/* FI_INJECT, eager.MAX below it */
+	EFA_TEST_PROTO_BOUNDS_LONGCTS,		/* eager.MAX and medium.MAX below it, REQ built */
+	EFA_TEST_PROTO_BOUNDS_WRITE_LONGCTS,	/* emulated write, eager_write.MAX below it, RTW built */
+	EFA_TEST_PROTO_BOUNDS_WRITE_INJECT,	/* FI_INJECT emulated write, eager_write.MAX below it */
+};
+
+/**
+ * @brief Select a protocol for @p test_case, and build the REQ when a long
+ * CTS protocol is selected. The caller restores the bounds with
+ * efa_test_proto_restore_globals().
+ */
+int efa_test_proto_bounds_select(struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain, enum efa_test_proto_bounds_case test_case, struct efa_test_proto_select_result *out);
 
 struct efa_test_proto_longread_construct_result {
 	ssize_t ret;
