@@ -191,6 +191,8 @@ struct efa_test_proto_select_result {
 	ssize_t ret;
 	/** Name of the protocol selection picked, empty when it picked none. */
 	char proto_name[32];
+	/** Payload of the REQ that efa_test_proto_bounds_select() built, if any. */
+	size_t payload_size;
 };
 
 /**
@@ -208,6 +210,26 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 			  struct fid_domain *domain, int read_peer,
 			  size_t runt_size, int with_desc, uint64_t flags,
 			  struct efa_test_proto_select_result *out);
+
+#define EFA_TEST_PROTO_BOUNDS_LEN 64
+
+/* Host bounds set up for an EFA_TEST_PROTO_BOUNDS_LEN byte transfer */
+enum efa_test_proto_bounds_case {
+	EFA_TEST_PROTO_BOUNDS_OVERLAP,		/* eager and medium both take it */
+	EFA_TEST_PROTO_BOUNDS_MEDIUM_MIN,	/* eager.MAX below it, medium.MIN at it */
+	EFA_TEST_PROTO_BOUNDS_GAP,		/* no send protocol takes it */
+	EFA_TEST_PROTO_BOUNDS_INJECT_GAP,	/* FI_INJECT, eager.MAX below it */
+	EFA_TEST_PROTO_BOUNDS_LONGCTS,		/* eager.MAX and medium.MAX below it, REQ built */
+	EFA_TEST_PROTO_BOUNDS_WRITE_LONGCTS,	/* emulated write, eager_write.MAX below it, RTW built */
+	EFA_TEST_PROTO_BOUNDS_WRITE_INJECT,	/* FI_INJECT emulated write, eager_write.MAX below it */
+};
+
+/**
+ * @brief Select a protocol for @p test_case, and build the REQ when a long
+ * CTS protocol is selected. The caller restores the bounds with
+ * efa_test_proto_restore_globals().
+ */
+int efa_test_proto_bounds_select(struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain, enum efa_test_proto_bounds_case test_case, struct efa_test_proto_select_result *out);
 
 struct efa_test_proto_longread_construct_result {
 	ssize_t ret;

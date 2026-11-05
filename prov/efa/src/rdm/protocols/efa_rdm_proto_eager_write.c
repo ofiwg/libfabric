@@ -48,7 +48,7 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov, txe->total_len);
 }
 
 /**
@@ -75,7 +75,7 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
 	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
-					  dc_eager_rtw_hdr->rma_iov);
+					  dc_eager_rtw_hdr->rma_iov, txe->total_len);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
 	return ret;
 }
@@ -248,6 +248,7 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(eager_write,
 	.wants_mr = false,
+	.supports_inject = true,
 	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
 	.set_max_bound = &efa_rdm_proto_set_max_bound,
 	.can_use_protocol = &efa_rdm_proto_eager_write_can_use,

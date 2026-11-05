@@ -169,7 +169,9 @@ ssize_t efa_rdm_proto_medium_plan_tx_pkes(struct efa_rdm_ep *ep,
 
 	*pkt_entry_cnt = (txe->total_len - 1) / max_data_size + 1;
 	data_size = (txe->total_len - 1) / *pkt_entry_cnt + 1;
-	data_size &= ~(memory_alignment - 1);
+	/* A single packet carries the whole message, which may be smaller than the alignment */
+	if (*pkt_entry_cnt > 1)
+		data_size &= ~(memory_alignment - 1);
 	assert(data_size);
 
 	full_pkt_cnt = txe->total_len / data_size;

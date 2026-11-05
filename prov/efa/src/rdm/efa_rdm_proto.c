@@ -83,8 +83,10 @@ struct efa_rdm_proto_bound_param {
 };
 
 static const struct efa_rdm_proto_bound_param efa_rdm_proto_bound_params[] = {
+	{ "inter_max_eager_message_size",  "FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE",  false, false, { &efa_rdm_proto_eager } },
 	{ "inter_max_medium_message_size", "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE", false, true,  { &efa_rdm_proto_medium } },
 	{ "inter_min_read_message_size",   "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE",   true,  false, { &efa_rdm_proto_runtread, &efa_rdm_proto_longread } },
+	{ "inter_max_eager_write_size",    "FI_EFA_INTER_MAX_EAGER_WRITE_SIZE",    false, false, { &efa_rdm_proto_eager_write } },
 	{ "inter_min_read_write_size",     "FI_EFA_INTER_MIN_READ_WRITE_SIZE",     true,  false, { &efa_rdm_proto_longread_write } },
 };
 
@@ -409,6 +411,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		if (!efa_rdm_proto_msg_size_in_bounds(selected_proto, iface, txe->total_len))
 			continue;
 
+		if ((effective_flags & FI_INJECT) && !selected_proto->supports_inject)
+			continue;
+
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, op, effective_flags, peer);
 
@@ -498,6 +503,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 
 	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_write_protocols); ++i) {
 		selected_proto = efa_rdm_emulated_write_protocols[i];
+
+		if ((txe->fi_flags & FI_INJECT) && !selected_proto->supports_inject)
+			continue;
 
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, txe->op, txe->fi_flags, peer);

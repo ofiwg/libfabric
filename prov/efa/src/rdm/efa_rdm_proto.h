@@ -77,6 +77,10 @@ struct efa_rdm_proto {
 	 * being registered */
 	bool wants_mr;
 
+	/* Bool set to true if this protocol is done with the user buffer when
+	 * the operation returns, so it can carry FI_INJECT */
+	bool supports_inject;
+
 	/* Inclusive message size window, per HMEM interface, in which the
 	 * protocol may be selected. Selection checks it before
 	 * can_use_protocol(), which keeps the correctness checks.

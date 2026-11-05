@@ -8,6 +8,8 @@
 #include "efa_wr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_pkt_type.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_eager_write.h"
 
 #define EFA_FABRIC_PREFIX "EFA-"
 #define EFA_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
@@ -680,7 +682,11 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		if (min_pkt_size < efa_rdm_pkt_type_get_max_hdr_size()) {
 			prov_info_rdm->tx_attr->inject_size = 0;
 		} else {
-			prov_info_rdm->tx_attr->inject_size = min_pkt_size;
+			/* Only eager and eager_write carry injects, so their MAX bounds cap it too */
+			prov_info_rdm->tx_attr->inject_size =
+				MIN3((size_t) min_pkt_size,
+				     efa_rdm_proto_eager.bounds[FI_HMEM_SYSTEM].max,
+				     efa_rdm_proto_eager_write.bounds[FI_HMEM_SYSTEM].max);
 		}
 
 		/*

@@ -249,13 +249,12 @@ int efa_rdm_proto_longcts_construct_req_pke(struct efa_rdm_ep *ep,
 		rtm_hdr->hdr.flags |= EFA_RDM_REQ_READ_NACK;
 		rtm_payload_size = 0;
 	} else {
-		/* Fill the packet with as much aligned payload as fits. */
+		/* Fill the packet with as much aligned payload as fits, leaving data for the CTS phase. */
 		iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
 				       FI_HMEM_SYSTEM;
 		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
-		rtm_payload_size = (ep->mtu_size - hdr_size) &
+		rtm_payload_size = MIN(ep->mtu_size - hdr_size, txe->total_len - 1) &
 				   ~(memory_alignment - 1);
-		assert(rtm_payload_size > 0);
 		/* The REQ holds only part of the message. */
 		assert(rtm_payload_size < txe->total_len);
 	}
