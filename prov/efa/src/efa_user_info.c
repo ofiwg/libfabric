@@ -400,6 +400,32 @@ int efa_user_info_alter_tclass(struct fi_info *info, const struct fi_info *hints
 }
 
 /**
+ * @brief apply FI_EFA_TX_SIZE / FI_EFA_RX_SIZE to info, capped at the
+ * size info already advertises.
+ *
+ * @param	info[in,out]	info to be updated
+ */
+static void efa_user_info_apply_env_queue_size(struct fi_info *info)
+{
+	if (efa_env.tx_size > 0) {
+		if (efa_env.tx_size > info->tx_attr->size)
+			EFA_WARN_ONCE(FI_LOG_CORE,
+				      "FI_EFA_TX_SIZE=%zu exceeds the device "
+				      "maximum, using %zu\n",
+				      efa_env.tx_size, info->tx_attr->size);
+		info->tx_attr->size = MIN(efa_env.tx_size, info->tx_attr->size);
+	}
+	if (efa_env.rx_size > 0) {
+		if (efa_env.rx_size > info->rx_attr->size)
+			EFA_WARN_ONCE(FI_LOG_CORE,
+				      "FI_EFA_RX_SIZE=%zu exceeds the device "
+				      "maximum, using %zu\n",
+				      efa_env.rx_size, info->rx_attr->size);
+		info->rx_attr->size = MIN(efa_env.rx_size, info->rx_attr->size);
+	}
+}
+
+/**
  * @brief update RDM info to match user hints
  *
  * the input info is a duplicate of prov info, which matches
@@ -415,6 +441,8 @@ int efa_user_info_alter_tclass(struct fi_info *info, const struct fi_info *hints
 static
 int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_info *hints)
 {
+	efa_user_info_apply_env_queue_size(info);
+
 	if (!hints) {
 		/*
 		 * No hints provided; per the spec, return all supported
@@ -912,6 +940,24 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		ofi_alter_info(dupinfo, hints, version);
+
+		/*
+		 * efa_rdm_ep_open() raises a small rx size to the minimum, so
+		 * report that size here for the application to see what the
+		 * endpoint will use.
+		 */
+		if (EFA_INFO_TYPE_IS_RDM(prov_info)) {
+			size_t rx_size = efa_rdm_ep_get_rx_size(
+				prov_info->rx_attr->size, dupinfo->rx_attr->size);
+
+			if (rx_size > dupinfo->rx_attr->size)
+				EFA_WARN_ONCE(FI_LOG_CORE,
+					      "rx size %zu is below the minimum "
+					      "(FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + "
+					      "FI_EFA_MAX_QUEUED_COPY), using %zu\n",
+					      dupinfo->rx_attr->size, rx_size);
+			dupinfo->rx_attr->size = rx_size;
+		}
 
 		/* On input to fi_getinfo, a user may set this to an opened
 		 * fabric/domain instance to restrict output to the given fabric/domain. */
