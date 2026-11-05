@@ -105,7 +105,7 @@ tests:
      csrs: null}
 
   - {description: "Run KI info tests",
-     filter: "ki_info/*",
+     filter: "ki_info*/*",
      runtime_parameters: null,
      csrs: null}
 
@@ -114,3 +114,8 @@ tests:
      runtime_parameters: null,
      csrs: null}
 
+  - {description: "Run KI tests with provider keys",
+     filter: "ki_*/*",
+     runtime_parameters: {
+       CXIP_TEST_PROV_KEY: 1},
+     csrs: null}

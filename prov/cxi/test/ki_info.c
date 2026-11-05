@@ -23,6 +23,67 @@
 TestSuite(ki_info, .init = cxit_setup_ki_full, .fini = cxit_teardown_ki_full,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
+TestSuite(ki_info_client_key, .init = cxit_setup_ki_full_client_key,
+	  .fini = cxit_teardown_ki_full, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Check PTL indices, match bits, offset adjustment and restriction against
+ * the registered MR and its assigned key.
+ */
+static void ki_info_check_remote_mr(struct fid_mr *fid,
+				    const struct fi_cxi_gpu_remote_mr *remote)
+{
+	struct cxip_mr *mr = container_of(fid, struct cxip_mr, mr_fid);
+	struct cxip_mr_key key = { .raw = fi_mr_key(fid) };
+	uint16_t write_ptl_idx = CXIP_PTL_IDX_WRITE_MR_STD;
+	uint16_t read_ptl_idx = CXIP_PTL_IDX_READ_MR_STD;
+	uint16_t idx;
+	uint64_t offset_adjust = 0;
+	bool events;
+
+	cr_assert_eq(!!key.is_prov,
+		     !!(cxit_fi->domain_attr->mr_mode & FI_MR_PROV_KEY),
+		     "key=0x%lx does not match domain key mode", key.raw);
+
+	/* Compute portal indices from the assigned key rather than the
+	 * provider's mapping helper. The test uses mr->optimized to choose
+	 * optimized vs. standard indices, so it checks the index calculation,
+	 * not the provider's choice of mode.
+	 */
+	if (mr->optimized) {
+		if (!key.is_prov) {
+			idx = key.raw;
+		} else if (key.cached) {
+			idx = key.lac;
+		} else {
+			idx = CXIP_PTL_IDX_PROV_NUM_CACHE_IDX + key.id;
+		}
+		write_ptl_idx = CXIP_PTL_IDX_WRITE_MR_OPT_BASE + idx;
+		read_ptl_idx = CXIP_PTL_IDX_READ_MR_OPT_BASE + idx;
+	}
+
+	if (key.is_prov && key.cached)
+		offset_adjust = CXI_VA_TO_IOVA(mr->md->md, mr->buf);
+
+	events = key.is_prov ? (!key.cached && key.events) :
+		 !!(cxit_fi->caps & FI_RMA_EVENT);
+
+	cr_assert_eq(remote->write_ptl_idx, write_ptl_idx,
+		     "key=0x%lx write_ptl_idx is %u, expected %u", key.raw,
+		     remote->write_ptl_idx, write_ptl_idx);
+	cr_assert_eq(remote->read_ptl_idx, read_ptl_idx,
+		     "key=0x%lx read_ptl_idx is %u, expected %u", key.raw,
+		     remote->read_ptl_idx, read_ptl_idx);
+	cr_assert_eq(remote->match_bits, CXIP_KEY_MATCH_BITS(key.raw),
+		     "key=0x%lx match_bits is 0x%lx", key.raw,
+		     remote->match_bits);
+	cr_assert_eq(remote->offset_adjust, offset_adjust,
+		     "key=0x%lx offset_adjust is 0x%lx, expected 0x%lx",
+		     key.raw, remote->offset_adjust, offset_adjust);
+	cr_assert_eq(remote->unrestricted, !mr->optimized || events,
+		     "key=0x%lx unrestricted is %u", key.raw,
+		     remote->unrestricted);
+}
+
 /* Test that get_gpu_ep_info() populates every field */
 Test(ki_info, ep_info_fields)
 {
@@ -153,10 +214,10 @@ Test(ki_info, host_helpers)
 }
 
 /* Test the peer-info blob round trip: get_peer_info() decoded via
- * get_gpu_remote_mrs() publishes the MR's IOVA and LAC, the
- * client-key PTL index formulas, and the key-derived match bits,
- * offset adjustment and restriction, and get_gpu_mr_info() reports
- * the same IOVA for the buffer start.
+ * get_gpu_remote_mrs() publishes the MR's IOVA, the assigned key's PTL
+ * indices, and the key-derived match bits, offset adjustment and
+ * restriction, and get_gpu_mr_info() reports the same IOVA for the
+ * buffer start.
  */
 Test(ki_info, peer_info_roundtrip)
 {
@@ -182,20 +243,7 @@ Test(ki_info, peer_info_roundtrip)
 		     "local iova (0x%lx) != decoded iova (0x%lx)",
 		     local_info.iova, remote.iova);
 
-	cr_assert_eq(remote.write_ptl_idx, CXIP_PTL_IDX_WRITE_MR_OPT(key),
-		     "write_ptl_idx is %u", remote.write_ptl_idx);
-	cr_assert_eq(remote.read_ptl_idx, CXIP_PTL_IDX_READ_MR_OPT(key),
-		     "read_ptl_idx is %u", remote.read_ptl_idx);
-
-	/* Optimized client key: match bits are the key, no cached-key
-	 * offset, and restricted commands are allowed.
-	 */
-	cr_assert_eq(remote.match_bits, key, "match_bits is 0x%lx",
-		     remote.match_bits);
-	cr_assert_eq(remote.offset_adjust, 0, "offset_adjust is 0x%lx",
-		     remote.offset_adjust);
-	cr_assert_eq(remote.unrestricted, 0, "unrestricted is %u",
-		     remote.unrestricted);
+	ki_info_check_remote_mr(mem_window.mr, &remote);
 
 	mr_destroy(&mem_window);
 }
@@ -232,7 +280,7 @@ Test(ki_info, bad_peer_blob)
 	mr_destroy(&mem_window);
 }
 
-/* Test PTL indices and restriction across the MR key space: optimized
+/* Test PTL indices and restriction across the client MR key space: optimized
  * keys map to BASE + key and allow restricted commands, keys at and
  * past CXIP_PTL_IDX_MR_OPT_CNT map to the fixed standard indices and
  * require unrestricted commands. Key 100's optimized value (17 + 100)
@@ -240,7 +288,7 @@ Test(ki_info, bad_peer_blob)
  * the two paths. Expected values assume the default
  * FI_CXI_OPTIMIZED_MRS=1.
  */
-Test(ki_info, ptl_idx_key_sweep)
+Test(ki_info_client_key, ptl_idx_key_sweep)
 {
 	int i;
 	struct fi_cxi_gpu_remote_mr remote;
@@ -265,6 +313,8 @@ Test(ki_info, ptl_idx_key_sweep)
 					 FI_REMOTE_READ | FI_REMOTE_WRITE, &key,
 					 &mem_window, NULL, &remote);
 
+		cr_assert_eq(key, keys[i], "requested key %lu became 0x%lx",
+			     keys[i], key);
 		cr_assert_eq(remote.write_ptl_idx, write_ptl_idx,
 			     "key=%lu write_ptl_idx is %u", key,
 			     remote.write_ptl_idx);
@@ -295,10 +345,7 @@ Test(ki_info, mr_access_indices)
 	cxit_ki_create_remote_mr(s_page_size, FI_REMOTE_READ, &key,
 				 &mem_window, NULL, &remote);
 
-	cr_assert_eq(remote.write_ptl_idx, CXIP_PTL_IDX_WRITE_MR_OPT(0),
-		     "write_ptl_idx is %u", remote.write_ptl_idx);
-	cr_assert_eq(remote.read_ptl_idx, CXIP_PTL_IDX_READ_MR_OPT(0),
-		     "read_ptl_idx is %u", remote.read_ptl_idx);
+	ki_info_check_remote_mr(mem_window.mr, &remote);
 
 	mr_destroy(&mem_window);
 }
@@ -645,14 +692,7 @@ Test(ki_info, remote_mrs_array)
 		cr_assert_eq(local[i].iova, remotes[i].iova,
 			     "local[%d].iova 0x%lx != decoded 0x%lx", i,
 			     local[i].iova, remotes[i].iova);
-		cr_assert_eq(remotes[i].write_ptl_idx,
-			     CXIP_PTL_IDX_WRITE_MR_OPT(i),
-			     "remotes[%d].write_ptl_idx is %u", i,
-			     remotes[i].write_ptl_idx);
-		cr_assert_eq(remotes[i].read_ptl_idx,
-			     CXIP_PTL_IDX_READ_MR_OPT(i),
-			     "remotes[%d].read_ptl_idx is %u", i,
-			     remotes[i].read_ptl_idx);
+		ki_info_check_remote_mr(mem_windows[i].mr, &remotes[i]);
 	}
 
 	for (i = 0; i < 3; i++)

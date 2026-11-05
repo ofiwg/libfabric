@@ -124,11 +124,15 @@ ki_hints_test=(
 )
 
 ki_info_test=(
-	"./cxitest --verbose --filter=\"ki_info/*\" -j 1 --tap=cxitest-ki_info.tap"
+	"./cxitest --verbose --filter=\"ki_info*/*\" -j 1 --tap=cxitest-ki_info.tap"
 )
 
 ki_rma_test=(
 	"./cxitest --verbose --filter=\"ki_rma*/*\" -j 1 --tap=cxitest-ki_rma.tap"
+)
+
+ki_provider_keys_test=(
+	"CXIP_TEST_PROV_KEY=1 ./cxitest --verbose --filter=\"ki_*/*\" -j 1 --tap=cxitest-ki_prov_key.tap"
 )
 
 alt_read_rendezvous_test=(
@@ -174,6 +178,7 @@ long_test_suite=(
 	"ki_hints_test"
 	"ki_info_test"
 	"ki_rma_test"
+	"ki_provider_keys_test"
 	"swget_test"
 	"swget_unaligned_test"
 	"constrained_le_test"

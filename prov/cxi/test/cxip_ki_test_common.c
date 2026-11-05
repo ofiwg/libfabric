@@ -47,7 +47,7 @@ void cxit_ki_init_hints(struct fi_cxi_ki_ep_hints *hints, void *tx_buf,
 	hints->trig_cmdq.dmabuf_offset = 0;
 }
 
-void cxit_ki_setup_ep(bool prov_key)
+void cxit_ki_setup_ep(bool force_prov_key)
 {
 	cxit_setup_getinfo();
 
@@ -57,7 +57,7 @@ void cxit_ki_setup_ep(bool prov_key)
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->tx_attr->size = 512;
 	cxit_fi_hints->caps = CXIT_KI_EP_CAPS;
-	if (prov_key)
+	if (force_prov_key)
 		cxit_fi_hints->domain_attr->mr_mode |= FI_MR_PROV_KEY;
 
 	cxit_setup_ep();
@@ -96,13 +96,13 @@ struct fi_cxi_ki_ops *cxit_ki_ops;
 void *cxit_ki_full_tx_buf;
 void *cxit_ki_full_trig_buf;
 
-static void cxit_setup_ki_full_common(bool prov_key)
+static void cxit_setup_ki_full_common(bool force_prov_key)
 {
 	struct fi_cxi_ki_ep_hints hints;
 	size_t addrlen = sizeof(cxit_ep_addr);
 	int ret;
 
-	cxit_ki_setup_ep(prov_key);
+	cxit_ki_setup_ep(force_prov_key);
 	cxit_ki_create_enabled_objects(true);
 
 	cxit_ki_full_tx_buf = cxit_ki_page_alloc(s_page_size);
@@ -131,6 +131,16 @@ static void cxit_setup_ki_full_common(bool prov_key)
 void cxit_setup_ki_full(void)
 {
 	cxit_setup_ki_full_common(false);
+}
+
+void cxit_setup_ki_full_client_key(void)
+{
+	cxit_setup_getinfo();
+	/* Nested getinfo setup preserves existing hints, so this override
+	 * survives endpoint setup.
+	 */
+	cxit_fi_hints->domain_attr->mr_mode &= ~FI_MR_PROV_KEY;
+	cxit_setup_ki_full();
 }
 
 void cxit_setup_ki_full_prov_key(void)
