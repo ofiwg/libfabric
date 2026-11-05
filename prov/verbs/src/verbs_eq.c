@@ -1197,16 +1197,20 @@ int vrb_eq_match_event(struct dlist_entry *item, const void *arg)
 	struct vrb_eq_entry *entry;
 	const struct fid *fid = arg;
 
+	/* fi_eq_write() accepts events of any size, so check that the
+	 * stored copy is long enough to hold the fid before reading it. */
 	entry = container_of(item, struct vrb_eq_entry, item);
 	switch (entry->event) {
 	case FI_CONNREQ:
 	case FI_CONNECTED:
 	case FI_SHUTDOWN:
-		return entry->cm_entry->fid == fid;
+		return entry->len >= sizeof(struct fi_eq_cm_entry) &&
+		       entry->cm_entry.fid == fid;
 	case FI_MR_COMPLETE:
 	case FI_AV_COMPLETE:
 	case FI_JOIN_COMPLETE:
-		return entry->eq_entry->fid == fid;
+		return entry->len >= sizeof(struct fi_eq_entry) &&
+		       entry->eq_entry.fid == fid;
 	default:
 		return 0;
 	}
@@ -1223,7 +1227,7 @@ void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid)
 					   vrb_eq_match_event, fid))) {
 		entry = container_of(item, struct vrb_eq_entry, item);
 		if (entry->event == FI_CONNREQ)
-			fi_freeinfo(entry->cm_entry->info);
+			fi_freeinfo(entry->cm_entry.info);
 		free(entry);
 	}
 }
@@ -1233,7 +1237,7 @@ vrb_eq_alloc_entry(uint32_t event, const void *buf, size_t len)
 {
 	struct vrb_eq_entry *entry;
 
-	entry = calloc(1, sizeof(struct vrb_eq_entry) + len);
+	entry = calloc(1, offsetof(struct vrb_eq_entry, data) + len);
 	if (!entry)
 		return NULL;
 
