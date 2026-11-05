@@ -157,11 +157,8 @@ struct efa_rdm_proto {
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
  * @param[out] proto  Selected protocol, or NULL if none matched
- * @return 0 on success, negative errno if the operation cannot be carried at
- *	   all. Finding no protocol by size is not a failure : it returns 0 with
-       *proto NULL, and the caller falls back to the old send path.
- *     TODO: Fail send operation when FI_EFA_RDM_FORCE_SEND_PROTO is set but
- *     does not match any of the implemented protocols.
+ * @return 0 on success, negative errno if the operation cannot be carried.
+ *	   -FI_EOPNOTSUPP when no protocol matched.
  */
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       struct efa_rdm_peer *peer,
