@@ -1176,16 +1176,19 @@ To prioritize the messages from a given endpoint, user can specify `fi_info->tx_
   allows all available NICs to be discovered.
 
 *FI_EFA_TX_SIZE*
-: Maximum number of transmit operations before the provider returns -FI_EAGAIN.
-  For only the RDM endpoint, this parameter will cause transmit operations to
-  be queued when this value is set higher than the default and the transmit queue
-  is full.
+: Maximum number of outstanding work requests on the device send queue before
+  the provider returns -FI_EAGAIN. The value is capped at the device's maximum
+  send queue depth and only takes effect when `tx_attr->size` is not specified
+  in the user-provided `fi_info` hints. The `efa-direct` fabric is unaffected.
 
 *FI_EFA_RX_SIZE*
-: Maximum number of receive operations before the provider returns -FI_EAGAIN.
-  For the `efa` fabric, the minimum is FI_EFA_INTERNAL_RX_REFILL_THRESHOLD +
-  FI_EFA_MAX_QUEUED_COPY. Smaller values are raised to it. The `efa-direct`
-  fabric is unaffected.
+: Maximum number of outstanding work requests on the device receive queue.
+  The value is capped at the device's maximum receive queue depth and only
+  takes effect when `rx_attr->size` is not specified in the user-provided
+  `fi_info` hints. For the `efa` fabric, the minimum is
+  FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + FI_EFA_MAX_QUEUED_COPY. Smaller values,
+  including an `rx_attr->size` hint, are raised to it. The `efa-direct` fabric
+  is unaffected.
 
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 

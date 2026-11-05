@@ -247,9 +247,9 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "max_memcpy_size", FI_PARAM_SIZE_T,
 			"Threshold size switch between using memory copy into a pre-registered bounce buffer and memory registration on the user buffer. (Default: 4096)");
 	fi_param_define(&efa_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Set the maximum number of transmit operations before the provider returns -FI_EAGAIN. For only the RDM endpoint, this parameter will cause transmit operations to be queued when this value is set higher than the default and the transmit queue is full.");
+			"Set the maximum number of outstanding work requests on the device send queue before the provider returns -FI_EAGAIN. The value is capped at the device maximum and only takes effect when tx_attr->size is not specified in the user-provided fi_info hints. The efa-direct fabric is unaffected.");
 	fi_param_define(&efa_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Set the maximum number of receive operations before the provider returns -FI_EAGAIN.");
+			"Set the maximum number of outstanding work requests on the device receive queue. The value is capped at the device maximum and only takes effect when rx_attr->size is not specified in the user-provided fi_info hints. The efa-direct fabric is unaffected.");
 	fi_param_define(&efa_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&efa_prov, "rx_copy_ooo", FI_PARAM_BOOL,

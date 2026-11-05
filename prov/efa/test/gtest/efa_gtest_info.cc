@@ -4,6 +4,8 @@
 
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_resource.h"
+#include "efa_gtest_info_utils.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 
 using testing::Test;
@@ -21,6 +23,9 @@ class EfaInfoQueueDepthTest : public Test
 	bool wide_wqe = false;
 	size_t wide_inject = 0;
 	ssize_t max_sq_depth = -1;
+	size_t prev_tx_size = 0;
+	size_t prev_rx_size = 0;
+	bool env_set = false;
 
 	void SetUp() override
 	{
@@ -47,6 +52,16 @@ class EfaInfoQueueDepthTest : public Test
 			fi_freeinfo(info);
 		if (hints)
 			fi_freeinfo(hints);
+		if (env_set)
+			efa_test_set_queue_size_env(prev_tx_size, prev_rx_size,
+						    NULL, NULL);
+	}
+
+	void set_queue_size_env(size_t tx, size_t rx)
+	{
+		efa_test_set_queue_size_env(tx, rx, &prev_tx_size,
+					    &prev_rx_size);
+		env_set = true;
 	}
 
 	int getinfo()
@@ -111,4 +126,55 @@ TEST_F(EfaInfoQueueDepthTest, getinfo_rejects_tx_size_above_wide_wqe_depth)
 
 	EXPECT_EQ(getinfo(), -FI_ENODATA);
 	EXPECT_EQ(info, nullptr);
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_size_honors_env_below_device_rdm)
+{
+	size_t tx_size = efa_test_device_max_tx_size() / 2;
+	size_t rx_size = efa_test_rdm_ep_min_rx_size();
+
+	ASSERT_GT(tx_size, 0);
+	ASSERT_LT(rx_size, efa_test_device_max_rx_size());
+	fi_freeinfo(hints);
+	hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	ASSERT_NE(hints, nullptr);
+	ASSERT_NO_FATAL_FAILURE(set_queue_size_env(tx_size, rx_size));
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->tx_attr->size, tx_size);
+	EXPECT_EQ(info->rx_attr->size, rx_size);
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_raises_env_rx_size_to_min_rdm)
+{
+	ASSERT_LT(1u, efa_test_rdm_ep_min_rx_size());
+	fi_freeinfo(hints);
+	hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	ASSERT_NE(hints, nullptr);
+	ASSERT_NO_FATAL_FAILURE(set_queue_size_env(0, 1));
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->rx_attr->size,
+		  std::min(efa_test_device_max_rx_size(),
+			   efa_test_rdm_ep_min_rx_size()));
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_raises_hint_rx_size_to_min_rdm)
+{
+	ASSERT_LT(8u, efa_test_rdm_ep_min_rx_size());
+	fi_freeinfo(hints);
+	hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	ASSERT_NE(hints, nullptr);
+	hints->rx_attr->size = 8;
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->rx_attr->size,
+		  std::min(efa_test_device_max_rx_size(),
+			   efa_test_rdm_ep_min_rx_size()));
 }
