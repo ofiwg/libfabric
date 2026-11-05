@@ -204,9 +204,6 @@ static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *
  * protocols are appropriate but MR fails, it will automatically switch to a
  * different protocol.
  *
- * FI_EFA_RDM_FORCE_SEND_PROTO forces the use of a given protocol selected by
- * name.
- *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to
  * @param[in]  msg    Message descriptor from application

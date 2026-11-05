@@ -48,7 +48,6 @@ struct efa_env efa_env = {
 	.use_hw_cntr = 1,
 	.use_sq_req_id_64_bit = 1,
 	.enable_comp_action = 0,
-	.rdm_force_send_proto = NULL,
 	.max_queued_copy = EFA_RDM_MAX_QUEUED_COPY,
 };
 
@@ -184,16 +183,6 @@ void efa_env_param_get(void)
 	if (efa_env.strict_mode)
 		efa_env.track_mr = 1;
 
-	fi_param_get_str(&efa_prov, "rdm_force_send_proto",
-			 &efa_env.rdm_force_send_proto);
-	/*
-	 * An empty value is how the application can clear the variable.
-	 * So leave the field NULL when the string is empty.
-	 * NULL then means that we should not force the protocol at all.
-	 */
-	if (efa_env.rdm_force_send_proto && !*efa_env.rdm_force_send_proto)
-		efa_env.rdm_force_send_proto = NULL;
-
 	fi_param_get_size_t(&efa_prov, "max_queued_copy",
 			    &efa_env.max_queued_copy);
 	if (efa_env.max_queued_copy < 1) {
@@ -324,18 +313,6 @@ void efa_env_define()
 		"instead of invoking the undefined behavior, which can "
 		"otherwise corrupt provider state or crash the process. "
 		"(Default: false)");
-	fi_param_define(
-		&efa_prov, "rdm_force_send_proto", FI_PARAM_STRING,
-		"Pin RDM send protocol selection to the protocol of this name "
-		"(`eager`, `medium`, ...) instead of the regular protocol "
-		"selection logic. The named protocol is used irrespective of "
-		"the regular protocol selection logic. This environment "
-		"variable is meant to be used for testing and debugging. If "
-		"the value of the environment variable does not match any of "
-		"the implemented protocols, the send operation will fail. This "
-		"environment variable does not affect protocol selection for "
-		"emulated RMA operations. (Default: unset, i.e. use default "
-		"protocol selection logic.");
 	fi_param_define(&efa_prov, "max_queued_copy", FI_PARAM_SIZE_T,
 			"The maximum number of rx pkts whose payload copies to "
 			"device memory are queued and done together. Must be "

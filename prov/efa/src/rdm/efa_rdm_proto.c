@@ -367,44 +367,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	header_flags = efa_rdm_proto_req_header_flags(peer, effective_flags);
 
-	/*
-	 * FI_EFA_RDM_FORCE_SEND_PROTO pins the choice to one protocol by name.
-	 * The name replaces the size decision rather than narrowing it, so the
-	 * named protocol is used whether or not this message suits it; that is
-	 * the point, since no threshold can steer a message that fits in a
-	 * single packet away from eager.
-	 */
-	if (efa_env.rdm_force_send_proto) {
-		for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
-			selected_proto = efa_rdm_protocols[i];
-
-			if (strcmp(efa_env.rdm_force_send_proto,
-				   selected_proto->name))
-				continue;
-
-			if (selected_proto->wants_mr &&
-			    efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
-				efa_rdm_ope_try_fill_desc(
-					txe, 0, mr_access_flags);
-
-			*proto = selected_proto;
-			txe->proto = selected_proto;
-			txe->req_pkt_type = efa_rdm_proto_req_pkt_type(
-				selected_proto, op, effective_flags, peer);
-			EFA_INFO(FI_LOG_EP_DATA,
-				"Forced the %s protocol for a %zu byte send\n",
-				selected_proto->name, txe->total_len);
-			return FI_SUCCESS;
-		}
-
-		EFA_WARN(FI_LOG_EP_DATA,
-			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol\n",
-			 efa_env.rdm_force_send_proto);
-		*proto = NULL;
-		txe->proto = NULL;
-		return -FI_EOPNOTSUPP;
-	}
-
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
 		selected_proto = efa_rdm_protocols[i];
 
