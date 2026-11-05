@@ -115,12 +115,13 @@ void efa_rdm_proto_longcts_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
  * @brief Long CTS takes any send the protocols before it decline, so it is
  * last in the registry.
  */
-static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_proto *proto,
+						   struct efa_rdm_ope *txe,
 						   int req_pkt_type,
 						   uint16_t header_flags,
 						   int iface, bool use_p2p)
 {
-	return true;
+	return efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len);
 }
 
 EFA_RDM_PROTO_DEF(longcts,

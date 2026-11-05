@@ -12,6 +12,7 @@
 #include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_medium.h"
 #include "rdm/protocols/efa_rdm_proto_runtread.h"
 #include "rdm/protocols/efa_rdm_proto_zero_copy.h"
 #include <errno.h>
@@ -2637,10 +2638,11 @@ setup_proto_runtread_test(struct efa_resource *resource,
 	ep->use_device_rdma = true;
 
 	info->runt_size = EFA_UNIT_TEST_PROTO_RUNT_SIZE;
-	info->min_read_msg_size = EFA_UNIT_TEST_PROTO_RUNTREAD_LEN;
+	efa_rdm_proto_runtread.min_size[FI_HMEM_SYSTEM] = EFA_UNIT_TEST_PROTO_RUNTREAD_LEN;
+	efa_rdm_proto_longread.min_size[FI_HMEM_SYSTEM] = EFA_UNIT_TEST_PROTO_RUNTREAD_LEN;
 
 	/* The medium protocol is tried first and must decline this size. */
-	assert_true(EFA_UNIT_TEST_PROTO_RUNTREAD_LEN > info->max_medium_msg_size);
+	assert_true(EFA_UNIT_TEST_PROTO_RUNTREAD_LEN > efa_rdm_proto_medium.max_size[FI_HMEM_SYSTEM]);
 
 	return ep;
 }
@@ -2792,4 +2794,70 @@ void test_proto_runtread_construct_pkes_carries_read_iov(void **state)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/* The bound environment variables and the values the bounds tests give them */
+static const char *const test_proto_bound_envs[][2] = {
+	{ "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE", "1000" },
+	{ "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE", "2000" },
+	{ "FI_EFA_INTER_MIN_READ_WRITE_SIZE", "3000" },
+};
+
+/**
+ * @brief Test the bound defaults of each policy, and that the bound
+ *        environment variables set the bounds they map to, as the
+ *        per-interface thresholds did: HMEM with p2p ignores the medium
+ *        variable, and HMEM without p2p takes the host policy in its own slot.
+ *        efa_unit_test_mocks_teardown() restores the bounds.
+ */
+void test_proto_bounds_env_mapping(void **state)
+{
+#if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
+	size_t rm = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size() + 1;
+#else
+	size_t rm = 1;
+#endif
+	const struct {
+		enum fi_hmem_iface target, policy;
+		bool env;
+		struct efa_rdm_proto *proto;
+		size_t min, max;
+	} cases[] = {
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_medium, 0, EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_runtread, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_longread, EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, false, &efa_rdm_proto_longread_write, EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_medium, 0, 1000 },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_runtread, 2000, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_longread, 2000, SIZE_MAX },
+		{ FI_HMEM_SYSTEM, FI_HMEM_SYSTEM, true, &efa_rdm_proto_longread_write, 3000, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_medium, 0, 0 },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_longread, rm, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, false, &efa_rdm_proto_longread_write, rm, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_medium, 0, 0 },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_runtread, 2000, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_CUDA, true, &efa_rdm_proto_longread_write, 3000, SIZE_MAX },
+		{ FI_HMEM_CUDA, FI_HMEM_SYSTEM, true, &efa_rdm_proto_medium, 0, 1000 },
+		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_medium, 0, 0 },
+		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_runtread, 1, SIZE_MAX },
+		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_longread, 1, SIZE_MAX },
+		{ FI_HMEM_SYNAPSEAI, FI_HMEM_SYNAPSEAI, true, &efa_rdm_proto_longread_write, 1, SIZE_MAX },
+	};
+	size_t i, j;
+
+	for (i = 0; i < ARRAY_SIZE(cases); i++) {
+		for (j = 0; j < ARRAY_SIZE(test_proto_bound_envs); j++) {
+			if (cases[i].env)
+				setenv(test_proto_bound_envs[j][0], test_proto_bound_envs[j][1], 1);
+			else
+				unsetenv(test_proto_bound_envs[j][0]);
+		}
+		efa_rdm_proto_init_bounds_for_iface(cases[i].target, cases[i].policy);
+		/* Clear the variables before asserting, so a failure cannot leak them */
+		for (j = 0; j < ARRAY_SIZE(test_proto_bound_envs); j++)
+			unsetenv(test_proto_bound_envs[j][0]);
+
+		assert_int_equal(cases[i].proto->min_size[cases[i].target], cases[i].min);
+		assert_int_equal(cases[i].proto->max_size[cases[i].target], cases[i].max);
+	}
 }

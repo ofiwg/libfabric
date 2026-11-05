@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_hmem.h"
 
 // Harmless suppression: persistent allocation from glibc outside of EFA provider
 const char *__lsan_default_suppressions(void)
@@ -20,7 +21,7 @@ static int efa_unit_test_mocks_group_setup(void **state)
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
 
-	/* run fi_getinfo to populate g_efa_hmem_info and copy it */
+	/* Populate g_efa_hmem_info and the protocol bounds, then back up g_efa_hmem_info */
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
 	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
 	fi_freeinfo(info);
@@ -56,9 +57,16 @@ static int efa_unit_test_mocks_setup(void **state)
 static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
+	enum fi_hmem_iface iface, bounds_profile_iface;
 
-	/* Reset the contents of g_efa_hmem_info from backup */
+	/* Reset the contents of g_efa_hmem_info and the protocol bounds from backup */
 	memcpy(g_efa_hmem_info, g_efa_hmem_info_backup, sizeof(g_efa_hmem_info));
+	EFA_HMEM_IFACE_FOREACH(iface) {
+		bounds_profile_iface = iface;
+		if (ofi_hmem_p2p_disabled() || !g_efa_hmem_info[iface].p2p_supported_by_device)
+			bounds_profile_iface = FI_HMEM_SYSTEM;
+		efa_rdm_proto_init_bounds_for_iface(iface, bounds_profile_iface);
+	}
 
 	/* Provide default mock return values for CQ operations during teardown */
 	if (g_efa_unit_test_mocks.efa_ibv_cq_start_poll) {
@@ -958,6 +966,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_atomic_read_responder_accepts_read_only_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_select_runtread_for_large_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_runtread_construct_pkes_carries_read_iov, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_bounds_env_mapping, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

@@ -271,14 +271,14 @@ void efa_env_define()
 			"Set the number of EFA completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
 	fi_param_define(&efa_prov, "shm_cq_read_size", FI_PARAM_SIZE_T,
 			"Set the number of SHM completion entries to read for one loop for one iteration of the progress engine. (Default: 50)");
-	fi_param_define(&efa_prov, "inter_max_medium_message_size", FI_PARAM_INT,
-			"The maximum message size for inter EFA medium message protocol (Default 65536).");
-	fi_param_define(&efa_prov, "inter_min_read_message_size", FI_PARAM_INT,
-			"The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol (Default 1048576).");
+	fi_param_define(&efa_prov, "inter_max_medium_message_size", FI_PARAM_SIZE_T,
+			"The inclusive maximum message size eligible for the inter EFA medium message protocol (Default 65536).");
+	fi_param_define(&efa_prov, "inter_min_read_message_size", FI_PARAM_SIZE_T,
+			"The minimum message size in bytes for inter EFA read message protocol. If the instance supports RDMA read, messages at least this size are eligible for the read message protocol (Default 1048576).");
+	fi_param_define(&efa_prov, "inter_min_read_write_size", FI_PARAM_SIZE_T,
+			"The minimum emulated write size for inter EFA to use the read write protocol. If the firmware supports RDMA read and FI_EFA_USE_DEVICE_RDMA is 1, emulated writes at least this size are eligible for the read write protocol (Default 65536). If the EFA device supports RDMA write, device RDMA write will always be used.");
 	fi_param_define(&efa_prov, "inter_max_gdrcopy_from_hmem_size", FI_PARAM_SIZE_T,
 			"The maximum message size for which data is copied out of device memory with gdrcopy when it is staged through bounce buffers. (Default 32768).");
-	fi_param_define(&efa_prov, "inter_min_read_write_size", FI_PARAM_INT,
-			"The minimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the efa device supports RDMA write, device RDMA write will always be used.");
 	fi_param_define(&efa_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&efa_prov, "fork_safe", FI_PARAM_BOOL,

@@ -151,17 +151,37 @@ err:
  * The peer RDMA-reads the source buffer, so this is usable when the transfer
  * is large enough and the peer supports RDMA read over p2p.
  */
-static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_proto *proto,
+						 struct efa_rdm_ope *txe,
 						 int req_pkt_type,
 						 uint16_t header_flags, int iface,
 						 bool use_p2p)
 {
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
+
 	return efa_rdm_rma_should_write_using_longread(txe->ep, txe, txe->peer,
 						       use_p2p);
 }
 
+static bool efa_rdm_proto_longread_write_set_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){
+	switch (bounds_profile_iface) {
+	case FI_HMEM_SYSTEM:
+		proto->min_size[target_iface] = EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE;
+		return true;
+	case FI_HMEM_SYNAPSEAI:
+		proto->min_size[target_iface] = 1;
+		return false;
+	default:
+		proto->min_size[target_iface] = efa_rdm_proto_max_eager_msg_size_with_largest_header() + 1;
+		return true;
+	}
+}
+
 EFA_RDM_PROTO_DEF(longread_write,
 	.wants_mr = true,
+	.min_param_name = "inter_min_read_write_size",
+	.set_bounds = &efa_rdm_proto_longread_write_set_bounds,
 	.can_use_protocol = &efa_rdm_proto_longread_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longread_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_LONGREAD_RTW_PKT,

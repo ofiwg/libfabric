@@ -61,12 +61,16 @@ efa_rdm_proto_longread_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
  * The receiver RDMA reads the message straight from the source buffers, so they
  * must be reachable over p2p and registered, and the peer must support RDMA read.
  */
-static bool efa_rdm_proto_longread_can_use_for_send(struct efa_rdm_ope *txe,
+static bool efa_rdm_proto_longread_can_use_for_send(struct efa_rdm_proto *proto,
+						    struct efa_rdm_ope *txe,
 						    int req_pkt_type,
 						    uint16_t header_flags,
 						    int iface, bool use_p2p)
 {
 	int i;
+
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
 
 	if (!use_p2p)
 		return false;
@@ -76,14 +80,27 @@ static bool efa_rdm_proto_longread_can_use_for_send(struct efa_rdm_ope *txe,
 		if (!txe->desc[i])
 			return false;
 
-	if (txe->total_len < g_efa_hmem_info[iface].min_read_msg_size)
-		return false;
-
 	return efa_rdm_interop_rdma_read(txe->ep, txe->peer);
+}
+
+static bool efa_rdm_proto_longread_set_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){
+	switch (bounds_profile_iface) {
+	case FI_HMEM_SYSTEM:
+		proto->min_size[target_iface] = EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE;
+		return true;
+	case FI_HMEM_SYNAPSEAI:
+		proto->min_size[target_iface] = 1;
+		return false;
+	default:
+		proto->min_size[target_iface] = efa_rdm_proto_max_eager_msg_size_with_largest_header() + 1;
+		return true;
+	}
 }
 
 EFA_RDM_PROTO_DEF(longread,
 	.wants_mr = true,
+	.min_param_name = "inter_min_read_message_size",
+	.set_bounds = &efa_rdm_proto_longread_set_bounds,
 	.can_use_protocol = &efa_rdm_proto_longread_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longread_construct_tx_pkes,
 	/* Long read has no DC variant, so the DC entries reuse the non-DC types. */
