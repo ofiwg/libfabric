@@ -107,6 +107,24 @@ int efa_test_proto_medium_completion(
 	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
 	struct efa_test_proto_completion_result *out);
 
+struct efa_test_proto_zero_copy_result {
+	size_t pke_cnt;
+	size_t ope_list_after_send;
+	int send_to_user_recv_qp;
+	int has_no_base_hdr;
+	size_t pkt_size;
+	size_t payload_size;
+	int handler_set;
+	int req_pkt_type;
+	int expected_req_pkt_type;
+	size_t ope_list_after_completion;
+	ssize_t cq_readerr_after_completion;
+};
+
+int efa_test_zero_copy_send_end_to_end(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain, struct efa_test_proto_zero_copy_result *out);
+
 struct efa_test_proto_peer_abort_result {
 	size_t pke_cnt;
 	int req_pkt_type_is_rtm;

@@ -5561,8 +5561,8 @@ static void run_rtm_tx_error_with_type(struct efa_resource *resource,
 	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 
-	/* Mirror efa_rdm_msg_post_rtm: the selected protocol is recorded
-	 * on the txe. The forged txe bypasses post_rtm, so set it here so
+	/* Mirror the message send path: the selected protocol is recorded
+	 * on the txe. The forged txe bypasses it, so set it here so
 	 * the PEER_ERROR ref_kind derivation sees the right protocol. */
 	txe->req_pkt_type = pkt_type;
 

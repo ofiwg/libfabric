@@ -310,8 +310,6 @@ int efa_rdm_peer_queue_aborted_msg_marker(struct efa_rdm_peer *peer, struct efa_
 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
-int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
-
 /**
  * @brief Return the util_av index of a peer in the explicit AV, or
  * FI_ADDR_NOTAVAIL if the peer is only in the implicit AV. Safe without the
