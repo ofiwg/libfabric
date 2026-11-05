@@ -393,7 +393,7 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
              (empty for the fallback path), and message_size is the -S value.
     """
     # Host-memory defaults (efa.h): eager_max ~= MTU - headers (~8 KB),
-    # max_medium_msg_size = 65536, min_read_msg_size = 1048576.
+    # medium.MAX = 65536, runtread.MIN/longread.MIN = 1048576.
     EAGER_SIZE = MSG_SIZE_4KIB            # < eager_max -> EAGER
     MEDIUM_SIZE = MSG_SIZE_64KIB          # 8 MTU-sized packets, == default medium_max -> MEDIUM
     LARGE_SIZE = MSG_SIZE_1MIB            # 1 MiB, > medium_max -> LONGCTS / read-base
@@ -426,9 +426,9 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
         # threshold so read-base is never considered. No threshold override.
         proto_env = ""
     elif protocol == "MEDIUM":
-        # 64 KB == the default host max_medium_msg_size (65536), which spans
+        # 64 KB == the default host medium.MAX (65536), which spans
         # ~8 MTU-sized REQ packets. It is above eager_max and below min_read
-        # (1 MiB), and the selection test is total_len <= max_medium_msg_size,
+        # (1 MiB), and the selection test is total_len <= medium.MAX,
         # so the defaults select MEDIUM. No threshold override.
         proto_env = ""
     elif protocol == "LONGCTS":

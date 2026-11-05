@@ -2551,7 +2551,7 @@ static int run(void)
 		 * ft_init_fabric() has already enabled the EP. Setting it here
 		 * is still correct: EFA's setopt handler has no enable-state
 		 * guard, and homogeneous_peers is read lazily at RTM-post time
-		 * (efa_rdm_msg_post_rtm), not at enable. No send has been posted
+		 * (efa_rdm_interop_rdma_read), not at enable. No send has been posted
 		 * yet at this point, so the value is in effect for every op.
 		 */
 		for (i = 0; i < n_local_eps; i++) {
