@@ -7,6 +7,7 @@
 #include "efa_prov.h"
 #include "efa_prov_info.h"
 #include "efa_env.h"
+#include "rdm/efa_rdm_proto.h"
 
 #ifndef _WIN32
 
@@ -237,6 +238,8 @@ EFA_INI
 	err = efa_hmem_info_initialize();
 	if (err)
 		goto err_free;
+
+	efa_rdm_proto_configure_force_send(efa_env.rdm_force_send_proto);
 
 	/*
 	* efa_util_prov_initialize uses g_efa_hmem_info, so it

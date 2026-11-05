@@ -1285,14 +1285,13 @@ buffers. Larger message sizes use cudaMemcpy. (Default 32768).
 : The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
 
 *FI_EFA_RDM_FORCE_SEND_PROTO*
-: Pin RDM send protocol selection to the protocol of this name (`eager`,
-`medium`, ...) instead of the regular protocol selection logic. The named
-protocol is used irrespective of the regular protocol selection logic. This
-environment variable is meant to be used for testing and debugging. If the
-value of the environment variable does not match any of the implemented
-protocols, the send operation will fail. This environment variable does not
-affect protocol selection for emulated RMA operations.
-(Default: unset, i.e. use default protocol selection logic.)
+: Force the registered RDM send protocol of this name (`eager`, `medium`, ...),
+  short-circuiting the normal protocol selection rules. The protocol's size
+  bounds are ignored, but its other eligibility requirements still apply. If
+  the protocol cannot support an operation, the normal selector returns
+  `-FI_EOPNOTSUPP` instead of falling back. An unknown name leaves the selector
+  with no candidate. This debug option does not affect emulated RMA operations.
+  (Default: unset.)
 
 *FI_EFA_USE_DEVICE_RDMA*
 : Specify whether to require or ignore RDMA features of the EFA device.

@@ -138,6 +138,23 @@ void test_proto_select_eager_for_zero_len_msg(void **state)
 }
 
 /**
+ * @brief Test that medium rejects zero-length messages with forced bounds.
+ */
+void test_proto_medium_rejects_zero_len_msg(void **state)
+{
+	struct efa_rdm_proto proto = efa_rdm_proto_medium;
+	struct efa_rdm_ope txe = {0};
+
+	(void) state;
+	proto.min_size[FI_HMEM_SYSTEM] = 0;
+	proto.max_size[FI_HMEM_SYSTEM] = SIZE_MAX;
+
+	assert_false(proto.can_use_protocol(
+		&proto, &txe, EFA_RDM_MEDIUM_MSGRTM_PKT, 0,
+		FI_HMEM_SYSTEM, false));
+}
+
+/**
  * @brief Test that eager construct_tx_pkes produces exactly 1 PKE with
  * the correct callback set.
  */

@@ -97,10 +97,8 @@ struct efa_env {
 	 */
 	int enable_comp_action;
 	/**
-	 * Name of the RDM send protocol that selection is pinned to, as set by
-	 * FI_EFA_RDM_FORCE_SEND_PROTO, or NULL to use the default protocol
-	 * selection logic.
-	 * Two-sided sends only; the RMA paths are not affected by this env var.
+	 * Name of the RDM send protocol to try first, as set by
+	 * FI_EFA_RDM_FORCE_SEND_PROTO, or NULL for normal selection.
 	 */
 	char *rdm_force_send_proto;
 	size_t max_queued_copy;

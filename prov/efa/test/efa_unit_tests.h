@@ -898,6 +898,7 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 /* Protocol TX path tests */
 void test_proto_select_eager_for_small_msg(void **state);
 void test_proto_select_eager_for_zero_len_msg(void **state);
+void test_proto_medium_rejects_zero_len_msg(void **state);
 void test_proto_eager_construct_pkes_single_pke(void **state);
 void test_proto_zero_copy_construct_pkes(void **state);
 void test_proto_zero_copy_reselected_after_handshake(void **state);

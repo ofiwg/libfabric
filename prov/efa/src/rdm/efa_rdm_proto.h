@@ -157,6 +157,7 @@ struct efa_rdm_proto {
 size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void);
 
 void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface);
+void efa_rdm_proto_configure_force_send(const char *proto_name);
 
 static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *proto, enum fi_hmem_iface iface, size_t len)
 {
@@ -174,10 +175,9 @@ static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *
  * protocols are appropriate but MR fails, it will automatically switch to a
  * different protocol.
  *
- * FI_EFA_RDM_FORCE_SEND_PROTO forces the use of a given protocol selected by
- * name. A name that matches no registered protocol fails the operation rather
- * than falling back, so a typo cannot silently send over a protocol the
- * application asked not to use.
+ * FI_EFA_RDM_FORCE_SEND_PROTO widens the named protocol's size bounds and makes
+ * it the only candidate. Its remaining eligibility checks still apply, and
+ * selection fails rather than falling back when they are not satisfied.
  *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to

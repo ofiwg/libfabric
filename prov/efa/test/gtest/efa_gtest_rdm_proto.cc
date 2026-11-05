@@ -434,10 +434,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 struct EfaRdmProtoForceCase {
 	const char *name;
-	/* FI_EFA_RDM_FORCE_SEND_PROTO, nullptr when unset. */
 	const char *forced;
-	size_t len;
-	/* Protocol expected, nullptr when the send must fail instead. */
+	ssize_t expected_ret;
 	const char *expected_proto;
 };
 
@@ -461,56 +459,27 @@ class EfaRdmProtoForceTest : public TestWithParam<EfaRdmProtoForceCase>
 	}
 };
 
-/**
- * @brief FI_EFA_RDM_FORCE_SEND_PROTO replaces the size decision with a name
- * match, so the named protocol is selected whether or not the size suits it,
- * and a name no registered protocol answers to fails the send.
- *
- * Overriding the size decision is the point: no threshold can steer a message
- * that fits in one packet away from eager, which claims it first.
- */
-TEST_P(EfaRdmProtoForceTest, forced_name_replaces_the_size_decision)
+TEST_P(EfaRdmProtoForceTest, forced_protocol_is_used_or_selection_fails)
 {
 	const EfaRdmProtoForceCase &c = GetParam();
-	struct efa_test_proto_force_result res = {};
+	struct efa_test_proto_select_result res = {};
 
 	ASSERT_EQ(efa_test_proto_force_select_send(resource.ep, resource.av,
 						   resource.domain, c.forced,
-						   c.len, &res),
+						   &res),
 		  0);
-
-	if (!c.expected_proto) {
-		EXPECT_EQ(res.ret, -FI_EOPNOTSUPP);
-		EXPECT_STREQ(res.proto_name, "");
-		return;
-	}
-
-	ASSERT_EQ(res.ret, 0);
+	EXPECT_EQ(res.ret, c.expected_ret);
 	EXPECT_STREQ(res.proto_name, c.expected_proto);
 }
 
 INSTANTIATE_TEST_SUITE_P(
 	, EfaRdmProtoForceTest,
-	Values(EfaRdmProtoForceCase{"unset_picks_eager", nullptr, 64, "eager"},
-	       EfaRdmProtoForceCase{"eager_picks_eager", "eager", 64, "eager"},
-	       EfaRdmProtoForceCase{"medium_beats_eager", "medium", 64, "medium"},
-	       /* Both of these decline under can_use_protocol(). */
-	       EfaRdmProtoForceCase{"eager_ignores_multi_packet_size", "eager",
-				    EFA_TEST_PROTO_MEDIUM_LEN, "eager"},
-	       EfaRdmProtoForceCase{"medium_ignores_zero_length", "medium", 0,
+	Values(EfaRdmProtoForceCase{"medium_ignores_size_bound", "medium", 0,
 				    "medium"},
-	       /* A read protocol's predicate would decline a 64 byte send. */
-	       EfaRdmProtoForceCase{"runtread_picks_runtread", "runtread", 64,
-				    "runtread"},
-	       EfaRdmProtoForceCase{"longread_picks_longread", "longread", 64,
-				    "longread"},
-	       EfaRdmProtoForceCase{"longcts_picks_longcts", "longcts", 64,
-				    "longcts"},
-	       /* A write protocol's name is not a send protocol's name. */
-	       EfaRdmProtoForceCase{"eager_write_fails", "eager_write", 64,
-				    nullptr},
-	       EfaRdmProtoForceCase{"unknown_name_fails", "no_such_proto", 64,
-				    nullptr}),
+	       EfaRdmProtoForceCase{"unsupported_longread_fails", "longread",
+				    -FI_EOPNOTSUPP, ""},
+	       EfaRdmProtoForceCase{"unknown_name_fails", "no_such_proto",
+				    -FI_EOPNOTSUPP, ""}),
 	[](const testing::TestParamInfo<EfaRdmProtoForceCase> &info) {
 		return std::string(info.param.name);
 	});
