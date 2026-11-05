@@ -81,6 +81,12 @@ static void ki_rma_setup(void)
 	ki_rma_init();
 }
 
+static void ki_rma_client_key_setup(void)
+{
+	cxit_setup_ki_full_client_key();
+	ki_rma_init();
+}
+
 static void ki_rma_prov_key_setup(void)
 {
 	cxit_setup_ki_full_prov_key();
@@ -95,6 +101,9 @@ static void ki_rma_teardown(void)
 
 TestSuite(ki_rma, .init = ki_rma_setup, .fini = ki_rma_teardown,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+TestSuite(ki_rma_client_key, .init = ki_rma_client_key_setup,
+	  .fini = ki_rma_teardown, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Same fixture on an FI_MR_PROV_KEY domain */
 TestSuite(ki_rma_prov_key, .init = ki_rma_prov_key_setup,
@@ -302,7 +311,7 @@ Test(ki_rma, put_verify)
  * The failure must be counted on the send counter's error count and
  * reported through the TX CQ with the endpoint's context.
  */
-Test(ki_rma, put_error)
+static void ki_put_error(uint16_t unmapped_write_ptl_idx)
 {
 	int ret;
 	struct c_full_dma_cmd cmd;
@@ -316,8 +325,9 @@ Test(ki_rma, put_error)
 	size_t dst_off = 256;
 	size_t len = 64;
 
-	/* No MR was registered with this optimized key */
-	bad_remote_mr.write_ptl_idx = CXIP_PTL_IDX_WRITE_MR_OPT(7);
+	cr_assert_neq(unmapped_write_ptl_idx, ki_self_remote_mr.write_ptl_idx,
+		      "error test targets the registered MR");
+	bad_remote_mr.write_ptl_idx = unmapped_write_ptl_idx;
 
 	initial = fi_cntr_read(cxit_send_cntr);
 	initial_err = fi_cntr_readerr(cxit_send_cntr);
@@ -350,11 +360,38 @@ Test(ki_rma, put_error)
 	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_read returned %d", ret);
 }
 
-/* Test a PUT to an MR with a standard (non-optimized) key. The target
+/* Test that a PUT to an unmapped client-key write index reports a counter
+ * error and a TX CQ error without writing the payload.
+ */
+Test(ki_rma_client_key, put_error)
+{
+	/* Only KI_RMA_WIN_KEY was registered in this client-key domain. */
+	ki_put_error(CXIP_PTL_IDX_WRITE_MR_OPT(7));
+}
+
+/* Test that a PUT to an unmapped non-cached provider-key write index reports
+ * a counter error and a TX CQ error without writing the payload.
+ */
+Test(ki_rma_prov_key, put_error)
+{
+	struct cxip_domain *dom = container_of(cxit_domain, struct cxip_domain,
+					      util_domain.domain_fid);
+	uint16_t id = 7;
+
+	/* Inspect private state to verify the fixture's unmapped-index
+	 * invariant, not a KI API contract. MR ID id uses slot id + 1.
+	 */
+	cr_assert_null(ofi_idx_lookup(&dom->mr_ids, id + 1),
+		       "provider MR ID %u is in use", id);
+	ki_put_error(CXIP_PTL_IDX_WRITE_MR_OPT_BASE +
+		     CXIP_PTL_IDX_PROV_NUM_CACHE_IDX + id);
+}
+
+/* Test a PUT to an MR with a standard (non-optimized) client key. The target
  * is a matching LE on the standard PTL index, so the command must carry
  * the match bits decoded from the peer blob.
  */
-Test(ki_rma, put_std_key)
+Test(ki_rma_client_key, put_std_key)
 {
 	struct mem_region std_window;
 	struct fi_cxi_gpu_remote_mr std_remote_mr;
