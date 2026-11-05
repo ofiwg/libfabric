@@ -87,7 +87,9 @@ enum vrb_pcie_proximity {
 /* Per-NIC info with proximity data for auto policy */
 struct vrb_nic_proximity_cache {
 	struct fi_info *info;
+	const struct fi_pci_attr *pci;
 	enum vrb_pcie_proximity proximity;
+	int index;
 };
 
 const struct fi_fabric_attr verbs_fabric_attr = {
@@ -2175,19 +2177,47 @@ vrb_calc_pcie_proximity(hwloc_topology_t topology,
         return VRB_PROXIMITY_UNKNOWN;
 }
 
+static int vrb_pci_addr_compare(const struct fi_pci_attr *a,
+				const struct fi_pci_attr *b)
+{
+	if (a->domain_id != b->domain_id)
+		return a->domain_id < b->domain_id ? -1 : 1;
+	if (a->bus_id != b->bus_id)
+		return a->bus_id < b->bus_id ? -1 : 1;
+	if (a->device_id != b->device_id)
+		return a->device_id < b->device_id ? -1 : 1;
+	if (a->function_id != b->function_id)
+		return a->function_id < b->function_id ? -1 : 1;
+	return 0;
+}
+
+/*
+ * Total order: proximity, then PCI address (entries without one last),
+ * then original list position.  qsort is not stable, so the final key is
+ * needed to keep the ordering deterministic when one device contributes
+ * several fi_info entries (e.g. MSG and DGRAM).
+ */
 static int vrb_proximity_compare(const void *a, const void *b)
 {
 	const struct vrb_nic_proximity_cache *nic_a;
 	const struct vrb_nic_proximity_cache *nic_b;
+	int ret;
 
 	nic_a = (const struct vrb_nic_proximity_cache *)a;
 	nic_b = (const struct vrb_nic_proximity_cache *)b;
 
-	if (nic_a->proximity < nic_b->proximity)
-		return -1;
-	if (nic_a->proximity > nic_b->proximity)
-		return 1;
-	return 0;
+	if (nic_a->proximity != nic_b->proximity)
+		return nic_a->proximity < nic_b->proximity ? -1 : 1;
+
+	if (nic_a->pci && nic_b->pci) {
+		ret = vrb_pci_addr_compare(nic_a->pci, nic_b->pci);
+		if (ret)
+			return ret;
+	} else if (nic_a->pci || nic_b->pci) {
+		return nic_a->pci ? -1 : 1;
+	}
+
+	return nic_a->index - nic_b->index;
 }
 #endif /* HAVE_HWLOC */
 
@@ -2320,12 +2350,14 @@ int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *devic
 	for (cur = *info; cur; cur = cur->next, i++) {
 		nic_array[i].info = cur;
 		nic_array[i].proximity = VRB_PROXIMITY_UNKNOWN;
+		nic_array[i].index = i;
 
 		if (!cur->nic || !cur->nic->bus_attr ||
 		    cur->nic->bus_attr->bus_type != FI_BUS_PCI)
 			continue;
 
-		nic_pci_obj = vrb_find_pci_device(topology, &cur->nic->bus_attr->attr.pci);
+		nic_array[i].pci = &cur->nic->bus_attr->attr.pci;
+		nic_pci_obj = vrb_find_pci_device(topology, nic_array[i].pci);
 		if (!nic_pci_obj)
 			continue;
 
