@@ -233,9 +233,11 @@ AC_ARG_WITH([neuron],
              CPPFLAGS="-I$withval/include $CPPFLAGS"
              AC_CHECK_HEADER([nrt/nrt.h],
                              [AC_DEFINE([HAVE_NEURON], [1],
-                                        [Define to 1 if you have <nrt/nrt.h>])],
+                                        [Define to 1 if you have <nrt/nrt.h>])
+                              have_neuron=1],
                              [AC_MSG_ERROR([<nrt/nrt.h> not found])])],
             [])
+AM_CONDITIONAL([HAVE_NEURON], [test x"$have_neuron" = x1])
 
 dnl Check for SynapseAI support. Require fabtests to dlopen SynapseAI runtime.
 AC_ARG_WITH([synapseai],
