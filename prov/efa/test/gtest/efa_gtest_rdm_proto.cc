@@ -324,6 +324,51 @@ TEST_F(EfaRdmProtoMediumCompletionTest, peer_abort_completes_txe_once)
 	EXPECT_EQ(res.final_prov_errno, efa_test_proto_peer_abort_prov_errno());
 }
 
+class EfaRdmProtoZeroCopyTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME));
+		ASSERT_NE(resource.ep, nullptr);
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmProtoZeroCopyTest, zero_copy_send_end_to_end)
+{
+	struct efa_test_proto_zero_copy_result res = {};
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_zero_copy_send_end_to_end(resource.ep, resource.av,
+						     resource.cq,
+						     resource.domain, &res),
+		  0);
+	EXPECT_EQ(res.ope_list_after_send, 1u);
+	EXPECT_EQ(res.pke_cnt, 1u);
+	EXPECT_TRUE(res.send_to_user_recv_qp);
+	EXPECT_TRUE(res.has_no_base_hdr);
+	EXPECT_EQ(res.pkt_size, 64u);
+	EXPECT_EQ(res.payload_size, 64u);
+	EXPECT_TRUE(res.handler_set);
+	EXPECT_EQ(res.req_pkt_type, res.expected_req_pkt_type);
+	EXPECT_EQ(res.ope_list_after_completion, 0u);
+	EXPECT_EQ(res.cq_readerr_after_completion, -FI_EAGAIN);
+}
+
 struct EfaRdmProtoForceCase {
 	const char *name;
 	/* FI_EFA_RDM_FORCE_SEND_PROTO, nullptr when unset. */
@@ -371,10 +416,8 @@ TEST_P(EfaRdmProtoForceTest, forced_name_replaces_the_size_decision)
 						   c.len, &res),
 		  0);
 
-	// TODO: after all protocols are migrated, protocol selection should
-	// fail with -FI_EINVAL
 	if (!c.expected_proto) {
-		EXPECT_EQ(res.ret, FI_SUCCESS);
+		EXPECT_EQ(res.ret, -FI_EOPNOTSUPP);
 		EXPECT_STREQ(res.proto_name, "");
 		return;
 	}

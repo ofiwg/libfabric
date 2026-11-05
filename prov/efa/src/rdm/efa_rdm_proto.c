@@ -22,12 +22,8 @@
  * @brief Undo the memory registrations the selection loop made.
  *
  * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
- * protocol can be evaluated. When no protocol is selected the caller falls back
- * to the legacy send path, whose efa_rdm_txe_construct() clears txe->mr without
- * closing it, so nothing would ever release those registrations. Hand them back
- * here instead.
- *
- * TODO: Remove after all protocols are migrated to the new code path
+ * protocol can be evaluated. Hand those registrations back when no protocol
+ * can carry the operation.
  */
 static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 {
@@ -257,14 +253,12 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			return FI_SUCCESS;
 		}
 
-		// TODO: fail the send operation after all protocols are migrated.
 		EFA_WARN(FI_LOG_EP_DATA,
-			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol "
-			 "that supports the new code path. Falling back to the old code "
-			 "path\n", efa_env.rdm_force_send_proto);
+			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol\n",
+			 efa_env.rdm_force_send_proto);
 		*proto = NULL;
 		txe->proto = NULL;
-		return FI_SUCCESS;
+		return -FI_EOPNOTSUPP;
 	}
 
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
@@ -303,14 +297,13 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	/*
 	 * No protocol matched, so release any MRs that were registered
-	 * TODO: Remove after all protocols moved to new code path
 	 */
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
 
 	*proto = NULL;
 	txe->proto = NULL;
-	return FI_SUCCESS;
+	return -FI_EOPNOTSUPP;
 }
 
 /* Utility funcions */
