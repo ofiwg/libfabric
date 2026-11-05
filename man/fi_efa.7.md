@@ -1260,6 +1260,9 @@ These OFI runtime parameters apply only to the RDM endpoint.
   larger than this switch point will be transferred with large message protocol.
   NOTE: This parameter is now deprecated.
 
+*FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE*
+: The inclusive maximum message size eligible for the inter EFA eager protocol. `FI_INJECT` operations ignore this selection bound but remain limited by the endpoint's advertised inject size. (Default: unlimited).
+
 *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*
 : The maximum size for inter EFA messages to be sent by using medium message protocol. Messages which can fit in one packet will be sent as eager message. Messages whose sizes are smaller than this value will be sent using medium message protocol. Other messages will be sent using CTS based long message protocol.
 
@@ -1276,6 +1279,9 @@ buffers. Larger message sizes use cudaMemcpy. (Default 32768).
 
 *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
 : The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
+
+*FI_EFA_INTER_MAX_EAGER_WRITE_SIZE*
+: The inclusive maximum write size eligible for the inter EFA eager write protocol. `FI_INJECT` operations ignore this selection bound but remain limited by the endpoint's advertised inject size. (Default: unlimited).
 
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
 : The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
