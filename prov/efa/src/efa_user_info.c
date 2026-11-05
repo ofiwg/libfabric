@@ -721,6 +721,9 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->tx_attr->caps &= ~OFI_TX_RMA_CAPS;
 		info->rx_attr->caps &= ~OFI_RX_RMA_CAPS;
 	}
+
+	efa_user_info_apply_env_queue_size(info);
+
 	/*
 	 * A larger inline (inject) size reduces the number of send queue
 	 * entries, so when the application requests one, cap the tx queue depth
@@ -757,7 +760,7 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 					 hints->tx_attr->inject_size);
 				return -FI_ENODATA;
 			}
-			info->tx_attr->size = max_sq_depth;
+			info->tx_attr->size = MIN(info->tx_attr->size, max_sq_depth);
 #else
 			return -FI_ENODATA;
 #endif

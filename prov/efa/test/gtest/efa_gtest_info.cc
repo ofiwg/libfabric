@@ -128,6 +128,71 @@ TEST_F(EfaInfoQueueDepthTest, getinfo_rejects_tx_size_above_wide_wqe_depth)
 	EXPECT_EQ(info, nullptr);
 }
 
+TEST_F(EfaInfoQueueDepthTest, getinfo_size_honors_env_below_device)
+{
+	size_t tx_size = efa_test_device_max_tx_size() / 2;
+	size_t rx_size = efa_test_device_max_rx_size() / 2;
+
+	ASSERT_GT(tx_size, 0);
+	ASSERT_GT(rx_size, 0);
+	ASSERT_NO_FATAL_FAILURE(set_queue_size_env(tx_size, rx_size));
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->tx_attr->size, tx_size);
+	EXPECT_EQ(info->rx_attr->size, rx_size);
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_size_capped_by_device_when_env_above)
+{
+	ASSERT_NO_FATAL_FAILURE(
+		set_queue_size_env(efa_test_device_max_tx_size() * 2,
+				   efa_test_device_max_rx_size() * 2));
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->tx_attr->size, efa_test_device_max_tx_size());
+	EXPECT_EQ(info->rx_attr->size, efa_test_device_max_rx_size());
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_wide_wqe_tx_size_honors_env_below_depth)
+{
+	if (!wide_wqe)
+		GTEST_SKIP() << "device without wide WQE support";
+
+	size_t tx_size = (size_t) max_sq_depth / 2;
+
+	ASSERT_GT(tx_size, 0);
+	ASSERT_NO_FATAL_FAILURE(set_queue_size_env(tx_size, 0));
+	hints->tx_attr->inject_size = wide_inject;
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->tx_attr->inject_size, wide_inject);
+	EXPECT_EQ(info->tx_attr->size, tx_size);
+}
+
+TEST_F(EfaInfoQueueDepthTest, getinfo_size_hint_overrides_env)
+{
+	size_t tx_size = efa_test_device_max_tx_size() / 2;
+	size_t rx_size = efa_test_device_max_rx_size() / 2;
+
+	ASSERT_GT(tx_size / 2, 0);
+	ASSERT_GT(rx_size / 2, 0);
+	ASSERT_NO_FATAL_FAILURE(set_queue_size_env(tx_size / 2, rx_size / 2));
+	hints->tx_attr->size = tx_size;
+	hints->rx_attr->size = rx_size;
+
+	ASSERT_EQ(getinfo(), 0);
+	ASSERT_NE(info, nullptr);
+
+	EXPECT_EQ(info->tx_attr->size, tx_size);
+	EXPECT_EQ(info->rx_attr->size, rx_size);
+}
+
 TEST_F(EfaInfoQueueDepthTest, getinfo_size_honors_env_below_device_rdm)
 {
 	size_t tx_size = efa_test_device_max_tx_size() / 2;

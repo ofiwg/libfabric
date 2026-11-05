@@ -1179,7 +1179,7 @@ To prioritize the messages from a given endpoint, user can specify `fi_info->tx_
 : Maximum number of outstanding work requests on the device send queue before
   the provider returns -FI_EAGAIN. The value is capped at the device's maximum
   send queue depth and only takes effect when `tx_attr->size` is not specified
-  in the user-provided `fi_info` hints. The `efa-direct` fabric is unaffected.
+  in the user-provided `fi_info` hints.
 
 *FI_EFA_RX_SIZE*
 : Maximum number of outstanding work requests on the device receive queue.
@@ -1187,8 +1187,7 @@ To prioritize the messages from a given endpoint, user can specify `fi_info->tx_
   takes effect when `rx_attr->size` is not specified in the user-provided
   `fi_info` hints. For the `efa` fabric, the minimum is
   FI_EFA_INTERNAL_RX_REFILL_THRESHOLD + FI_EFA_MAX_QUEUED_COPY. Smaller values,
-  including an `rx_attr->size` hint, are raised to it. The `efa-direct` fabric
-  is unaffected.
+  including an `rx_attr->size` hint, are raised to it.
 
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 
