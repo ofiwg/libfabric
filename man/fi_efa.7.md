@@ -69,7 +69,16 @@ The following features are supported:
   such requirement. The inject sizes an endpoint ended up with can be queried
   with the `fi_getopt` API with option names `FI_OPT_INJECT_MSG_SIZE` and
   `FI_OPT_INJECT_RMA_SIZE`. On `efa-direct`, enabling completion actions lowers
-  them; see *COMPLETION ACTIONS*.
+  them; see *COMPLETION ACTIONS*. On the `efa` fabric, of the protocols chosen
+  by the selection bounds only eager and eager write carry injected operations,
+  so *FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE* and *FI_EFA_INTER_MAX_EAGER_WRITE_SIZE*
+  cap the inject size: setting either one below the inject size `fi_getinfo`
+  reports by default lowers `tx_attr->inject_size`, and with it the inject size
+  of every operation, including RMA, atomics and transfers through SHM. Larger
+  `tx_attr->inject_size` hints and `FI_OPT_INJECT_*_SIZE` values are then
+  rejected. An operation that carries `FI_INJECT`, also through the endpoint's
+  default `tx_attr->op_flags`, must not be larger than the inject size; a larger
+  one fails with *-FI_EOPNOTSUPP*.
   Furthermore, missing `FI_CONTEXT2` in `hints->mode`
   can yield different `fi_getinfo` behavior for both `efa-direct` and `dgram`, see ***Modes*** section.
 
@@ -1260,8 +1269,34 @@ These OFI runtime parameters apply only to the RDM endpoint.
   larger than this switch point will be transferred with large message protocol.
   NOTE: This parameter is now deprecated.
 
+*FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE*, *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*,
+*FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*, *FI_EFA_INTER_MAX_EAGER_WRITE_SIZE* and
+*FI_EFA_INTER_MIN_READ_WRITE_SIZE* set the protocol selection bounds of inter
+EFA transfers. A protocol may only carry a transfer whose size is within its
+inclusive MIN and MAX bounds. Two-sided protocols are tried in this order: `eager`, `medium`,
+`runtread`, `longread`, then `longcts`. Emulated write protocols are tried in
+this order: `eager_write`, `longread_write`, then `longcts_write`. The first
+protocol whose bounds contain the size and whose normal capability checks pass
+is selected, so the bounds never make a protocol carry a transfer it cannot
+carry. A transfer that no protocol can carry fails with *-FI_EOPNOTSUPP*.
+
+Which of these five variables apply depends on the memory interface of the
+buffer:
+
+- Host memory, and HMEM interfaces without P2P: all of them, with the defaults
+  given below.
+- CUDA, ROCr and Neuron with P2P: the medium protocol is not used, and
+  *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE* is ignored. *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
+  and *FI_EFA_INTER_MIN_READ_WRITE_SIZE* default to the device MTU minus the
+  largest packet header, plus one.
+- SynapseAI: sends always use the long read protocol, and all of them are
+  ignored.
+
+*FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE*
+: The inclusive maximum size of an inter EFA message eligible for the eager protocol. A message must also fit in one packet to use eager. Setting it below the default inject size lowers the inject size; see *Inject*. (Default unlimited).
+
 *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*
-: The maximum size for inter EFA messages to be sent by using medium message protocol. Messages which can fit in one packet will be sent as eager message. Messages whose sizes are smaller than this value will be sent using medium message protocol. Other messages will be sent using CTS based long message protocol.
+: The inclusive maximum size of an inter EFA message eligible for the medium protocol. (Default 65536).
 
 *FI_EFA_FORK_SAFE*
 : Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
@@ -1275,10 +1310,34 @@ CUDA memory with gdrcopy when the data is staged through internal bounce
 buffers. Larger message sizes use cudaMemcpy. (Default 32768).
 
 *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
-: The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
+: The inclusive minimum size of an inter EFA message eligible for the read message protocols, `runtread` and `longread`. They also need RDMA read support, P2P access to the buffer and a registered buffer. (Default 1048576).
+
+*FI_EFA_INTER_MAX_EAGER_WRITE_SIZE*
+: The inclusive maximum size of an emulated inter EFA write eligible for the eager write protocol. A write must also fit in one packet to use eager write. Setting it below the default inject size lowers the inject size; see *Inject*. (Default unlimited).
 
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
-: The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
+: The inclusive minimum size of an emulated inter EFA write eligible for the read write protocol, `longread_write`. It also needs RDMA read support (FI_EFA_USE_DEVICE_RDMA not set to 0) and P2P access to the buffer. (Default 65536). When both sides support device RDMA write for the buffer, the write uses device RDMA write instead of an emulated write protocol.
+
+For example, to send a 1024 byte host memory message with `longread`, when its
+capability checks pass:
+
+```
+FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE=1023
+FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE=1023
+FI_EFA_INTER_MIN_READ_MESSAGE_SIZE=1024
+```
+
+The runt size of host memory is 0 by default, so `runtread` declines the
+message. For CUDA with P2P, set FI_EFA_RUNT_SIZE=0 instead of the medium
+variable.
+
+To send a 1024 byte emulated write with `longread_write` on a device without
+RDMA write, when its capability checks pass:
+
+```
+FI_EFA_INTER_MAX_EAGER_WRITE_SIZE=1023
+FI_EFA_INTER_MIN_READ_WRITE_SIZE=1024
+```
 
 *FI_EFA_USE_DEVICE_RDMA*
 : Specify whether to require or ignore RDMA features of the EFA device.
