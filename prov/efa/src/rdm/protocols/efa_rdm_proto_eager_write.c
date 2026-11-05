@@ -52,7 +52,8 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
 	pkt_entry->handle_pke =
 		&efa_rdm_proto_eager_write_handle_rtw_send_completion;
-	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
+						      rtw_hdr->rma_iov);
 }
 
 /**
@@ -243,7 +244,8 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_proto *proto,
 {
 	size_t max_data_offset, max_rtw_data_capacity;
 
-	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+	/* A valid injected write fits eager write, so the bounds must not reject it. */
+	if (!(txe->fi_flags & FI_INJECT) && !efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
 		return false;
 
 	/* TODO: remove interface-specific run-time checks for protocol usage */
@@ -259,6 +261,7 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_proto *proto,
 
 EFA_RDM_PROTO_DEF(eager_write,
 	.wants_mr = false,
+	.max_param_name = "inter_max_eager_write_size",
 	.can_use_protocol = &efa_rdm_proto_eager_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_eager_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_RTW_PKT,

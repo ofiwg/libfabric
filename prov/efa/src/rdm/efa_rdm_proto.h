@@ -148,8 +148,6 @@ struct efa_rdm_proto {
 	int req_pkt_type_tagged_dc;
 };
 
-#define EFA_RDM_PROTO_ANY_POLICY ((enum fi_hmem_iface) OFI_HMEM_MAX)
-
 #define EFA_RDM_PROTO_DEF(_name, ...) \
 	struct efa_rdm_proto efa_rdm_proto_##_name = { \
 		.name = #_name, \
@@ -187,8 +185,7 @@ static inline bool efa_rdm_proto_msg_size_in_bounds(const struct efa_rdm_proto *
  * @param[in]  op     Operation type (ofi_op_msg or ofi_op_tagged)
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
- * @param[out] proto  Selected protocol. Never NULL on success: the long CTS
- *                    protocol is registered last and can always be used.
+ * @param[out] proto  Selected protocol. Never NULL on success.
  * @return 0 on success, negative errno on failure. -FI_EOPNOTSUPP if no
  *         registered protocol can carry the operation.
  */
