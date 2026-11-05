@@ -134,6 +134,9 @@ err:
 
 struct efa_rdm_proto efa_rdm_proto_longcts_rtr = {
 	.name = "longcts_rtr",
+	.bounds = EFA_RDM_PROTO_DEFAULT_BOUNDS,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longcts_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_rtr_construct_tx_pkes,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

@@ -76,14 +76,13 @@ static bool efa_rdm_proto_longread_can_use_for_send(struct efa_rdm_ope *txe,
 		if (!txe->desc[i])
 			return false;
 
-	if (txe->total_len < g_efa_hmem_info[iface].min_read_msg_size)
-		return false;
-
 	return efa_rdm_interop_rdma_read(txe->ep, txe->peer);
 }
 
 EFA_RDM_PROTO_DEF(longread,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longread_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longread_construct_tx_pkes,
 	/* Long read has no DC variant, so the DC entries reuse the non-DC types. */

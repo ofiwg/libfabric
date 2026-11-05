@@ -139,6 +139,18 @@ int efa_test_proto_peer_abort_prov_errno(void);
 /** @brief EFA_RDM_MEDIUM_MSGRTM_PKT, whose enum is not includable from C++. */
 int efa_test_proto_medium_msgrtm_pkt_type(void);
 
+struct efa_test_proto_set_bound_result {
+	int set_ret;
+	size_t set_min;
+	int inverted_ret;
+	int inverted_unchanged;
+	int unsupported_ret;
+	int unsupported_unchanged;
+};
+
+/** @brief Set MIN == MAX on medium, then MAX < MIN on medium and MIN on eager. */
+void efa_test_proto_set_bound(struct efa_test_proto_set_bound_result *out);
+
 struct efa_test_proto_force_result {
 	ssize_t ret;
 	/** Name of the protocol selection picked, empty when it picked none. */
@@ -167,8 +179,8 @@ int efa_test_proto_large_len_beyond_medium(struct fid_ep *ep);
 int efa_test_proto_device_supports_rdma_read(void);
 
 /**
- * @brief Save the host hmem thresholds and the device generation that the read
- * protocol tests override.
+ * @brief Save the host hmem settings, the protocol bounds and the device
+ * generation that the protocol tests override.
  */
 void efa_test_proto_save_globals(void);
 

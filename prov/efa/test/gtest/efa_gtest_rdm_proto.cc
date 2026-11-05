@@ -324,6 +324,20 @@ TEST_F(EfaRdmProtoMediumCompletionTest, peer_abort_completes_txe_once)
 	EXPECT_EQ(res.final_prov_errno, efa_test_proto_peer_abort_prov_errno());
 }
 
+/* MIN > MAX and an unsupported direction are rejected and change nothing. */
+TEST(EfaRdmProtoSetBoundTest, supported_and_rejected_updates)
+{
+	struct efa_test_proto_set_bound_result res = {};
+
+	efa_test_proto_set_bound(&res);
+	EXPECT_EQ(res.set_ret, 0);
+	EXPECT_EQ(res.set_min, 64u);
+	EXPECT_EQ(res.inverted_ret, -FI_EINVAL);
+	EXPECT_TRUE(res.inverted_unchanged);
+	EXPECT_EQ(res.unsupported_ret, -FI_EOPNOTSUPP);
+	EXPECT_TRUE(res.unsupported_unchanged);
+}
+
 struct EfaRdmProtoForceCase {
 	const char *name;
 	/* FI_EFA_RDM_FORCE_SEND_PROTO, nullptr when unset. */

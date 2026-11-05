@@ -162,6 +162,8 @@ static bool efa_rdm_proto_longread_write_can_use(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(longread_write,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longread_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longread_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_LONGREAD_RTW_PKT,

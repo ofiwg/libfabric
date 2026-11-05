@@ -2,6 +2,9 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_runtread.h"
 
 // Harmless suppression: persistent allocation from glibc outside of EFA provider
 const char *__lsan_default_suppressions(void)
@@ -12,19 +15,38 @@ const char *__lsan_default_suppressions(void)
 struct efa_env orig_efa_env = {0};
 struct efa_hmem_info g_efa_hmem_info_backup[OFI_HMEM_MAX];
 
+/* Protocol bounds are global and efa_hmem_info_initialize() rewrites them, so
+ * they are backed up and restored together with g_efa_hmem_info. */
+static struct efa_rdm_proto *const g_efa_unit_test_protos[] = {
+	&efa_rdm_proto_eager,
+	&efa_rdm_proto_medium,
+	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
+	&efa_rdm_proto_longcts,
+	&efa_rdm_proto_eager_write,
+	&efa_rdm_proto_longread_write,
+	&efa_rdm_proto_longcts_write,
+	&efa_rdm_proto_short_rtr,
+	&efa_rdm_proto_longcts_rtr,
+};
+static struct efa_rdm_proto_bounds g_efa_proto_bounds_backup[ARRAY_SIZE(g_efa_unit_test_protos)][OFI_HMEM_MAX];
+
 /* Runs once before all tests */
 static int efa_unit_test_mocks_group_setup(void **state)
 {
 	struct efa_resource *resource;
 	struct fi_info *info;
+	int i;
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
 
 	orig_efa_env = efa_env;
 
-	/* run fi_getinfo to populate g_efa_hmem_info and copy it */
+	/* run fi_getinfo to populate g_efa_hmem_info and the protocol bounds, and copy them */
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
 	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
+	for (i = 0; i < ARRAY_SIZE(g_efa_unit_test_protos); i++)
+		memcpy(g_efa_proto_bounds_backup[i], g_efa_unit_test_protos[i]->bounds, sizeof(g_efa_proto_bounds_backup[i]));
 	fi_freeinfo(info);
 
 	/* Initialize the random number generator */
@@ -56,9 +78,12 @@ static int efa_unit_test_mocks_setup(void **state)
 static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
+	int i;
 
-	/* Reset the contents of g_efa_hmem_info from backup */
+	/* Reset the contents of g_efa_hmem_info and the protocol bounds from backup */
 	memcpy(g_efa_hmem_info, g_efa_hmem_info_backup, sizeof(g_efa_hmem_info));
+	for (i = 0; i < ARRAY_SIZE(g_efa_unit_test_protos); i++)
+		memcpy(g_efa_unit_test_protos[i]->bounds, g_efa_proto_bounds_backup[i], sizeof(g_efa_proto_bounds_backup[i]));
 
 	/* Provide default mock return values for CQ operations during teardown */
 	if (g_efa_unit_test_mocks.efa_ibv_cq_start_poll) {
@@ -957,6 +982,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_atomic_read_responder_accepts_read_only_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_select_runtread_for_large_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_runtread_construct_pkes_carries_read_iov, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_bounds_env_mapping, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

@@ -125,6 +125,8 @@ static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_ope *txe,
 
 EFA_RDM_PROTO_DEF(longcts,
 	.wants_mr = true,
+	.set_min_bound = &efa_rdm_proto_set_min_bound,
+	.set_max_bound = &efa_rdm_proto_set_bound_unsupported,
 	.can_use_protocol = &efa_rdm_proto_longcts_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_construct_req_pke,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

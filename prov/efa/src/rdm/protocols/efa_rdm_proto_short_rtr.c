@@ -40,6 +40,8 @@ static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_ope *txe,
 }
 
 EFA_RDM_PROTO_DEF(short_rtr,
+	.set_min_bound = &efa_rdm_proto_set_bound_unsupported,
+	.set_max_bound = &efa_rdm_proto_set_max_bound,
 	.can_use_protocol = &efa_rdm_proto_short_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_short_rtr_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_SHORT_RTR_PKT,
