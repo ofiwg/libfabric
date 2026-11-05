@@ -54,10 +54,11 @@ static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_proto *proto,
 						  uint16_t header_flags,
 						  int iface, bool use_p2p)
 {
-	/* A zero sized message should use eager protocol */
-	assert(txe->total_len > 0);
+	if (!efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len))
+		return false;
 
-	return efa_rdm_proto_msg_size_in_bounds(proto, iface, txe->total_len);
+	/* A zero sized message should use eager protocol */
+	return txe->total_len > 0;
 }
 
 static bool efa_rdm_proto_medium_set_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){

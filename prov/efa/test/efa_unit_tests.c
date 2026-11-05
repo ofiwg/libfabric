@@ -933,6 +933,7 @@ int main(void)
 		/* begin efa_unit_test_proto.c */
 		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_small_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_zero_len_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_medium_rejects_zero_len_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_single_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_zero_copy_construct_pkes, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_zero_copy_reselected_after_handshake, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

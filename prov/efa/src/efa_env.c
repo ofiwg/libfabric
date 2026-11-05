@@ -195,11 +195,6 @@ void efa_env_param_get(void)
 
 	fi_param_get_str(&efa_prov, "rdm_force_send_proto",
 			 &efa_env.rdm_force_send_proto);
-	/*
-	 * An empty value is how the application can clear the variable.
-	 * So leave the field NULL when the string is empty.
-	 * NULL then means that we should not force the protocol at all.
-	 */
 	if (efa_env.rdm_force_send_proto && !*efa_env.rdm_force_send_proto)
 		efa_env.rdm_force_send_proto = NULL;
 
@@ -337,16 +332,11 @@ void efa_env_define()
 		"(Default: false)");
 	fi_param_define(
 		&efa_prov, "rdm_force_send_proto", FI_PARAM_STRING,
-		"Pin RDM send protocol selection to the protocol of this name "
-		"(`eager`, `medium`, ...) instead of the regular protocol "
-		"selection logic. The named protocol is used irrespective of "
-		"the regular protocol selection logic. This environment "
-		"variable is meant to be used for testing and debugging. If "
-		"the value of the environment variable does not match any of "
-		"the implemented protocols, the send operation will fail. This "
-		"environment variable does not affect protocol selection for "
-		"emulated RMA operations. (Default: unset, i.e. use default "
-		"protocol selection logic.");
+		"Force the RDM send protocol of this name without applying its "
+		"normal size bounds. If the protocol cannot support an operation, "
+		"the normal selector fails instead of falling back. An unknown name "
+		"leaves the selector with no candidate. This debug option does not "
+		"affect emulated RMA operations. (Default: unset)");
 	fi_param_define(&efa_prov, "max_queued_copy", FI_PARAM_SIZE_T,
 			"The maximum number of rx pkts whose payload copies to "
 			"device memory are queued and done together. Must be "

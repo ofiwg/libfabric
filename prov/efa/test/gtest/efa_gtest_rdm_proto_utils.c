@@ -164,63 +164,66 @@ int efa_test_proto_medium_msgrtm_pkt_type(void)
 	return EFA_RDM_MEDIUM_MSGRTM_PKT;
 }
 
-int efa_test_proto_force_select_send(struct fid_ep *ep_fid, struct fid_av *av,
-				     struct fid_domain *domain,
-				     const char *forced, size_t len,
-				     struct efa_test_proto_force_result *out)
+static struct efa_rdm_proto * const efa_test_send_protocols[] = {
+	&efa_rdm_proto_eager,
+	&efa_rdm_proto_medium,
+	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
+	&efa_rdm_proto_longcts,
+};
+
+struct efa_test_proto_bounds {
+	size_t min_size[OFI_HMEM_MAX];
+	size_t max_size[OFI_HMEM_MAX];
+};
+
+static struct efa_rdm_proto *efa_test_proto_find_send(const char *name)
 {
-	struct efa_test_proto_ctx ctx = {0};
-	struct efa_rdm_proto *proto = NULL;
-	struct efa_rdm_ope txe;
-	struct fi_msg msg = {0};
-	struct iovec iov;
-	char *saved_forced;
-	void *desc;
-	int err;
+	size_t i;
 
-	memset(out, 0, sizeof(*out));
+	if (!name)
+		return NULL;
 
-	err = efa_test_proto_setup_peer(ep_fid, av, &ctx);
-	if (err)
-		return err;
-
-	/* A zero length message still needs a registered buffer to describe. */
-	err = efa_test_proto_setup_buf(domain, &ctx, len ? len : 1);
-	if (err)
-		return err;
-
-	desc = fi_mr_desc(ctx.mr);
-	iov.iov_base = ctx.buf;
-	iov.iov_len = len;
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = ctx.peer_addr;
-
-	/* The selector fills the rest of this txe itself. */
-	memset(&txe, 0, sizeof(txe));
-	txe.op = ofi_op_msg;
-	txe.peer = ctx.peer;
-
-	saved_forced = efa_env.rdm_force_send_proto;
-	efa_env.rdm_force_send_proto = (char *) forced;
-
-	out->ret = efa_rdm_proto_select_send_protocol(
-		ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, &txe, &proto);
-
-	efa_env.rdm_force_send_proto = saved_forced;
-
-	/* Leave proto_name empty when selection picked nothing. */
-	if (proto) {
-		strncpy(out->proto_name, proto->name,
-			sizeof(out->proto_name));
-		out->proto_name[sizeof(out->proto_name) - 1] = '\0';
+	for (i = 0; i < ARRAY_SIZE(efa_test_send_protocols); ++i) {
+		if (!strcmp(name, efa_test_send_protocols[i]->name))
+			return efa_test_send_protocols[i];
 	}
 
-	efa_test_proto_teardown_buf(&ctx);
-	return 0;
+	return NULL;
 }
 
+int efa_test_proto_force_select_send(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	const char *forced, struct efa_test_proto_select_result *out)
+{
+	struct efa_test_proto_bounds saved_bounds[
+		ARRAY_SIZE(efa_test_send_protocols)];
+	struct efa_rdm_proto *restore_proto;
+	size_t i;
+	int err;
+
+	restore_proto = efa_test_proto_find_send(efa_env.rdm_force_send_proto);
+	if (!restore_proto)
+		restore_proto = &efa_rdm_proto_eager;
+
+	for (i = 0; i < ARRAY_SIZE(efa_test_send_protocols); ++i) {
+		memcpy(saved_bounds[i].min_size, efa_test_send_protocols[i]->min_size, sizeof(saved_bounds[i].min_size));
+		memcpy(saved_bounds[i].max_size, efa_test_send_protocols[i]->max_size, sizeof(saved_bounds[i].max_size));
+	}
+
+	efa_rdm_proto_configure_force_send(forced);
+	err = efa_test_proto_select(ep, av, domain, 0, 0, 1, 0, out);
+
+	/* Restore both the protocol ordering and the force configuration. */
+	efa_rdm_proto_configure_force_send(restore_proto->name);
+	efa_rdm_proto_configure_force_send(efa_env.rdm_force_send_proto);
+	for (i = 0; i < ARRAY_SIZE(efa_test_send_protocols); ++i) {
+		memcpy(efa_test_send_protocols[i]->min_size, saved_bounds[i].min_size, sizeof(saved_bounds[i].min_size));
+		memcpy(efa_test_send_protocols[i]->max_size, saved_bounds[i].max_size, sizeof(saved_bounds[i].max_size));
+	}
+
+	return err;
+}
 int efa_test_proto_medium_plan(struct fid_ep *ep, struct fid_av *av,
 			       enum fi_hmem_iface iface, int align128,
 			       size_t total_len, int leave_one_tx_pkt,
@@ -812,6 +815,7 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 	efa_test_proto_teardown_buf(&ctx);
 	return 0;
 }
+
 
 static void efa_test_proto_set_system_bounds(struct efa_rdm_proto *proto, size_t min, size_t max)
 {
