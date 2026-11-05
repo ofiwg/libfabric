@@ -77,6 +77,7 @@ fabtests/ubertest/fi_ubertest
 fabtests/common/check_hmem
 fabtests/regression/sighandler_test
 fabtests/regression/pep_close_eq_read
+fabtests/regression/ep_close_eq_events
 fabtests/benchmarks/fi_*
 fabtests/component/sock_test
 fabtests/component/dmabuf-rdma/xe_*
