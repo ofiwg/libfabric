@@ -1264,9 +1264,13 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_cq *efa_cq;
 	struct fid_list_entry *fid_entry;
+	struct efa_ibv_cq *own;
 
-	EFA_GENLOCK_LOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	EFA_GENLOCK_LOCK(&efa_rdm_cq->ibv_cq_poll_list_lock,
+			 efa_ibv_cq_poll_list_lock_sym);
+	EFA_GENLOCK_LOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -1286,16 +1290,17 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		}
 		efa_rdm_cq->need_to_scan_ep_list = false;
 	}
+
+	own = &efa_rdm_cq->efa_cq.ibv_cq;
+	if (dlist_find_first_match(&efa_rdm_cq->ibv_cq_poll_list,
+				   efa_ibv_cq_poll_list_match, own))
+		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, own);
 	EFA_GENLOCK_UNLOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 
-	/* Taking cq->ep_list_lock would deadlock in two ways:
-	 * 1. efa_cq_lock_ep_list() always locks rx before tx.
-	 * 2. another thread reading the other cq takes the two locks in the opposite order.
-	 */
-	EFA_GENLOCK_LOCK(&efa_rdm_cq->ibv_cq_poll_list_lock,
-			 efa_ibv_cq_poll_list_lock_sym);
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
+		if (poll_list_entry->cq == own)
+			continue;
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
 		EFA_GENLOCK_LOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
