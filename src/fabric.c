@@ -1772,6 +1772,8 @@ static const char *const errstr[] = {
 	[FI_ENORX - FI_ERRNO_OFFSET] = "Receiver not ready, no receive buffers available",
 	[FI_ENOMR - FI_ERRNO_OFFSET] = "Memory registration limit exceeded",
 	[FI_EFIREWALLADDR - FI_ERRNO_OFFSET] = "Host unreacheable due to firewall",
+	[FI_NO_EREMOTEIO - FI_ERRNO_OFFSET] = "Remote I/O error",
+	[FI_NO_EKEYREJECTED - FI_ERRNO_OFFSET] = "Key was rejected by service",
 };
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))

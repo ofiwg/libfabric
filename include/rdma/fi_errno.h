@@ -164,7 +164,6 @@ extern "C" {
 //#define	FI_ENOTNAM		ENOTNAM		/* Not a XENIX named type file */
 //#define	FI_ENAVAIL		ENAVAIL		/* No XENIX semaphores available */
 //#define	FI_EISNAM		EISNAM		/* Is a named type file */
-#define	FI_EREMOTEIO		EREMOTEIO	/* Remote I/O error */
 //#define	FI_EDQUOT		EDQUOT		/* Quota exceeded */
 //#define	FI_ENOMEDIUM		ENOMEDIUM	/* No medium found */
 //#define	FI_EMEDIUMTYPE		EMEDIUMTYPE	/* Wrong medium type */
@@ -172,7 +171,6 @@ extern "C" {
 
 //#define	FI_EKEYEXPIRED		EKEYEXPIRED	/* Key has expired */
 //#define	FI_EKEYREVOKED		EKEYREVOKED	/* Key has been revoked */
-#define	FI_EKEYREJECTED		EKEYREJECTED	/* Key was rejected by service */
 //#define	FI_EOWNERDEAD		EOWNERDEAD	/* Owner died */
 //#define	FI_ENOTRECOVERABLE	ENOTRECOVERABLE	/* State not recoverable */
 
@@ -196,8 +194,22 @@ enum {
 	FI_ENORX	 = 269, /* Receiver not ready, no receive buffers available */
 	FI_ENOMR	 = 270, /* No more memory registrations available */
 	FI_EFIREWALLADDR = 271, /* Host unreachable because it is behind firewall */
+	FI_NO_EREMOTEIO     = 272, /* Remote I/O error */
+	FI_NO_EKEYREJECTED  = 273, /* Key was rejected by service */
 	FI_ERRNO_MAX
 };
+
+#ifdef EREMOTEIO
+#define	FI_EREMOTEIO		EREMOTEIO	/* Remote I/O error */
+#else
+#define	FI_EREMOTEIO		FI_NO_EREMOTEIO	/* Remote I/O error */
+#endif
+
+#ifdef EKEYREJECTED
+#define	FI_EKEYREJECTED		EKEYREJECTED	/* Key was rejected by service */
+#else
+#define	FI_EKEYREJECTED		FI_NO_EKEYREJECTED /* Key was rejected by service */
+#endif
 
 const char *fi_strerror(int errnum);
 

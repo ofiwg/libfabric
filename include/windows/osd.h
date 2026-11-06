@@ -207,10 +207,6 @@ extern "C" {
 #ifndef ESTALE
 # define ESTALE			246	/* Stale NFS file handle */
 #endif
-#ifndef EREMOTEIO
-# define EREMOTEIO		247	/* Remote I/O error */
-#endif
-
 /* MSG_NOSIGNAL doesn't exist on Windows */
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL	0
