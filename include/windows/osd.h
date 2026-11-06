@@ -17,7 +17,7 @@
 #ifndef _FI_WIN_OSD_H_
 #define _FI_WIN_OSD_H_
 
-#include "config.h"
+#include <config.h>
 
 #include <WinSock2.h>
 #include <Mswsock.h>
