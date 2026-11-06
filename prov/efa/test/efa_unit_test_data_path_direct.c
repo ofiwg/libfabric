@@ -130,6 +130,14 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	uint64_t test_wr_id = 0xDEADBEEF;
 	uint16_t pool_next_before;
 
+	/*
+	 * This test exercises the wrid index pool, which is only allocated
+	 * when the SQ does not use 64-bit request IDs. Devices that support
+	 * EFADV_WQ_CAPS_64_BIT_REQ_ID (e.g. p5en) enable it by default.
+	 * efa_unit_test_mocks_teardown() restores efa_env after the test.
+	 */
+	efa_env.use_sq_req_id_64_bit = 0;
+
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
