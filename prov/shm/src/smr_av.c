@@ -192,11 +192,16 @@ static void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id)
 	peer_peers = smr_peer_data(peer_smr);
 	peer_id = smr_peer_data(ep->region)[id].id;
 
-	peer_peers[peer_id].id = -1;
-	peer_peers[peer_id].name_sent = 0;
+	if (peer_id >= 0) {
+		peer_peers[peer_id].id = -1;
+		peer_peers[peer_id].name_sent = 0;
+	}
 
 	local_peers = smr_peer_data(ep->region);
-	ofi_xpmem_release(&local_peers[peer_id].xpmem);
+	if (local_peers[id].xpmem.avail) {
+		ofi_xpmem_release(&local_peers[id].xpmem);
+		local_peers[id].xpmem.avail = false;
+	}
 }
 
 void smr_unmap_region(struct smr_map *map, int64_t peer_id, bool local)
