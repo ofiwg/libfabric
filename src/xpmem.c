@@ -39,6 +39,7 @@
 #include <ofi_iov.h>
 #include <ofi_mem.h>
 #include <ofi_mr.h>
+#include <ofi_tree.h>
 #include <ofi.h>
 #include <stdio.h>
 
@@ -239,6 +240,27 @@ int ofi_xpmem_enable(struct ofi_xpmem_pinfo *peer,
 
 void ofi_xpmem_release(struct ofi_xpmem_client *xpmem)
 {
+	struct ofi_mr_entry *entry;
+	struct dlist_entry *tmp;
+
+	if (xpmem_cache) {
+		pthread_mutex_lock(&mm_lock);
+		dlist_foreach_container_safe(&xpmem_cache->lru_list,
+					     struct ofi_mr_entry, entry,
+					     list_entry, tmp) {
+			if (entry->info.peer_id != (uint64_t) xpmem->apid)
+				continue;
+			dlist_remove(&entry->list_entry);
+			ofi_rbmap_delete(&xpmem_cache->tree, entry->node);
+			entry->node = NULL;
+			xpmem_cache->cached_cnt--;
+			xpmem_cache->cached_size -= entry->info.iov.iov_len;
+			dlist_insert_tail(&entry->list_entry,
+					  &xpmem_cache->dead_region_list);
+		}
+		pthread_mutex_unlock(&mm_lock);
+		ofi_mr_cache_flush(xpmem_cache, false);
+	}
 	xpmem_release(xpmem->apid);
 }
 
