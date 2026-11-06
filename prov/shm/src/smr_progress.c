@@ -523,10 +523,9 @@ fail:
 	return ret;
 }
 
-static ssize_t smr_progress_ipc(struct smr_ep *ep, struct smr_cmd *cmd,
-				struct fi_peer_rx_entry *rx_entry,
-				struct ofi_mr **mr, struct iovec *iov,
-				size_t iov_count)
+static ssize_t smr_ipc_copy(struct smr_ep *ep, struct smr_cmd *cmd,
+			    struct fi_peer_rx_entry *rx_entry,
+			    struct iovec *iov, size_t iov_count, bool async)
 {
 	void *ptr;
 	int ret;
@@ -549,8 +548,7 @@ static ssize_t smr_progress_ipc(struct smr_ep *ep, struct smr_cmd *cmd,
 	ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
 		(uintptr_t) cmd->data.ipc_info.offset;
 
-	if (ofi_hmem_async_copy_enabled(cmd->data.ipc_info.iface) &&
-	    !(cmd->hdr.smr_flags & SMR_BUFFER_RECV)) {
+	if (async) {
 		ret = smr_ipc_async_copy(ep, cmd, rx_entry, mr_entry, iov,
 					 iov_count, ptr);
 		if (ret)
@@ -580,6 +578,16 @@ out:
 		cmd->hdr.smr_flags |= SMR_OP_ERROR;
 
 	return ret;
+}
+
+static ssize_t smr_progress_ipc(struct smr_ep *ep, struct smr_cmd *cmd,
+				struct fi_peer_rx_entry *rx_entry,
+				struct ofi_mr **mr, struct iovec *iov,
+				size_t iov_count)
+{
+	return smr_ipc_copy(ep, cmd, rx_entry, iov, iov_count,
+			    ofi_hmem_async_copy_enabled(
+					cmd->data.ipc_info.iface));
 }
 
 typedef ssize_t (*smr_progress_func)(
@@ -1059,7 +1067,10 @@ static int smr_unexp_ipc(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 		cmd_ctx->cmd->hdr.size = MIN(total_size - bytes, SMR_SAR_SIZE);
 		cmd_ctx->cmd->data.ipc_info.offset = cmd->data.ipc_info.offset + bytes;
 
-		ret = smr_progress_ipc(ep, cmd_ctx->cmd, NULL, NULL, &iov, 1);
+		/* Stage synchronously so the cmd can be returned to the sender
+		 * before the receive is posted.
+		 */
+		ret = smr_ipc_copy(ep, cmd_ctx->cmd, NULL, &iov, 1, false);
 		if (ret) {
 			ofi_buf_free(buf);
 			goto out;
