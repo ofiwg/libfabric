@@ -269,10 +269,14 @@ static int ofi_remove_patch(struct ofi_intercept *intercept)
 static void ofi_restore_intercepts(void)
 {
 	struct ofi_intercept *intercept;
+	bool restored = true;
 
 	dlist_foreach_container(&memhooks.intercept_list, struct ofi_intercept,
-		intercept, entry)
-		ofi_remove_patch(intercept);
+		intercept, entry) {
+		if (ofi_remove_patch(intercept))
+			restored = false;
+	}
+	symbols_intercepted = !restored;
 }
 
 #if (defined(__x86_64___) || defined(__amd64__))
