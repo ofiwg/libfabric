@@ -275,11 +275,15 @@ void musa_dev_free(uint64_t device, void *addr);
  * open_fd	fd from pidfd_get_fd. Needed for closing extra fd and for
  * 		opening with open_handle
  * pid_fd	fd that references a pid used to open an fd across processes
+ * alloc_id	unique id of the allocation the handle was taken from. The fd
+ * 		can be reused for a new allocation at the same address, so the
+ * 		id is what tells a cached handle apart from a stale one
  */
 struct ze_pid_handle {
 	int get_fd;
 	int open_fd;
 	int pid_fd;
+	uint64_t alloc_id;
 };
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);

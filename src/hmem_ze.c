@@ -1012,7 +1012,7 @@ int ze_hmem_get_handle(void *dev_buf, size_t size, void **handle)
 	memcpy(&pid_handle->get_fd, &temp_handle,
 		sizeof(pid_handle->get_fd));
 
-	return FI_SUCCESS;
+	return ze_hmem_get_id(dev_buf, &pid_handle->alloc_id);
 }
 
 void ze_set_pid_fd(void **handle, int pid_fd)

@@ -43,7 +43,8 @@ static bool ze_ipc_monitor_valid(struct ofi_mem_monitor *monitor,
 	struct ze_pid_handle *existing = (struct ze_pid_handle *)info->handle;
 	struct ze_pid_handle *comp = (struct ze_pid_handle *)entry->info.handle;
 
-	return (existing->get_fd == comp->get_fd);
+	return (existing->get_fd == comp->get_fd &&
+		existing->alloc_id == comp->alloc_id);
 }
 
 #else
