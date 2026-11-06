@@ -53,19 +53,29 @@ void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 	/* enable xpmem locally if the peer also has it enabled */
 	if (smr_get_vma_cap(peer_smr->self_vma_caps, FI_SHM_P2P_XPMEM) &&
 	    smr_get_vma_cap(ep->region->self_vma_caps, FI_SHM_P2P_XPMEM)) {
-		ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
-				       &local_peers[id].xpmem);
-		if (ret) {
-			local_peers[id].xpmem.avail = false;
-			smr_set_vma_cap(&ep->region->self_vma_caps,
-					FI_SHM_P2P_XPMEM, false);
-			return;
+		if (!local_peers[id].xpmem.avail) {
+			ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
+					       &local_peers[id].xpmem);
+			if (ret) {
+				local_peers[id].xpmem.avail = false;
+				smr_set_vma_cap(&ep->region->self_vma_caps,
+						FI_SHM_P2P_XPMEM, false);
+				smr_set_vma_cap(&ep->region->peer_vma_caps,
+						FI_SHM_P2P_XPMEM, false);
+				return;
+			}
+			local_peers[id].xpmem.avail = true;
+			local_peers[id].xpmem.addr_max =
+						peer_smr->xpmem_self.address_max;
 		}
-		local_peers[id].xpmem.avail = true;
-		local_peers[id].xpmem.addr_max =
-					peer_smr->xpmem_self.address_max;
+		if (ep->region != peer_smr)
+			smr_set_vma_cap(&ep->region->peer_vma_caps,
+					FI_SHM_P2P_XPMEM, true);
 	} else {
 		local_peers[id].xpmem.avail = false;
+		if (ep->region != peer_smr)
+			smr_set_vma_cap(&ep->region->peer_vma_caps,
+					FI_SHM_P2P_XPMEM, false);
 	}
 
 	smr_set_ipc_valid(ep, id);
