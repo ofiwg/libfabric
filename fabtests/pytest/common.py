@@ -649,10 +649,10 @@ class ClientServerTest:
         else:
             assert host_memory_type == "neuron"
             num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
-            if command_type == "server":
-                additional_env = f"{additional_env} NEURON_RT_VISIBLE_CORES={hmem_device_id * num_cores}"
-            else:
-                additional_env = f"{additional_env} NEURON_RT_VISIBLE_CORES={hmem_device_id * num_cores + 1}"
+            neuron_core_id = hmem_device_id * num_cores
+            if command_type != "server":
+                neuron_core_id += 1
+            additional_env = f"{additional_env} NEURON_RT_VISIBLE_CORES={neuron_core_id}"
             wait_until_neuron_device_available(host_ip, hmem_device_id)
 
         if self._cmdline_args.provider == "efa":
@@ -666,9 +666,9 @@ class ClientServerTest:
                 assert efa_device, \
                     "{} has no NIC on the {} path to GPU memory".format(host_ip, nic_dma_path)
             elif host_memory_type == "neuron":
-                num_cores = num_neuron_cores_on_device(host_ip, hmem_device_id)
-                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip,
-                                                                                hmem_device_id * num_cores)
+                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(
+                    host_ip, neuron_core_id, self._cmdline_args.binpath,
+                    self._cmdline_args.environments)
             else:
                 efa_device = efa.efa_common.get_efa_device_name_for_hmem_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
