@@ -17,10 +17,6 @@ import groovy.transform.Field
 @Field def samwise_test_runner_path = "/tmp/SamwiseTestRunner"
 @Field def samwise_test_schema_path = "/tmp/SamwiseTestSchema"
 
-def is_post_merge() {
-    return env.CHANGE_ID == null
-}
-
 def get_account_id() {
     return sh (
         script: "aws sts get-caller-identity --query Account --output text | tr -dc 0-9",
@@ -90,45 +86,12 @@ def download_all_testing_packages() {
     }
 }
 
-def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_count, region, addl_args) {
-    /*
-     * Run PortaFiducia/tests/test_orchestrator.py with given command line arguments
-     * param@ args: str, the command line arguments
-     */
-    def cluster_name = get_cluster_name(build_tag, os, instance_type)
-    def args = "--os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
-    sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && ./test_orchestrator.py ${args}"
-}
-
-def get_random_string(len) {
-    def s = sh (
-        script: "cat /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9 | head -c ${len}",
-        returnStdout: true
-    )
-    return s
-}
-
 def get_cluster_name_prefix(build_tag) {
     def prefix = sh(
                 script: "echo ${build_tag} | sed \"s/^jenkins-//g\" | sed \"s/ //g\" | tr -d '.\\n'",
                 returnStdout: true
             )
     return prefix.take(28)
-}
-
-def get_cluster_name(build_tag, os, instance_type) {
-    /*
-     * Compose the cluster name. Pcluster requires a cluster name under 60 characters.
-     * cluster name cannot have ".".
-     * Jenkins does not allow groovy to use the replace() method
-     * of string. Therefore we used shell command sed to replace "." with ""
-     */
-    def cluster_name = sh(
-                        script: "echo '${get_cluster_name_prefix(build_tag)}-${os.take(10)}-${instance_type.take(10)}-'${get_random_string(8)} | tr -d '.\\n'",
-                        returnStdout: true
-                     )
-
-    return cluster_name
 }
 
 /*
@@ -202,18 +165,8 @@ def get_cluster_name(build_tag, os, instance_type) {
 ]
 
 def check_for_relevant_changes() {
-    def diff_range
-    if (is_post_merge()) {
-        def prev = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
-        if (!prev) {
-            echo "No previous successful commit recorded; running to seed the baseline."
-            return
-        }
-        diff_range = "${prev}..HEAD"
-    } else {
-        sh "git fetch origin ${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags --no-recurse-submodules"
-        diff_range = "origin/${env.CHANGE_TARGET}...HEAD"
-    }
+    sh "git fetch origin ${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags --no-recurse-submodules"
+    def diff_range = "origin/${env.CHANGE_TARGET}...HEAD"
     def all_changes = sh(
         script: "git diff --name-only ${diff_range}",
         returnStdout: true
@@ -284,11 +237,7 @@ def record_coverage() {
         echo "No merged coverage report produced; skipping coverage report."
         return
     }
-    // Delta coverage vs. the PR target branch (needs the Git Forensics plugin).
-    // Post-merge produces the baseline
-    if (!is_post_merge()) {
-        discoverGitReferenceBuild(targetBranch: env.CHANGE_TARGET ?: 'main')
-    }
+    discoverGitReferenceBuild(targetBranch: env.CHANGE_TARGET ?: 'main')
     // Informational only for now: no qualityGates,
     // Add a gate here later, e.g.
     // qualityGates: [[threshold: 80.0, metric: 'LINE', baseline: 'MODIFIED_LINES', unstable: true]]
@@ -306,28 +255,13 @@ def post_build_actions() {
     }
     sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs"
     sh 'find outputs -name "*.xml" | xargs du -shc'
-    // Blocking stages only — non-recursive on purpose so it does NOT descend into outputs/pmc/
-    junit testResults: 'outputs/*.xml', keepLongStdio: false
-    // Advisory PMC results: recorded/visible but never degrade the build
-    junit testResults: 'outputs/pmc/**/*.xml', skipMarkingBuildUnstable: true, allowEmptyResults: true, keepLongStdio: false
+    junit testResults: 'outputs/**/*.xml', keepLongStdio: false
     archiveArtifacts artifacts: 'outputs/**/*.*'
     record_coverage()
-    // Try To Cleanup Resources
-    def regions = ["us-east-1", "eu-north-1", "us-west-2", "ap-southeast-4"]
-    def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
-    regions.each { region ->
-        try {
-            sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
-        } catch (Exception e) {
-            echo "Warning: Failed to cleanup resources in ${region}: ${e.getMessage()}"
-        }
-    }
 }
 
 /*
  * Persistent Manual Cluster (PMC) configuration tables and helpers.
- * These stages run as non-blocking (catchError) so failures only mark
- * the stage UNSTABLE without failing the overall build.
  */
 def prci_instance_configuration(cluster_key) {
     def cluster_configs = [
@@ -404,7 +338,7 @@ def run_test_orchestrator_once_persistent(run_name, cluster_name, os, instance_t
     args += " --public-ip-addresses ${public_ip_addresses}"
     args += " ${addl_args}"
     args += " --perf-metrics-path outputs"
-    args += " --junit-xml outputs/pmc/${run_name}.xml"
+    args += " --junit-xml outputs/${run_name}.xml"
     sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && STAGE_NAME='" + run_name + "' ./test_orchestrator.py ${args}"
 }
 
@@ -415,14 +349,12 @@ def get_test_stage_with_lock_persistent(stage_name, cluster_key, lock_count, add
     }
     return {
         stage("${stage_name}") {
-            catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', catchInterruptions: false) {
-                lock(label: instance_info.lock_label, quantity: lock_count, variable: 'LOCKED_RESOURCE') {
-                    echo "Acquired lock resource(s): ${env.LOCKED_RESOURCE}"
-                    def public_ip_addresses = env.LOCKED_RESOURCE.tokenize(',').collect { resource ->
-                        manage_jenkins_lock_ip_mapping_read(instance_info.region, instance_info.cluster_name, resource)
-                    }.join(' ')
-                    run_test_orchestrator_once_persistent(stage_name, instance_info.cluster_name, instance_info.os, instance_info.instance_type, lock_count, instance_info.region, public_ip_addresses, addl_args)
-                }
+            lock(label: instance_info.lock_label, quantity: lock_count, variable: 'LOCKED_RESOURCE') {
+                echo "Acquired lock resource(s): ${env.LOCKED_RESOURCE}"
+                def public_ip_addresses = env.LOCKED_RESOURCE.tokenize(',').collect { resource ->
+                    manage_jenkins_lock_ip_mapping_read(instance_info.region, instance_info.cluster_name, resource)
+                }.join(' ')
+                run_test_orchestrator_once_persistent(stage_name, instance_info.cluster_name, instance_info.os, instance_info.instance_type, lock_count, instance_info.region, public_ip_addresses, addl_args)
             }
         }
     }
@@ -433,7 +365,7 @@ def build_pmc_test_stages() {
     def timeout = "--timeout 90"
     def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
     def job_args = "--job-name '${env.JOB_NAME}' --job-url ${env.BUILD_URL}"
-    def persistent_manual_cluster_addl_args = " --keep-cluster --skip-fixture-setup --skip-health-checks --use-existing-installer --enable-placement-group false --lean-cluster-setup --use-prebuilt-ami-with-efa-installer true --cleanup-pf-directory true --libfabric-prci true --enable-live-log true"
+    def persistent_manual_cluster_addl_args = " --keep-cluster --skip-fixture-setup --skip-health-checks --use-existing-installer --enable-placement-group false --lean-cluster-setup --use-prebuilt-ami-with-efa-installer true --cleanup-pf-directory true --libfabric-prci true --enable-live-log false"
     def container_addl_args = " --test-in-containers-on-ec2"
 
     def pr_selector = "--test-type pr --test-libfabric-pr $env.CHANGE_ID"
@@ -447,6 +379,7 @@ def build_pmc_test_stages() {
     def sm2_addl_args = "${timeout} ${generic_pf} --test-libfabric-provider sm2 --enable-efa false --test-list test_pr_ci_fabtests test_run_efa_unit_tests ${job_args}${persistent_manual_cluster_addl_args}${container_addl_args}"
     def shm_addl_args = "${timeout} ${generic_pf} --test-libfabric-provider shm --enable-efa false --test-list test_pr_ci_fabtests test_run_efa_unit_tests ${job_args}${persistent_manual_cluster_addl_args}${container_addl_args}"
 
+    // Multi Node Tests - EFA
     stages["pmc_2_c5n_ubuntu2604_efa"]              = get_test_stage_with_lock_persistent("pmc_2_c5n_ubuntu2604_efa",              "c5n",        2, efa_addl_args)
     stages["pmc_2_c7g_ubuntu2404_efa"]              = get_test_stage_with_lock_persistent("pmc_2_c7g_ubuntu2404_efa",              "c7g-ub24",   2, efa_addl_args)
     stages["pmc_2_c7gn_ubuntu2204_efa"]             = get_test_stage_with_lock_persistent("pmc_2_c7gn_ubuntu2204_efa",             "c7gn",       2, efa_addl_args)
@@ -456,132 +389,15 @@ def build_pmc_test_stages() {
     stages["pmc_2_hpc6a_rhel8_efa"]                 = get_test_stage_with_lock_persistent("pmc_2_hpc6a_rhel8_efa",                 "hpc6a",      2, efa_hpc_dso_addl_args)
     stages["pmc_2_c8gn_alinux2023_efa"]             = get_test_stage_with_lock_persistent("pmc_2_c8gn_alinux2023_efa",             "c8gn",       2, efa_addl_args)
     stages["pmc_2_trn2_alinux2023_efa"]             = get_test_stage_with_lock_persistent("pmc_2_trn2_alinux2023_efa",             "trn2",       2, efa_addl_args)
-    stages["pmc_2_c7i_alinux2023_tcp"]              = get_test_stage_with_lock_persistent("pmc_2_c7i_alinux2023_tcp",              "c7i-al2023", 2, tcp_addl_args)
-    stages["pmc_2_c7i_ubuntu2204_sockets"]          = get_test_stage_with_lock_persistent("pmc_2_c7i_ubuntu2204_sockets",          "c7i-ub22",   2, sockets_addl_args)
-    stages["pmc_1_g4dn_alinux2023_sm2"]             = get_test_stage_with_lock_persistent("pmc_1_g4dn_alinux2023_sm2",             "g4dn16x",    1, sm2_addl_args)
-    stages["pmc_1_g4dn_ubuntu2404_shm"]             = get_test_stage_with_lock_persistent("pmc_1_g4dn_ubuntu2404_shm",             "g4dn-ub24-shm", 1, shm_addl_args)
-    stages["pmc_1_g4dn_ubuntu2404_shm_disable-cma"] = get_test_stage_with_lock_persistent("pmc_1_g4dn_ubuntu2404_shm_disable-cma", "g4dn-ub24-cma", 1, shm_addl_args + " --enable-cma false")
-
-    return stages
-}
-
-
-
-def get_test_stage_with_lock(stage_name, build_tag, os, instance_type, instance_count, region, lock_label, addl_args) {
-    /*
-     * Generate a single test stage that run test_orchestrator.py with the given parameters.
-     * param@ stage_name: the name of the stage
-     * param@ build_tag: the BUILD_TAG env generated by Jenkins
-     * param@ os: the operating system for the test stage.
-     * param@ instance_type: the instance type for the test stage.
-     * param@ instance_count: number of intances to use
-     * param@ region: the (default) aws region where the tests are run.
-     * param@ addl_args: additional arguments passed to test_orchestrator.py
-     * return@: the test stage.
-     */
-    return {
-        stage("${stage_name}") {
-            lock(label: lock_label, quantity: instance_count) {
-                this.run_test_orchestrator_once(stage_name, build_tag, os, instance_type, instance_count, region, addl_args)
-            }
-        }
-    }
-}
-
-def build_pr_test_stages() {
-    def stages = [:]
-    def timeout = "--timeout 90"
-    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
-    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg} --use-prebuilt-ami-with-efa-installer true"
-    def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
-    def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
-
-    def efa_provider = "--test-libfabric-provider efa"
-    def shm_provider = "--test-libfabric-provider shm --enable-efa false"
-    def sm2_provider = "--test-libfabric-provider sm2 --enable-efa false"
-    def tcp_provider = "--test-libfabric-provider tcp --enable-efa false"
-    def sockets_provider = "--test-libfabric-provider sockets --enable-efa false"
-
-    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
-    def addl_args_neuron = "${timeout} ${generic_pf} ${efa_provider} --test-list test_neuron_sdk_compilation --use-prebuilt-accelerator-ami neuron"
-    def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
-    def addl_args_efa_hpc_dso = "${addl_args_efa_hpc} test_pr_ci_dso"
-    def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
-    def addl_args_sm2 = "${timeout} ${generic_pf} ${sm2_provider} ${pr_ci_tests}"
-    def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
-    def addl_args_sockets = "${timeout} ${generic_pf} ${sockets_provider} ${pr_ci_tests}"
-
-    // Use lockable resources to limit the number of jobs that can get executed in parallel
-    def hpc7g16x_lock_label = "hpc7g16x"
-    def hpc8a96x_lock_label = "hpc8a96x"
-    def c7g16x_lock_label   = "c7g16x"
-    def c7gn16x_lock_label  = "c7gn16x"
-    def c8gn16x_lock_label  = "c8gn16x"
-    def hpc6a48x_lock_label = "hpc6a48x"
-    def g4dn16x_lock_label  = "g4dn16x"
-    def g4dn12x_lock_label  = "g4dn12x"
-    def c5n18x_lock_label   = "c5n18x"
-    def c7i16x_lock_label   = "c7i16x"
-
-    // Multi Node Tests - EFA
-    stages["2_hpc7g_rhel9_efa"] = get_test_stage_with_lock("2_hpc7g_rhel9_efa", env.BUILD_TAG, "rhel9", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
-    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa_hpc}")
-    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
-    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
-    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
-    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
-    stages["2_c5n_ubuntu2604_efa"]   = get_test_stage_with_lock("2_c5n_ubuntu2604_efa",   env.BUILD_TAG, "ubuntu2604", "c5n.18xlarge",   2, "us-east-1", c5n18x_lock_label,   "--odcr cr-03c9932f13d83e2d9 ${addl_args_efa}")
-
-    // Multi Node Tests - Accelerator EFA
-    // Use g4dn.12xlarge (4 GPUs) for the EFA CUDA stage to avoid the
-    // single-GPU worker oversubscription that hangs the EFA progress engine.
-    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.12xlarge",  2, "us-east-1",      g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_efa}")
-
 
     // Multi Node Tests - Other Providers
-    stages["2_c7i_alinux2023_tcp"]      = get_test_stage_with_lock("2_c7i_alinux2023_tcp",      env.BUILD_TAG, "alinux2023", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_tcp}")
-    stages["2_c7i_ubuntu2204_sockets"]  = get_test_stage_with_lock("2_c7i_ubuntu2204_sockets",  env.BUILD_TAG, "ubuntu2204", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_sockets}")
+    stages["pmc_2_c7i_alinux2023_tcp"]              = get_test_stage_with_lock_persistent("pmc_2_c7i_alinux2023_tcp",              "c7i-al2023", 2, tcp_addl_args)
+    stages["pmc_2_c7i_ubuntu2204_sockets"]          = get_test_stage_with_lock_persistent("pmc_2_c7i_ubuntu2204_sockets",          "c7i-ub22",   2, sockets_addl_args)
 
     // Single Node Tests - SM2 / SHM
-    stages["1_g4dn_alinux2023_sm2"]              = get_test_stage_with_lock("1_g4dn_alinux2023_sm2",              env.BUILD_TAG, "alinux2023", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_sm2}")
-    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_shm}")
-    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_shm} --enable-cma false")
-
-    // Single Node Tests - Compilation wtih Neuron SDK
-    stages["1_c5n_alinux2023_neuron"]  = get_test_stage_with_lock("1_c5n_alinux2023_neuron", env.BUILD_TAG, "alinux2023", "c5n.18xlarge",  1, "us-east-1", c5n18x_lock_label, "--odcr cr-03c9932f13d83e2d9 ${addl_args_neuron}")
-
-    return stages
-}
-
-def build_postmerge_test_stages() {
-    def stages = [:]
-    def timeout = "--timeout 90"
-    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
-
-    def commit_selector = "--test-type commit --test-libfabric-commit ${env.GIT_COMMIT}"
-    def generic_pf = "--cluster-type manual_cluster --test-target libfabric ${commit_selector} ${test_suite_pkg} --use-prebuilt-ami-with-efa-installer true"
-
-    def efa_provider = "--test-libfabric-provider efa"
-    def unit_tests_coverage = "--test-list 'test_run_efa_unit_tests[unittest-debug] and not asan' 'test_run_efa_unit_tests_gtest[unittest-debug] and not asan'"
-
-    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${unit_tests_coverage}"
-
-    def hpc7g16x_lock_label = "hpc7g16x"
-    def hpc8a96x_lock_label = "hpc8a96x"
-    def c7g16x_lock_label   = "c7g16x"
-    def c7gn16x_lock_label  = "c7gn16x"
-    def c8gn16x_lock_label  = "c8gn16x"
-    def hpc6a48x_lock_label = "hpc6a48x"
-    def g4dn16x_lock_label  = "g4dn16x"
-
-    // only EFA provider needs to be tested for unit test coverage
-    stages["2_hpc7g_rhel9_efa"] = get_test_stage_with_lock("2_hpc7g_rhel9_efa", env.BUILD_TAG, "rhel9", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa}")
-    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa}")
-    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
-    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
-    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
-    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa}")
-    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
+    stages["pmc_1_g4dn_alinux2023_sm2"]             = get_test_stage_with_lock_persistent("pmc_1_g4dn_alinux2023_sm2",             "g4dn16x",        1, sm2_addl_args)
+    stages["pmc_1_g4dn_ubuntu2404_shm"]             = get_test_stage_with_lock_persistent("pmc_1_g4dn_ubuntu2404_shm",             "g4dn-ub24-shm",  1, shm_addl_args)
+    stages["pmc_1_g4dn_ubuntu2404_shm_disable-cma"] = get_test_stage_with_lock_persistent("pmc_1_g4dn_ubuntu2404_shm_disable-cma", "g4dn-ub24-cma",  1, shm_addl_args + " --enable-cma false")
 
     return stages
 }
@@ -645,13 +461,7 @@ pipeline {
             when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
-                    def stages = is_post_merge() ? build_postmerge_test_stages()
-                                                 : build_pr_test_stages()
-                    // Add PMC stages (non-blocking) to run in parallel with existing stages — PR only
-                    if (!is_post_merge()) {
-                        stages = stages + build_pmc_test_stages()
-                    }
-                    parallel stages
+                    parallel build_pmc_test_stages()
                 }
             }
         }
