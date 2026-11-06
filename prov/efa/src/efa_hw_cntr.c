@@ -101,7 +101,8 @@ static void efa_hw_cntr_no_progress(struct util_cntr *cntr)
 	 * their value. However, the CQ still accumulates completion entries for
 	 * each operation.
 	 *
-	 * EFA-direct claims FI_RM_ENABLED and returns -FI_EAGAIN on data transfer
+	 * EFA-direct runs with FI_RM_DISABLED (resource management is the
+	 * application's responsibility) and returns -FI_EAGAIN on data transfer
 	 * operations when the SQ or RQ is full. Per the fi_cq man page,
 	 * applications size their CQ to at least the same size as the
 	 * endpoint queues bound to it, so a full SQ/RQ implies the CQ is also

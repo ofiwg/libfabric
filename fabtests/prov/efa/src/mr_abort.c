@@ -2927,7 +2927,6 @@ int main(int argc, char **argv)
 	}
 	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
-	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->addr_format = opts.address_format;
 
 	if (sl_low_latency)
