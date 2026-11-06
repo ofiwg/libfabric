@@ -186,7 +186,7 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 	vrb_ep_prepare_rdma_cm_param(&ep->conn_param, ep->cm_priv_data,
 					priv_data_len);
-	ep->conn_param.retry_count = vrb_conn_retry_count();
+	ep->conn_param.retry_count = (uint8_t) vrb_gl_data.retry_count;
 
 	if (ep->srx)
 		ep->conn_param.srq = 1;

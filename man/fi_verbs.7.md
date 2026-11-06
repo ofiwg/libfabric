@@ -192,8 +192,7 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_RETRY_COUNT*
 : Set the transport retry count of connected QPs (0 - 7).  A send that is
   not acknowledged fails after (retry count + 1) x the local ACK timeout,
-  for example on a connection whose peer has restarted.  -1 keeps the
-  rdma_cm maximum of 7. (default: -1)
+  for example on a connection whose peer has restarted. (default: 7)
 
 *FI_VERBS_USE_ODP*
 : Enable on-demand paging memory registrations, if supported.  This is

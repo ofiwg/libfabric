@@ -223,12 +223,6 @@ extern struct vrb_gl_data {
 	int	use_flow_ctrl;
 } vrb_gl_data;
 
-/* -1 keeps the previous value; rdma_cm clamps it to 7 */
-static inline uint8_t vrb_conn_retry_count(void)
-{
-	return vrb_gl_data.retry_count < 0 ? 15 : (uint8_t) vrb_gl_data.retry_count;
-}
-
 struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;

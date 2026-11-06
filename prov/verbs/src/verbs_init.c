@@ -51,7 +51,7 @@ struct vrb_gl_data vrb_gl_data = {
 	.def_rx_iov_limit	= 4,
 	.def_inline_size	= 256,
 	.min_rnr_timer		= VERBS_DEFAULT_MIN_RNR_TIMER,
-	.retry_count		= -1,
+	.retry_count		= 7,
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
@@ -691,9 +691,9 @@ static int vrb_read_params(void)
 	}
 
 	if (vrb_get_param_int("retry_count", "Set the transport retry count of "
-			      "connected QPs (0 - 7, -1 uses the rdma_cm "
-			      "maximum)", &vrb_gl_data.retry_count) ||
-	    ((vrb_gl_data.retry_count < -1) ||
+			      "connected QPs (0 - 7)",
+			      &vrb_gl_data.retry_count) ||
+	    ((vrb_gl_data.retry_count < 0) ||
 	     (vrb_gl_data.retry_count > 7))) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of retry_count\n");
 		return -FI_EINVAL;
