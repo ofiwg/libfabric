@@ -122,14 +122,8 @@ ssize_t efa_rdm_proto_medium_handle_rtm_send_completion(
 }
 
 /**
- * @brief Calculate how many REQ packets are required and how much data each
- *        packet carries.
- *
- * The data is spread evenly over the fewest packets that can carry it.
- * because the EFA device is better at handling a set of similarly sized
- * sends.
- *
- * Each size is rounded down to the interface's memory alignment.
+ * @brief Decide how many REQ packets carry the message and how much each
+ *        carries.
  *
  * @param[out] pkt_entry_cnt		number of packets to send
  * @param[out] pkt_entry_data_size_vec	data size of each of those packets
@@ -142,52 +136,22 @@ ssize_t efa_rdm_proto_medium_plan_tx_pkes(struct efa_rdm_ep *ep,
 					 size_t *pkt_entry_cnt,
 					 size_t *pkt_entry_data_size_vec)
 {
-	size_t i, max_pkt_entry_cnt, max_data_size, data_size, remainder;
-	size_t full_pkt_cnt, memory_alignment;
-	enum fi_hmem_iface iface;
+	size_t max_data_size;
 
 	assert(efa_rdm_pkt_type_is_medium(req_pkt_type));
 	assert(txe->total_len);
 	assert(ep->efa_max_outstanding_tx_ops >=
 	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
 
-	max_pkt_entry_cnt = MIN(efa_rdm_ep_get_available_tx_pkts(ep),
-				efa_base_ep_get_tx_pool_size(&ep->base_ep));
-
-	assert(max_pkt_entry_cnt > 0);
-
 	max_data_size = efa_rdm_proto_max_req_data_capacity(
-		ep, req_pkt_type,
-		efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags));
-	assert(max_data_size);
+		ep, efa_rdm_pkt_type_get_req_hdr_size(
+			    req_pkt_type,
+			    efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+			    0 /* rma_iov_count */));
 
-	iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
-			       FI_HMEM_SYSTEM;
-	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
-
-	*pkt_entry_cnt = (txe->total_len - 1) / max_data_size + 1;
-	data_size = (txe->total_len - 1) / *pkt_entry_cnt + 1;
-	data_size &= ~(memory_alignment - 1);
-	assert(data_size);
-
-	full_pkt_cnt = txe->total_len / data_size;
-	remainder = txe->total_len - full_pkt_cnt * data_size;
-	*pkt_entry_cnt = full_pkt_cnt +
-			 (data_size + remainder > max_data_size ? 1 : 0);
-
-	if (*pkt_entry_cnt > max_pkt_entry_cnt)
-		return -FI_EAGAIN;
-
-	assert(full_pkt_cnt > 0);
-	for (i = 0; i < full_pkt_cnt; ++i)
-		pkt_entry_data_size_vec[i] = data_size;
-
-	if (*pkt_entry_cnt == full_pkt_cnt)
-		pkt_entry_data_size_vec[full_pkt_cnt - 1] += remainder;
-	else
-		pkt_entry_data_size_vec[full_pkt_cnt] = remainder;
-
-	return FI_SUCCESS;
+	return efa_rdm_proto_split_req_data(ep, txe, txe->total_len,
+					    max_data_size, pkt_entry_cnt,
+					    pkt_entry_data_size_vec);
 }
 
 /**

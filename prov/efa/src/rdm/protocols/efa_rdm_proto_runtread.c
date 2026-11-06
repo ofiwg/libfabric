@@ -236,6 +236,67 @@ ssize_t efa_rdm_proto_runtread_handle_rtm_send_completion(
 }
 
 /**
+ * @brief Set the number of bytes a runt read message sends in its REQ packets.
+ *
+ * Only the first call computes the size, so a send that is queued and reposted
+ * carries the same runt on every attempt.
+ */
+static void efa_rdm_proto_runtread_set_runt_size(struct efa_rdm_ep *ep,
+						 struct efa_rdm_ope *txe)
+{
+	assert(txe->type == EFA_RDM_TXE);
+
+	if (txe->bytes_runt > 0)
+		return;
+
+	assert(txe->peer);
+	txe->bytes_runt = efa_rdm_peer_get_runt_size(txe->peer, ep, txe);
+
+	assert(txe->bytes_runt);
+}
+
+/**
+ * @brief Set the runt size and decide how the REQ packets share it.
+ *
+ * Each packet holds the read iov array, then a piece of the runt.
+ *
+ * @param[out] pkt_entry_cnt		number of packets to send
+ * @param[out] pkt_entry_data_size_vec	data size of each of those packets
+ * @return 0 on success, -FI_EAGAIN when the TX packet pool does not have
+ *	   enough free packets
+ */
+static ssize_t efa_rdm_proto_runtread_plan_tx_pkes(struct efa_rdm_ep *ep,
+						   struct efa_rdm_ope *txe,
+						   int req_pkt_type,
+						   size_t *pkt_entry_cnt,
+						   size_t *pkt_entry_data_size_vec)
+{
+	size_t hdr_size, max_data_size;
+
+	assert(efa_rdm_pkt_type_is_runtread(req_pkt_type));
+	assert(ep->efa_max_outstanding_tx_ops >=
+	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
+
+	/* The runt size is fixed on the first attempt that has a free packet. */
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
+
+	efa_rdm_proto_runtread_set_runt_size(ep, txe);
+
+	/* Leave room in every packet for the read iov array. */
+	hdr_size = efa_rdm_pkt_type_get_req_hdr_size(
+			   req_pkt_type,
+			   efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
+			   0 /* rma_iov_count */) +
+		   txe->iov_count * sizeof(struct fi_rma_iov);
+	max_data_size = efa_rdm_proto_max_req_data_capacity(ep, hdr_size);
+
+	return efa_rdm_proto_split_req_data(ep, txe, txe->bytes_runt,
+					    max_data_size, pkt_entry_cnt,
+					    pkt_entry_data_size_vec);
+}
+
+/**
  * @brief Construct TX packet entries for the runt read protocol.
  *
  * Splits the runt portion of the message across as many REQ packets as it takes,
@@ -296,16 +357,9 @@ int efa_rdm_proto_runtread_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 */
 	assert(efa_rdm_pkt_type_is_runtread(req_pkt_type));
 
-	/*
-	 * Set txe->bytes_runt and decide how many packets to send and how much
-	 * data each carries. Both are idempotent -- the runt size is only
-	 * computed when it is still zero -- so it is safe to re-run on a repost.
-	 * Returns -FI_EAGAIN when the TX packet pool cannot supply that many
-	 * packets right now.
-	 */
-	ret = efa_rdm_ope_prepare_to_post_send(txe, req_pkt_type,
-					       &pkt_entry_cnt,
-					       pkt_entry_data_size_vec);
+	ret = efa_rdm_proto_runtread_plan_tx_pkes(ep, txe, req_pkt_type,
+						  &pkt_entry_cnt,
+						  pkt_entry_data_size_vec);
 	if (ret)
 		return ret;
 
@@ -338,10 +392,8 @@ int efa_rdm_proto_runtread_construct_tx_pkes(struct efa_rdm_ep *ep,
 		rtm_hdr->read_iov_count = txe->iov_count;
 
 		/*
-		 * The read iov array sits between the header and the payload;
-		 * efa_rdm_txe_max_req_data_capacity() already reserved room for
-		 * it, and the receiver finds the payload the same way, via
-		 * efa_rdm_pke_get_payload_offset().
+		 * The read iov array sits between the header and the payload; the
+		 * receiver skips past it with efa_rdm_pke_get_payload_offset().
 		 */
 		hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 		read_iov = (struct fi_rma_iov *) (pkt_entry->wiredata + hdr_size);
