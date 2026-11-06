@@ -87,7 +87,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 	struct smr_ep *smr_ep;
 	struct smr_av *av = container_of(map, struct smr_av, smr_map);
 	size_t size;
-	int fd, ret = 0;
+	int fd = -1, ret = 0;
 	struct stat sts;
 	struct dlist_entry *entry;
 	const char *name = smr_no_prefix(peer_buf->name);
@@ -99,7 +99,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		peer_buf->region = container_of(entry, struct smr_ep_name,
 						entry)->region;
 		pthread_mutex_unlock(&ep_list_lock);
-		return FI_SUCCESS;
+		goto map_eps;
 	}
 	pthread_mutex_unlock(&ep_list_lock);
 
@@ -167,6 +167,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		}
 	}
 
+map_eps:
 	dlist_foreach_container(&av->util_av.ep_list, struct util_ep, util_ep,
 				av_entry) {
 		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
@@ -174,7 +175,8 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 	}
 
 out:
-	close(fd);
+	if (fd >= 0)
+		close(fd);
 	return ret;
 }
 
