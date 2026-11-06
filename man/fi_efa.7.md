@@ -1267,7 +1267,12 @@ These OFI runtime parameters apply only to the RDM endpoint.
 : Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
 
 *FI_EFA_RUNT_SIZE*
-: The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).
+: The maximum number of bytes across inflight runting-read messages that may
+be sent eagerly. The default depends on the memory interface: 0 for system
+memory or when peer-to-peer access is unavailable, 307200 for CUDA and ROCR,
+and 131072 for Neuron. SynapseAI does not support runting read and ignores
+this setting. These defaults are set in
+`efa_hmem_info_init_protocol_thresholds()`.
 
 *FI_EFA_INTER_MAX_GDRCOPY_FROM_HMEM_SIZE*
 : The maximum message size in bytes for which the provider copies data out of

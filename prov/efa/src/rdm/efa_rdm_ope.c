@@ -394,17 +394,23 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
  * @param[in,out]	txe	txe to be set
  */
 static inline
-void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+int efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	assert(txe->type == EFA_RDM_TXE);
 
 	if (txe->bytes_runt > 0)
-		return;
+		return FI_SUCCESS;
 
 	assert(txe->peer);
 	txe->bytes_runt = efa_rdm_peer_get_runt_size(txe->peer, ep, txe);
+	if (!txe->bytes_runt) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "Runt read protocol cannot send a %zu byte message "
+			 "because the peer has no runt allowance\n", txe->total_len);
+		return -FI_EOPNOTSUPP;
+	}
 
-	assert(txe->bytes_runt);
+	return FI_SUCCESS;
 }
 
 /**
@@ -511,7 +517,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 	size_t total_pkt_entry_data_size; /* total number of bytes send via packet entry's payload */
 	size_t single_pkt_entry_data_size;
 	size_t single_pkt_entry_max_data_size;
-	int i, memory_alignment, remainder, iface;
+	int i, memory_alignment, remainder, iface, ret;
 	size_t available_tx_pkts;
 
 	ep = ope->ep;
@@ -524,8 +530,11 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 		return -FI_EAGAIN;
 
 	if (efa_rdm_pkt_type_is_medium(pkt_type) || efa_rdm_pkt_type_is_runt(pkt_type)) {
-		if(efa_rdm_pkt_type_is_runt(pkt_type))
-			efa_rdm_txe_set_runt_size(ep, ope);
+		if(efa_rdm_pkt_type_is_runt(pkt_type)) {
+			ret = efa_rdm_txe_set_runt_size(ep, ope);
+			if (ret)
+				return ret;
+		}
 
 		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
 		assert(total_pkt_entry_data_size);

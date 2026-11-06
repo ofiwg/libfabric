@@ -157,6 +157,22 @@ int efa_test_proto_force_select_send(struct fid_ep *ep, struct fid_av *av,
 				     const char *forced, size_t len,
 				     struct efa_test_proto_force_result *out);
 
+struct efa_test_proto_force_construct_result {
+	ssize_t select_ret;
+	ssize_t construct_ret;
+	int selected_runtread;
+};
+
+/**
+ * @brief Force runtread for a registered host buffer with no runt allowance,
+ * then construct its packets.
+ *
+ * @return 0 if @p out was filled, negative on setup failure
+ */
+int efa_test_proto_force_runtread_zero_runt_construct(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_force_construct_result *out);
+
 #define EFA_TEST_PROTO_LARGE_LEN 131072
 #define EFA_TEST_PROTO_RUNT_SIZE 32768
 

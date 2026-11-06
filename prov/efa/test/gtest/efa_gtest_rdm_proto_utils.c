@@ -796,6 +796,64 @@ static void efa_test_proto_release_txe(struct efa_rdm_ope *txe, int filled)
 		ofi_buf_free(txe);
 }
 
+int efa_test_proto_force_runtread_zero_runt_construct(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	struct efa_test_proto_force_construct_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_ope *txe;
+	struct fi_msg msg;
+	struct iovec iov;
+	uint64_t pke_send_flags;
+	char *saved_forced;
+	void *desc;
+	int err, filled = 0;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, 0,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	efa_test_proto_build_msg(&ctx, 1, &msg, &iov, &desc);
+
+	saved_forced = efa_env.rdm_force_send_proto;
+	efa_env.rdm_force_send_proto = "runtread";
+	out->select_ret = efa_rdm_proto_select_send_protocol(
+		ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, txe, &proto);
+	efa_env.rdm_force_send_proto = saved_forced;
+
+	if (out->select_ret)
+		goto out;
+
+	out->selected_runtread = (proto == &efa_rdm_proto_runtread);
+	if (!out->selected_runtread)
+		goto out;
+
+	efa_rdm_proto_txe_fill(txe, ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, 0,
+			       0, proto);
+	filled = 1;
+	txe->msg_id = ctx.peer->next_msg_id++;
+
+	out->construct_ret =
+		proto->construct_tx_pkes(ctx.ep, txe, &pke_send_flags);
+	if (!out->construct_ret)
+		efa_test_proto_release_send_pkes(ctx.ep);
+
+out:
+	efa_test_proto_release_txe(txe, filled);
+	efa_test_proto_teardown_buf(&ctx);
+	return 0;
+}
+
 int efa_test_longread_construct_builds_one_pke(
 	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
 	struct efa_test_proto_longread_construct_result *out)

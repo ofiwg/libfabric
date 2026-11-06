@@ -478,6 +478,18 @@ TEST_F(EfaRdmProtoReadTest, runtread_declined_for_delivery_complete)
 	EXPECT_STREQ(res.proto_name, "longread");
 }
 
+TEST_F(EfaRdmProtoReadTest, forced_runtread_zero_runt_returns_error)
+{
+	struct efa_test_proto_force_construct_result res = {};
+
+	ASSERT_EQ(efa_test_proto_force_runtread_zero_runt_construct(
+			  resource.ep, resource.av, resource.domain, &res),
+		  0);
+	ASSERT_EQ(res.select_ret, 0);
+	ASSERT_TRUE(res.selected_runtread);
+	EXPECT_EQ(res.construct_ret, -FI_EOPNOTSUPP);
+}
+
 TEST_F(EfaRdmProtoReadTest, longread_construct_builds_one_pke)
 {
 	struct efa_test_proto_longread_construct_result res = {};
