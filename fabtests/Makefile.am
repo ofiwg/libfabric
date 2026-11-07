@@ -72,7 +72,8 @@ bin_PROGRAMS = \
 	component/sock_test \
 	component/dmabuf-rdma/cuda_check_dmabuf \
 	regression/sighandler_test \
-	regression/pep_close_eq_read
+	regression/pep_close_eq_read \
+	regression/ep_close_eq_events
 
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
@@ -648,6 +649,14 @@ regression_pep_close_eq_read_SOURCES = \
 regression_pep_close_eq_read_LDADD = libfabtests.la
 
 regression_pep_close_eq_read_CFLAGS = \
+	$(AM_CFLAGS)
+
+regression_ep_close_eq_events_SOURCES = \
+	regression/ep_close_eq_events.c
+
+regression_ep_close_eq_events_LDADD = libfabtests.la
+
+regression_ep_close_eq_events_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \
