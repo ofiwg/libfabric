@@ -76,40 +76,62 @@
 # define __force
 #endif
 
+/* ThreadSanitizer turns C11 atomic accesses into __tsan_atomic* calls, and
+   some TSan runtimes implement a relaxed store as XCHG: a locked
+   read-modify-write of the device BAR instead of a single MemWr TLP. Under
+   TSan, use volatile accesses that TSan does not instrument.
+*/
+#if defined(__SANITIZE_THREAD__)
+# define EFA_MMIO_NO_TSAN 1
+#elif defined(__has_feature)
+# if __has_feature(thread_sanitizer)
+#  define EFA_MMIO_NO_TSAN 1
+# endif
+#endif
+
+#ifdef EFA_MMIO_NO_TSAN
+# define EFA_MMIO_ATTR __attribute__((no_sanitize_thread))
+# define EFA_MMIO_STORE(_SZ_, _addr_, _value_)                                  \
+	(*(volatile uint##_SZ_##_t *)(_addr_) = (_value_))
+# define EFA_MMIO_LOAD(_SZ_, _addr_) (*(const volatile uint##_SZ_##_t *)(_addr_))
+#else
+# define EFA_MMIO_ATTR
+# define EFA_MMIO_STORE(_SZ_, _addr_, _value_)                                  \
+	atomic_store_explicit((_Atomic(uint##_SZ_##_t) *)(_addr_), (_value_),  \
+			      memory_order_relaxed)
+# define EFA_MMIO_LOAD(_SZ_, _addr_)                                            \
+	atomic_load_explicit((_Atomic(uint##_SZ_##_t) *)(_addr_),              \
+			     memory_order_relaxed)
+#endif
+
 #define MAKE_WRITE(_NAME_, _SZ_)                                               \
-	static inline void _NAME_##_be(void *addr, __be##_SZ_ value)           \
+	EFA_MMIO_ATTR static inline void _NAME_##_be(void *addr,               \
+						     __be##_SZ_ value)         \
 	{                                                                      \
-		atomic_store_explicit((_Atomic(uint##_SZ_##_t) *)addr,         \
-				      (__force uint##_SZ_##_t)value,           \
-				      memory_order_relaxed);                   \
+		EFA_MMIO_STORE(_SZ_, addr, (__force uint##_SZ_##_t)value);     \
 	}                                                                      \
-	static inline void _NAME_##_le(void *addr, __le##_SZ_ value)           \
+	EFA_MMIO_ATTR static inline void _NAME_##_le(void *addr,               \
+						     __le##_SZ_ value)         \
 	{                                                                      \
-		atomic_store_explicit((_Atomic(uint##_SZ_##_t) *)addr,         \
-				      (__force uint##_SZ_##_t)value,           \
-				      memory_order_relaxed);                   \
+		EFA_MMIO_STORE(_SZ_, addr, (__force uint##_SZ_##_t)value);     \
 	}
 #define MAKE_READ(_NAME_, _SZ_)                                                \
-	static inline __be##_SZ_ _NAME_##_be(const void *addr)                 \
+	EFA_MMIO_ATTR static inline __be##_SZ_ _NAME_##_be(const void *addr)   \
 	{                                                                      \
-		return (__force __be##_SZ_)atomic_load_explicit(               \
-		    (_Atomic(uint##_SZ_##_t) *)addr, memory_order_relaxed);    \
+		return (__force __be##_SZ_)EFA_MMIO_LOAD(_SZ_, addr);          \
 	}                                                                      \
-	static inline __le##_SZ_ _NAME_##_le(const void *addr)                 \
+	EFA_MMIO_ATTR static inline __le##_SZ_ _NAME_##_le(const void *addr)   \
 	{                                                                      \
-		return (__force __le##_SZ_)atomic_load_explicit(               \
-		    (_Atomic(uint##_SZ_##_t) *)addr, memory_order_relaxed);    \
+		return (__force __le##_SZ_)EFA_MMIO_LOAD(_SZ_, addr);          \
 	}
 
-static inline void mmio_write8(void *addr, uint8_t value)
+EFA_MMIO_ATTR static inline void mmio_write8(void *addr, uint8_t value)
 {
-	atomic_store_explicit((_Atomic(uint8_t) *)addr, value,
-			      memory_order_relaxed);
+	EFA_MMIO_STORE(8, addr, value);
 }
-static inline uint8_t mmio_read8(const void *addr)
+EFA_MMIO_ATTR static inline uint8_t mmio_read8(const void *addr)
 {
-	return atomic_load_explicit((_Atomic(uint8_t) *)addr,
-				    memory_order_relaxed);
+	return EFA_MMIO_LOAD(8, addr);
 }
 
 MAKE_WRITE(mmio_write16, 16)
