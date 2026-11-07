@@ -51,6 +51,7 @@ common_srcs =				\
 	src/hmem_ze.c			\
 	src/hmem_neuron.c		\
 	src/hmem_synapseai.c		\
+	src/hmem_musa.c			\
 	src/hmem_ipc_cache.c	        \
 	src/xpmem.c			\
 	src/xpmem_cache.c		\

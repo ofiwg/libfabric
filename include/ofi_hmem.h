@@ -256,6 +256,18 @@ int cuda_gdrcopy_dev_register(const void *buf, size_t len, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 int cuda_set_sync_memops(void *ptr);
 
+int musa_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
+int musa_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int musa_hmem_init(void);
+int musa_hmem_cleanup(void);
+bool musa_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
+int musa_host_register(void *ptr, size_t size);
+int musa_host_unregister(void *ptr);
+int musa_get_base_addr(const void *ptr, size_t len, void **base, size_t *size);
+int musa_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		   uint64_t flags, void **addr, int *fd, uint64_t *offset);
+void musa_dev_free(uint64_t device, void *addr);
+
 /*
  * ze handle is just an fd so we need a wrapper to contain extra fields for ipc
  * copies

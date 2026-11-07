@@ -852,6 +852,106 @@ AC_DEFINE_UNQUOTED([HAVE_CUDA_CTX_SYNC_MEMOPS], [$have_cuda_ctx_sync_memops], [C
 
 AS_IF([test "$cuda_dlopen" != "1"], [LIBS="$LIBS $cuda_LIBS"])
 
+dnl Check for MUSA runtime and driver libraries.
+AC_ARG_WITH([musa],
+	[AS_HELP_STRING([--with-musa=DIR],
+			[Enable MUSA build and fail if not found.
+			 Optional=<Path to where the MUSA libraries
+			 and headers are installed.>])])
+
+have_musa=0
+musa_dlopen=0
+musa_prefix=""
+musa_libdir=""
+AS_IF([test -n "$with_musa" && test x"$with_musa" != x"yes" &&
+       test x"$with_musa" != x"no"],
+	[musa_prefix="$with_musa"
+	 musa_libdir="$with_musa/lib"])
+AC_ARG_ENABLE([musa-dlopen],
+	[AS_HELP_STRING([--enable-musa-dlopen],
+			[Enable dlopen of MUSA libraries @<:@default=no@:>@])],
+	[
+		AS_IF([test "$with_dlopen" = "no"],
+			[AC_MSG_ERROR([dlopen not found. libfabric requires libdl.])])
+		AS_IF([test "$enable_musa_dlopen" != "no"], [musa_dlopen=1])
+	])
+
+AS_IF([test x"$with_musa" != x"no"],
+	[
+		AS_IF([test "$musa_dlopen" != "0"],
+			[
+				_FI_CHECK_PACKAGE_HEADER([musa],
+					[musa_runtime.h],
+					[$with_musa],
+					[have_musa=1],
+					[AC_MSG_ERROR([MUSA runtime headers not found. Cannot enable MUSA DL])])
+			],
+			[
+				FI_CHECK_PACKAGE([musa],
+					[musa_runtime.h],
+					[musart],
+					[musaGetDeviceCount],
+					[-lmusa],
+					[$musa_prefix],
+					[$musa_libdir],
+					[have_musa=1],
+					[have_musa=0])
+			])
+
+		AS_IF([test "$have_musa" = "1"],
+			[
+				musa_save_CPPFLAGS="$CPPFLAGS"
+				CPPFLAGS="$CPPFLAGS $musa_CPPFLAGS"
+				AC_CHECK_HEADERS([musa.h],
+					[],
+					[have_musa=0])
+				CPPFLAGS="$musa_save_CPPFLAGS"
+			])
+
+		AS_IF([test "$have_musa" = "1" &&
+		       test "$musa_dlopen" = "1" &&
+		       test -n "$musa_libdir"],
+			[
+				musa_save_LDFLAGS="$LDFLAGS"
+				musa_save_LIBS="$LIBS"
+				LDFLAGS="$LDFLAGS -L$musa_libdir"
+				LIBS=""
+				AC_CHECK_LIB([musart], [musaGetDeviceCount],
+					[],
+					[have_musa=0])
+				AS_IF([test "$have_musa" = "1"],
+					[
+						AC_CHECK_LIB([musa],
+							[muMemGetAddressRange_v2],
+							[],
+							[
+								AC_CHECK_LIB([musa],
+									[muMemGetAddressRange],
+									[],
+									[have_musa=0])
+							])
+					])
+				LDFLAGS="$musa_save_LDFLAGS"
+				LIBS="$musa_save_LIBS"
+			])
+	]
+)
+
+AS_IF([test x"$with_musa" != x"no" && test -n "$with_musa" &&
+       test "$have_musa" = "0"],
+	[AC_MSG_ERROR([MUSA runtime is not available.])])
+
+AC_DEFINE_UNQUOTED([MUSA_LIBDIR], ["$musa_libdir"],
+	[MUSA library directory for dlopen])
+AC_DEFINE_UNQUOTED([ENABLE_MUSA_DLOPEN], [$musa_dlopen],
+	[dlopen MUSA libraries])
+AC_DEFINE_UNQUOTED([HAVE_MUSA], [$have_musa], [MUSA support])
+
+AS_IF([test "$musa_dlopen" != "1"], [LIBS="$LIBS $musa_LIBS"])
+AS_IF([test "$have_musa" = "1" && test x"$with_musa" != x"yes"],
+	[CPPFLAGS="$CPPFLAGS $musa_CPPFLAGS"
+	 LDFLAGS="$LDFLAGS $musa_LDFLAGS"])
+
 AC_ARG_WITH([ze],
 	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
 					  Optional=<Path to where the ZE libraries
