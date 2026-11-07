@@ -515,6 +515,71 @@ out:
 	return err;
 }
 
+int efa_test_zero_copy_send_end_to_end(
+	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
+	struct fid_domain *domain, struct efa_test_proto_zero_copy_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *txe;
+	struct fi_cq_err_entry err_entry;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup_peer(ep, av, &ctx);
+	if (err)
+		return err;
+
+	err = efa_test_proto_setup_buf(domain, &ctx, 64);
+	if (err)
+		return err;
+
+	ctx.ep->peer_may_have_zcpy_rx = true;
+	ctx.peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	ctx.peer->user_recv_qp.qpn = 99;
+	ctx.peer->user_recv_qp.qkey = 0xABCD;
+
+	err = fi_send(ep, ctx.buf, ctx.len, fi_mr_desc(ctx.mr), ctx.peer_addr,
+		      NULL);
+	if (err)
+		goto out;
+
+	out->ope_list_after_send = efa_test_proto_ope_list_count(ctx.ep);
+	out->pke_cnt = ctx.ep->send_pkt_entry_vec_size;
+	if (out->pke_cnt != 1) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+
+	pke = ctx.ep->send_pkt_entry_vec[0];
+	if (!pke || !pke->ope || !pke->handle_pke) {
+		err = -FI_EINVAL;
+		goto out;
+	}
+
+	out->send_to_user_recv_qp =
+		!!(pke->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
+	out->has_no_base_hdr = !!(pke->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+	out->pkt_size = pke->pkt_size;
+	out->payload_size = pke->payload_size;
+	out->handler_set = pke->handle_pke != NULL;
+
+	txe = pke->ope;
+	out->req_pkt_type = txe->req_pkt_type;
+	out->expected_req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT;
+
+	efa_rdm_pke_handle_send_completion(pke);
+
+	out->ope_list_after_completion = efa_test_proto_ope_list_count(ctx.ep);
+	memset(&err_entry, 0, sizeof(err_entry));
+	out->cq_readerr_after_completion = fi_cq_readerr(cq, &err_entry, 0);
+
+out:
+	efa_test_proto_teardown_buf(&ctx);
+	return err;
+}
+
 int efa_test_proto_medium_peer_abort(
 	struct fid_ep *ep, struct fid_av *av, struct fid_cq *cq,
 	struct fid_domain *domain,
