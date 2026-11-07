@@ -494,6 +494,34 @@ static bool ofi_is_function_patched(struct ofi_intercept *intercept)
  * cache we will make the syscall directly. We store the original instructions
  * and restore them when memhooks is unloaded.
  */
+/*
+ * RTLD_NEXT misses libc when libc comes before libfabric in the global search
+ * order, as it does when libfabric is only an indirect dependency of the
+ * executable.  RTLD_DEFAULT is not a safe substitute for that case: it searches
+ * the executable first, and a non-PIE executable that takes the address of a
+ * libc function exports a canonical PLT entry for it.  Patching that entry
+ * overwrites the PLT entries after it and leaves libc itself unpatched, so ask
+ * libc directly before falling back to RTLD_DEFAULT.
+ */
+static void *ofi_find_intercept_target(const char *symbol)
+{
+	void *func_addr, *libc;
+
+	func_addr = dlsym(RTLD_NEXT, symbol);
+	if (func_addr)
+		return func_addr;
+
+	libc = dlopen("libc.so.6", RTLD_LAZY | RTLD_NOLOAD);
+	if (libc) {
+		func_addr = dlsym(libc, symbol);
+		dlclose(libc);
+		if (func_addr)
+			return func_addr;
+	}
+
+	return dlsym(RTLD_DEFAULT, symbol);
+}
+
 static int ofi_intercept_symbol(struct ofi_intercept *intercept)
 {
 	void *func_addr;
@@ -502,15 +530,12 @@ static int ofi_intercept_symbol(struct ofi_intercept *intercept)
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "overwriting function %s\n", intercept->symbol);
 
-	func_addr = dlsym(RTLD_NEXT, intercept->symbol);
+	func_addr = ofi_find_intercept_target(intercept->symbol);
 	if (!func_addr) {
-		func_addr = dlsym(RTLD_DEFAULT, intercept->symbol);
-		if (!func_addr) {
-			FI_DBG(&core_prov, FI_LOG_MR,
-			       "could not find symbol %s\n", intercept->symbol);
-			ret = -FI_ENOMEM;
-			return ret;
-		}
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "could not find symbol %s\n", intercept->symbol);
+		ret = -FI_ENOMEM;
+		return ret;
 	}
 
 	intercept->orig_func = func_addr;
