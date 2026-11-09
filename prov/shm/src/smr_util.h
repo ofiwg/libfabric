@@ -234,6 +234,7 @@ struct smr_peer {
 };
 
 #define SMR_MAX_PEERS	256
+#define SMR_SAR_POOL_SIZE	256
 #define SMR_PREFETCH_SZ	128
 
 struct smr_region {
@@ -332,6 +333,13 @@ static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
 	return (struct smr_return_queue *)
 			((char *) smr + smr->ret_queue_offset);
 }
+static inline uint16_t smr_sar_bufs_per_peer(int num_peers)
+{
+	if (num_peers <= 0)
+		return SMR_BUF_BATCH_MAX;
+	return MAX(1, MIN(SMR_BUF_BATCH_MAX, SMR_SAR_POOL_SIZE / num_peers));
+}
+
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
 	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
