@@ -424,6 +424,9 @@ int ft_cuda_alloc(uint64_t device, void **buf, size_t size)
 		return -FI_ENOMEM;
 	}
 
+	if (opts.no_cuda_sync_memops)
+		return FI_SUCCESS;
+
 	ret = ft_cuda_pointer_set_attribute(*buf);
 
 	if (ret != FI_SUCCESS) {

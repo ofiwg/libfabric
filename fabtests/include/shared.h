@@ -213,6 +213,7 @@ struct ft_opts {
 	int use_fi_more;
 	int use_fi_flush;
 	int use_wr_api;
+	int no_cuda_sync_memops;
 	int options;
 	enum ft_comp_method comp_method;
 	int machr;
@@ -762,6 +763,7 @@ enum {
 	LONG_OPT_USE_CUDA_PCIE_MAPPING,
 	LONG_OPT_FI_VERSION,
 	LONG_OPT_USE_WR,
+	LONG_OPT_NO_CUDA_SYNC_MEMOPS,
 };
 
 extern int debug_assert;
