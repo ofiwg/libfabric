@@ -560,6 +560,53 @@ static int verify_av_lookup(struct worker_context *ctx, fi_addr_t fi_addr, const
 	return 0;
 }
 
+/**
+ * apply_peer_update - Replace a peer's AV entry with its new endpoint address
+ *
+ * Removes the peer's old AV entry when --remove-av is set, inserts the new
+ * address into fi_addr[peer_idx], and records the peer's RMA info.
+ */
+static int apply_peer_update(struct worker_context *ctx,
+			     const struct ep_message *msg,
+			     char (*ep_addr)[MAX_EP_ADDR_LEN],
+			     struct rma_info *peer_rma,
+			     fi_addr_t *fi_addr,
+			     size_t *transferred_bytes)
+{
+	uint16_t peer_idx = msg->info.peer_idx;
+	int ret;
+
+	assert(msg->type == EP_MESSAGE_TYPE_UPDATE);
+	assert(msg->info.worker_id == ctx->worker_id);
+	if (FT_UNLIKELY(peer_idx >= ctx->num_peers)) {
+		fprintf(stderr, "Sender %u: unexpected peer index: %u",
+			ctx->worker_id, peer_idx);
+		return -1;
+	}
+
+	printf("Sender %u: received an update for peer %u\n",
+	       ctx->worker_id, peer_idx);
+	if (topts.remove_av && fi_addr[peer_idx] != FI_ADDR_UNSPEC) {
+		ret = fi_av_remove(ctx->av, &fi_addr[peer_idx], 1, 0);
+		if (ret) {
+			FT_PRINTERR("fi_av_remove", ret);
+			return ret;
+		}
+		ctx->av_remove_count++;
+	}
+	memcpy(ep_addr[peer_idx], msg->info.ep_addr, MAX_EP_ADDR_LEN);
+	memcpy(&peer_rma[peer_idx], &msg->info.rma, sizeof(struct rma_info));
+	fi_addr[peer_idx] = FI_ADDR_UNSPEC;
+	ret = fi_av_insert(ctx->av, &ep_addr[peer_idx], 1, &fi_addr[peer_idx],
+			   0, NULL);
+	if (ret != 1) {
+		FT_PRINTERR("fi_av_insert", ret);
+		return ret >= 0 ? -FI_EOTHER : ret;
+	}
+	transferred_bytes[peer_idx] = 0;
+	return 0;
+}
+
 static void *run_sender_worker(void *arg)
 {
 	struct worker_context *ctx = (struct worker_context*) arg;
@@ -646,42 +693,10 @@ static void *run_sender_worker(void *arg)
 							ctx->worker_id, cycle, total_ops);
 					goto out;
 				}
-				assert(msg.type == EP_MESSAGE_TYPE_UPDATE);
-				assert(msg.info.worker_id == ctx->worker_id);
-				if (FT_UNLIKELY(msg.info.peer_idx >= ctx->num_peers)) {
-					fprintf(stderr, "Sender %u: unexpected peer index: %u",
-							ctx->worker_id, msg.info.peer_idx);
-					ret = -1;
+				ret = apply_peer_update(ctx, &msg, ep_addr, peer_rma,
+							fi_addr, transferred_bytes);
+				if (ret)
 					goto out;
-				}
-
-				printf("Sender %u: received an update for peer %u\n",
-						ctx->worker_id, msg.info.peer_idx);
-				if (topts.remove_av
-					&& fi_addr[msg.info.peer_idx] != FI_ADDR_UNSPEC) {
-					ret = fi_av_remove(ctx->av, &fi_addr[msg.info.peer_idx], 1, 0);
-					if (ret) {
-						FT_PRINTERR("fi_av_remove", ret);
-						goto out;
-					}
-					ctx->av_remove_count++;
-				}
-				memcpy(ep_addr[msg.info.peer_idx], msg.info.ep_addr, MAX_EP_ADDR_LEN);
-				memcpy(&peer_rma[msg.info.peer_idx], &msg.info.rma, sizeof(struct rma_info));
-				fi_addr[msg.info.peer_idx] = FI_ADDR_UNSPEC;
-				ret = fi_av_insert(ctx->av,
-							&ep_addr[msg.info.peer_idx],
-							1,
-							&fi_addr[msg.info.peer_idx],
-							0,
-							NULL);
-				if (ret != 1) {
-					FT_PRINTERR("fi_av_insert", ret);
-					if (ret >= 0)
-						ret = -FI_EOTHER;
-					goto out;
-				}
-				transferred_bytes[msg.info.peer_idx] = 0;
 			} else if (ret != -FI_EAGAIN) {
 				FT_PRINTERR("ep_message_queue_try_pop", ret);
 				goto out;
@@ -833,11 +848,25 @@ static void *run_sender_worker(void *arg)
 
 	// Some updates might have arrived too late to be applied.
 	// Draining such messages from control queue until terminator.
+	// With --av-lookup and --remove-av, apply them so every receiver
+	// endpoint update exercises AV remove, reinsert and lookup.
 	do {
 		ret = ep_message_queue_pop(ctx->control_queue, &msg); // blocks
 		if (ret) {
 			FT_PRINTERR("ep_message_queue_pop", ret);
 			goto out;
+		}
+		if (msg.type == EP_MESSAGE_TYPE_UPDATE &&
+		    topts.av_lookup && topts.remove_av) {
+			ret = apply_peer_update(ctx, &msg, ep_addr, peer_rma,
+						fi_addr, transferred_bytes);
+			if (ret)
+				goto out;
+			ret = verify_av_lookup(ctx, fi_addr[msg.info.peer_idx],
+					       ep_addr[msg.info.peer_idx],
+					       msg.info.peer_idx);
+			if (ret)
+				goto out;
 		}
 	} while (msg.type != EP_MESSAGE_TYPE_TERMINATOR);
 
