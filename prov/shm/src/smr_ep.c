@@ -335,7 +335,8 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	int i, ret;
 
 	if (ep->region->max_sar_buf_per_peer == 0 ||
-	    smr_peer_data(ep->region)[cmd->hdr.tx_id].sar_status)
+	    smr_peer_data(ep->region)[cmd->hdr.tx_id].sar_status ||
+	    !smr_freestack_avail(smr_sar_pool(ep->region)))
 		return -FI_EAGAIN;
 
 	cmd->data.buf_batch_size = MIN3(

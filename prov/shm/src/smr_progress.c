@@ -884,9 +884,8 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	smr_peer_data(ep->region)[idx].local_region = (uintptr_t) peer_smr;
 
 	assert(ep->map->num_peers > 0);
-	ep->region->max_sar_buf_per_peer = MIN(
-		SMR_BUF_BATCH_MAX,
-		SMR_MAX_PEERS / ep->map->num_peers);
+	ep->region->max_sar_buf_per_peer =
+		smr_sar_bufs_per_peer(ep->map->num_peers);
 
 	//set last to indicate to peer that setup is complete
 	smr_peer_data(peer_smr)[cmd->hdr.tx_id].id = idx;
