@@ -4101,20 +4101,37 @@ int ft_check_atomic(enum ft_atomic_opcodes atomic, enum fi_op op,
 	return FI_SUCCESS;
 }
 
+#define FT_CHECK_TAIL_SIZE 4096
+
 int ft_check_buf(void *buf, size_t size)
 {
 	char *recv_data;
 	char c;
 	int msg_index = 0;
-	size_t i;
+	size_t i, tail;
 	int ret = 0;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
 		assert(dev_host_buf);
+		/* Copy the end of the buffer first. In the bandwidth tests it
+		 * holds the last posted transfers of the window, which are the
+		 * most likely to still be landing if the provider reports
+		 * completions before the data is visible. Nothing guarantees
+		 * the order the data lands in, so this makes the check more
+		 * likely to catch late data, not certain to.
+		 */
+		tail = MIN(size, FT_CHECK_TAIL_SIZE);
 		ret = ft_hmem_copy_from(opts.iface, opts.device,
-					dev_host_buf, buf, size);
+					(char *) dev_host_buf + size - tail,
+					(char *) buf + size - tail, tail);
 		if (ret)
 			return ret;
+		if (size > tail) {
+			ret = ft_hmem_copy_from(opts.iface, opts.device,
+						dev_host_buf, buf, size - tail);
+			if (ret)
+				return ret;
+		}
 		recv_data = (char *)dev_host_buf;
 	} else {
 		recv_data = (char *)buf;
