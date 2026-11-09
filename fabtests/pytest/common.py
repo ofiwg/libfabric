@@ -509,7 +509,8 @@ class ClientServerTest:
                  fabric=None,
                  additional_env='',
                  might_fail=False,
-                 nic_dma_path=None):
+                 nic_dma_path=None,
+                 hmem_device_offset=0):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
@@ -542,7 +543,8 @@ class ClientServerTest:
                              fabric=None,
                              additional_env='',
                              might_fail=False,
-                             nic_dma_path=None):
+                             nic_dma_path=None,
+                             hmem_device_offset=0):
         if executable == "fi_ubertest":
             return "fi_ubertest", additional_env
 
@@ -640,9 +642,9 @@ class ClientServerTest:
 
         if "PYTEST_XDIST_WORKER" in os.environ:
             worker_id = int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
-            hmem_device_id = worker_id % num_hmem
         else:
-            hmem_device_id = 0
+            worker_id = 0
+        hmem_device_id = (worker_id + hmem_device_offset) % num_hmem
 
         if host_memory_type in ["cuda", "rocr"]:
             command += " -i {}".format(hmem_device_id)
