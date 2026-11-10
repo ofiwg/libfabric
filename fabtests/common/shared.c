@@ -1137,6 +1137,8 @@ int ft_init_fabric_cm(void)
 	}
 
 	ret = opts.dst_addr ? ft_client_connect() : ft_server_connect();
+	if (ret)
+		return ret;
 
 	if (ft_check_opts(FT_OPT_NO_PRE_POSTED_RX) &&
 	    !ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
