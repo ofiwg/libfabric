@@ -326,7 +326,7 @@ int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 	ep->base_ep.conn_param.responder_resources = RDMA_MAX_RESP_RES;
 	ep->base_ep.conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
 	ep->base_ep.conn_param.flow_control = 1;
-	ep->base_ep.conn_param.retry_count = 15;
+	ep->base_ep.conn_param.retry_count = (uint8_t) vrb_gl_data.retry_count;
 	ep->base_ep.conn_param.rnr_retry_count = 7;
 	ep->base_ep.conn_param.srq = 1;
 

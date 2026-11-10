@@ -186,6 +186,7 @@ extern struct vrb_gl_data {
 	int	def_rx_iov_limit;
 	int	def_inline_size;
 	int	min_rnr_timer;
+	int	retry_count;
 	int	cqread_bunch_size;
 	int	use_odp;
 	char	*iface;
