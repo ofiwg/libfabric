@@ -247,9 +247,10 @@ int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries)
 	int ret;
 
 	memset(&params, 0, sizeof(params));
+	/* liburing returns -errno and does not set errno */
 	ret = io_uring_queue_init_params(entries, io_uring, &params);
 	if (ret)
-		return -errno;
+		return ret;
 
 	/* FAST_POOL is required for pre-posting receive buffers */
 	if (!(params.features & IORING_FEAT_FAST_POLL)) {
