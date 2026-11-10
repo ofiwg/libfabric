@@ -179,7 +179,16 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
-	io_uring_prep_readv(sqe, sock, iov, cnt, flags);
+	/* IORING_OP_READV takes a file offset, not socket flags: passing
+	 * the flags there makes the request fail with ESPIPE on a socket.
+	 * Use IORING_OP_RECVMSG, which accepts the socket flags.  The
+	 * msghdr must stay valid until the request is submitted.
+	 */
+	ctx->msg = (struct msghdr) {
+		.msg_iov = iov,
+		.msg_iovlen = cnt,
+	};
+	io_uring_prep_recvmsg(sqe, sock, &ctx->msg, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
 	uring->credits--;
