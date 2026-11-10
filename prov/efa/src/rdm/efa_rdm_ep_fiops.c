@@ -850,6 +850,18 @@ static int efa_rdm_ep_release_peer_overflow_pke(struct efa_av_array *arr,
 	return 0;
 }
 
+static int efa_rdm_ep_release_peer_robuf_pke(struct efa_av_array *arr,
+					     void *entry, void *context)
+{
+	struct efa_rdm_peer *peer = entry;
+
+	if (!peer)
+		return 0;
+
+	efa_rdm_peer_release_pending_items_in_robuf(peer);
+	return 0;
+}
+
 static int efa_rdm_ep_destroy_peer(struct efa_av_array *arr, void *entry,
 				   void *context)
 {
@@ -883,6 +895,16 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		       efa_rdm_ep_release_peer_overflow_pke);
 	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
 		       efa_rdm_ep_release_peer_overflow_pke);
+
+	/*
+	 * Out-of-order pkes in each peer's reorder window are owned by the
+	 * window, not an rxe. Release them before the sweep below, same reason
+	 * as the overflow pkes above.
+	 */
+	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map, efa_rdm_ep,
+		       efa_rdm_ep_release_peer_robuf_pke);
+	efa_av_array_iter(efa_rdm_ep->fi_addr_to_peer_map_implicit, efa_rdm_ep,
+		       efa_rdm_ep_release_peer_robuf_pke);
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;

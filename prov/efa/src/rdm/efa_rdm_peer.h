@@ -304,6 +304,8 @@ void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer);
 
 void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 
+void efa_rdm_peer_release_pending_items_in_robuf(struct efa_rdm_peer *peer);
+
 bool efa_rdm_peer_abort_ooo_msg(struct efa_rdm_peer *peer, uint32_t msg_id);
 
 int efa_rdm_peer_queue_aborted_msg_marker(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, uint32_t msg_id);
