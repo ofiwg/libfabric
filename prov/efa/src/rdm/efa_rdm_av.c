@@ -1880,20 +1880,16 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 * the need of the instances with more CPUs.
 		 */
 		av_attr = *attr;
-		if (efa_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
-			ret = -FI_ENOSYS;
-			EFA_WARN(FI_LOG_AV,
-				 "The requested av size is beyond"
-				 " shm supported maximum av size: %s\n",
-				 fi_strerror(-ret));
-			goto err_close_util_av_implicit;
-		}
 		av_attr.count = efa_env.shm_av_size;
 		assert(av_attr.type == FI_AV_TABLE);
 		ret = fi_av_open(rdm_domain->shm_domain, &av_attr,
 				 &rdm_av->shm_rdm_av, context);
-		if (ret)
+		if (ret) {
+			EFA_WARN(FI_LOG_AV,
+				 "Failed to open shm AV with FI_EFA_SHM_AV_SIZE=%d: %s\n",
+				 efa_env.shm_av_size, fi_strerror(-ret));
 			goto err_close_util_av_implicit;
+		}
 	}
 
 	/* the shm AV above stays a table: its fi_addrs never reach the application */
