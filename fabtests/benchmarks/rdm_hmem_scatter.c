@@ -51,7 +51,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = ft_scatter_exchange();
+	ret = ft_scatter_exchange(NULL);
 	if (ret)
 		return ret;
 
@@ -148,7 +148,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	if (ft_check_hmem_scatter_opts()) {
+	if (ft_check_hmem_scatter_opts(true)) {
 		ret = EXIT_FAILURE;
 		goto out;
 	}
