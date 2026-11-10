@@ -1302,6 +1302,14 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 		} else if (sockctx == &ep->bsock.rx_sockctx) {
 			xnet_uring_rx_done(ep, res);
 		} else if (sockctx == &ep->bsock.pollin_sockctx) {
+			/* With io_uring, POLLIN in ep->pollflags tracks whether
+			 * a one-shot poll request is armed.  That request has
+			 * now completed, so clear the flag.  Otherwise
+			 * xnet_update_pollflag() would consider POLLIN to be
+			 * still armed and would not post a new poll request,
+			 * leaving nothing to report incoming data.
+			 */
+			ep->pollflags &= ~POLLIN;
 			if (res < 0) {
 				xnet_ep_disable(ep, -res, NULL, 0);
 			} else {
