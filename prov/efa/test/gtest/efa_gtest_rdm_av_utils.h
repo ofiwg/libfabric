@@ -102,6 +102,15 @@ int efa_test_av_publish_ordering_recycle_slot(struct fid_ep *ep,
  */
 bool efa_test_av_publish_ordering_single_peer(fi_addr_t explicit_fi_addr);
 
+int efa_test_get_shm_av_size(void);
+
+int efa_test_set_shm_av_size(int value);
+
+int efa_test_av_insert_local_peer(struct fid_ep *ep, struct fid_av *av,
+				  uint32_t qpn, fi_addr_t *addr);
+
+bool efa_test_av_peer_uses_shm(struct fid_ep *ep, fi_addr_t addr);
+
 #ifdef __cplusplus
 }
 #endif

@@ -14,7 +14,6 @@ struct efa_env efa_env = {
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
 	.use_zcpy_rx = 1,
-	.shm_av_size = 256,
 	.recvwin_size = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
 	.ooo_pool_chunk_size = 64,
 	.unexp_pool_chunk_size = 1024,
@@ -75,6 +74,15 @@ static void efa_env_unregistered_param_get(void)
 		efa_env.enable_comp_action = atoi(tmp);
 }
 
+static int efa_env_default_shm_av_size(void)
+{
+	long cores = ofi_sysconf(_SC_NPROCESSORS_ONLN);
+
+	if (cores <= 256)
+		return 256;
+	return (int) cores;
+}
+
 /* @brief Read and store the FI_EFA_* environment variables.
  */
 void efa_env_param_get(void)
@@ -128,6 +136,7 @@ void efa_env_param_get(void)
 	fi_param_get_int(&efa_prov, "tx_queue_size", &efa_env.tx_queue_size);
 	fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
 	fi_param_get_int(&efa_prov, "use_zcpy_rx", &efa_env.use_zcpy_rx);
+	efa_env.shm_av_size = efa_env_default_shm_av_size();
 	fi_param_get_int(&efa_prov, "shm_av_size", &efa_env.shm_av_size);
 	fi_param_get_int(&efa_prov, "recvwin_size", &efa_env.recvwin_size);
 	fi_param_get_int(&efa_prov, "readcopy_pool_size", &efa_env.readcopy_pool_size);
@@ -230,7 +239,7 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "use_zcpy_rx", FI_PARAM_INT,
 			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
 	fi_param_define(&efa_prov, "shm_av_size", FI_PARAM_INT,
-			"Defines the maximum number of entries in SHM provider's address vector (Default 128).");
+			"Defines the maximum number of entries in SHM provider's address vector. (Default: number of online CPUs, minimum 256)");
 	fi_param_define(&efa_prov, "recvwin_size", FI_PARAM_INT,
 			"Defines the size of sliding receive window. (Default: 16384)");
 	fi_param_define(&efa_prov, "readcopy_pool_size", FI_PARAM_INT,
