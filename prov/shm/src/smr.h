@@ -70,7 +70,7 @@ struct smr_map {
 	int 			num_peers;
 	uint16_t		flags;
 	struct ofi_rbmap	rbmap;
-	struct smr_peer		peers[SMR_MAX_PEERS];
+	struct smr_peer		*peers;
 };
 
 struct smr_av {
