@@ -1384,25 +1384,34 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	}
 }
 
+/* Completion processing must be reentrant.  Handling a CQE may disable
+ * an endpoint, which cancels its outstanding requests through
+ * xnet_uring_cancel().  That function reaps CQEs from the same ring while
+ * waiting for the cancelation to complete.  If we peeked a batch of CQEs
+ * and only advanced the CQ head after processing the whole batch, the
+ * nested call would see (and process) the same, not yet consumed, CQEs a
+ * second time, and both calls would then advance the CQ head, skipping
+ * unprocessed entries.
+ *
+ * Copy each CQE and release its slot in the CQ ring before dispatching it,
+ * so that a nested call only ever sees entries that have not been handled.
+ */
 static void xnet_progress_uring(struct xnet_progress *progress,
 				struct xnet_uring *uring)
 {
-	int nready;
+	ofi_io_uring_cqe_t *cqe, cqe_copy;
 	int i;
 
 	assert(xnet_io_uring);
 
-	nready = ofi_uring_peek_batch_cqe(&uring->ring, progress->cqes,
-					  XNET_MAX_EVENTS);
-	if (!nready)
-		return;
+	for (i = 0; i < XNET_MAX_EVENTS; i++) {
+		if (!ofi_uring_peek_batch_cqe(&uring->ring, &cqe, 1))
+			break;
 
-	assert(nready <= XNET_MAX_EVENTS);
-	for (i = 0; i < nready; i++) {
-		xnet_progress_cqe(progress, uring, progress->cqes[i]);
+		cqe_copy = *cqe;
+		ofi_uring_cq_advance(&uring->ring, 1);
+		xnet_progress_cqe(progress, uring, &cqe_copy);
 	}
-
-	ofi_uring_cq_advance(&uring->ring, nready);
 }
 
 int xnet_uring_cancel(struct xnet_progress *progress,
@@ -1910,10 +1919,6 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err4;
 
 	if (xnet_io_uring) {
-		progress->cqes = calloc(XNET_MAX_EVENTS, sizeof(*progress->cqes));
-		if (!progress->cqes)
-			goto err5;
-
 		progress->sockapi = xnet_sockapi_uring;
 
 		ret = xnet_init_uring(&progress->tx_uring,
@@ -1922,7 +1927,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->sockapi.tx_uring,
 				      &progress->epoll_fd);
 		if (ret)
-			goto err6;
+			goto err5;
 
 		ret = xnet_init_uring(&progress->rx_uring,
 				      info ? info->rx_attr->size :
@@ -1930,18 +1935,16 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->sockapi.rx_uring,
 				      &progress->epoll_fd);
 		if (ret)
-			goto err7;
+			goto err6;
 	} else {
 		progress->sockapi = xnet_sockapi_socket;
 	}
 
 	return 0;
-err7:
-	xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
 err6:
-	ofi_dynpoll_del(&progress->epoll_fd, progress->signal.fd[FI_READ_FD]);
+	xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
 err5:
-	free(progress->cqes);
+	ofi_dynpoll_del(&progress->epoll_fd, progress->signal.fd[FI_READ_FD]);
 err4:
 	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
@@ -1962,7 +1965,6 @@ void xnet_close_progress(struct xnet_progress *progress)
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
 	if (xnet_io_uring) {
-		free(progress->cqes);
 		xnet_destroy_uring(&progress->rx_uring, &progress->epoll_fd);
 		xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
 	}
