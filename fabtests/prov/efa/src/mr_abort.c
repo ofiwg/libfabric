@@ -2510,6 +2510,24 @@ static void teardown_eps(void)
 	domain_names = NULL;
 }
 
+/* All of the endpoints share the TX CQ that ft_init_fabric() opens. */
+static int size_tx_cq(void)
+{
+	struct fi_info *info;
+	int n_eps, ret;
+
+	n_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
+	if (opts.tx_cq_size || n_eps == 1)
+		return 0;
+
+	ret = ft_getinfo(hints, &info);
+	if (ret)
+		return ret;
+	opts.tx_cq_size = n_eps * info->tx_attr->size;
+	fi_freeinfo(info);
+	return 0;
+}
+
 static int run(void)
 {
 	int ret;
@@ -2521,6 +2539,10 @@ static int run(void)
 	opts.options |= FT_OPT_SKIP_ADDR_EXCH;
 
 	ret = select_domains();
+	if (ret)
+		return ret;
+
+	ret = size_tx_cq();
 	if (ret)
 		return ret;
 
