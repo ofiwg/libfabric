@@ -143,6 +143,16 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		goto out;
 	}
 
+	if (peer->version != SMR_VERSION || peer->max_peers != smr_max_peers) {
+		FI_WARN(&smr_prov, FI_LOG_AV,
+			"peer %s region version %d max peers %d, expected %d %d\n",
+			name, peer->version, peer->max_peers, SMR_VERSION,
+			smr_max_peers);
+		munmap(peer, sizeof(*peer));
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
 	size = peer->total_size;
 	munmap(peer, sizeof(*peer));
 
@@ -261,18 +271,18 @@ void smr_map_add(struct smr_map *map, const char *name, int64_t *id)
 		return;
 	}
 
-	while (map->peers[map->cur_id].id_assigned && tries < SMR_MAX_PEERS) {
-		if (++map->cur_id == SMR_MAX_PEERS)
+	while (map->peers[map->cur_id].id_assigned && tries < smr_max_peers) {
+		if (++map->cur_id == smr_max_peers)
 			map->cur_id = 0;
 		tries++;
 	}
 
-	assert(map->cur_id < SMR_MAX_PEERS && tries < SMR_MAX_PEERS);
+	assert(map->cur_id < smr_max_peers && tries < smr_max_peers);
 	*id = map->cur_id;
-	if (++map->cur_id == SMR_MAX_PEERS)
+	if (++map->cur_id == smr_max_peers)
 		map->cur_id = 0;
 	node->data = (void *) (intptr_t) *id;
-	strncpy(map->peers[*id].name, shm_name, SMR_NAME_MAX);
+	strncpy(map->peers[*id].name, shm_name, SMR_NAME_MAX - 1);
 	map->peers[*id].name[SMR_NAME_MAX - 1] = '\0';
 	map->peers[*id].region = NULL;
 	map->num_peers++;
@@ -287,7 +297,7 @@ static void smr_map_del(struct smr_map *map, int64_t id)
 	assert(ofi_genlock_held(&container_of(map, struct smr_av,
 					      smr_map)->util_av.lock));
 
-	assert(id >= 0 && id < SMR_MAX_PEERS);
+	assert(id >= 0 && id < smr_max_peers);
 	pthread_mutex_lock(&ep_list_lock);
 	dlist_foreach_container(&ep_name_list, struct smr_ep_name, name,
 				entry) {
@@ -308,7 +318,7 @@ static void smr_map_del(struct smr_map *map, int64_t id)
 
 struct smr_region *smr_map_get(struct smr_map *map, int64_t id)
 {
-	if (id < 0 || id >= SMR_MAX_PEERS)
+	if (id < 0 || id >= smr_max_peers)
 		return NULL;
 
 	return map->peers[id].region;
@@ -328,6 +338,10 @@ static int smr_map_init(struct smr_map *map, int peer_count, uint16_t flags)
 {
 	int i;
 
+	map->peers = calloc(peer_count, sizeof(*map->peers));
+	if (!map->peers)
+		return -FI_ENOMEM;
+
 	for (i = 0; i < peer_count; i++) {
 		memset(&map->peers[i].name, 0, SMR_NAME_MAX);
 		map->peers[i].id_assigned = 0;
@@ -345,12 +359,14 @@ static void smr_map_cleanup(struct smr_av *av)
 	int64_t i;
 
 	ofi_genlock_lock(&av->util_av.lock);
-	for (i = 0; i < SMR_MAX_PEERS; i++) {
+	for (i = 0; i < smr_max_peers; i++) {
 		if (av->smr_map.peers[i].id_assigned)
 			smr_map_del(&av->smr_map, i);
 	}
 	ofi_rbmap_cleanup(&av->smr_map.rbmap);
 	ofi_genlock_unlock(&av->util_av.lock);
+	free(av->smr_map.peers);
+	av->smr_map.peers = NULL;
 }
 
 static int smr_av_close(struct fid *fid)
@@ -401,7 +417,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		FI_INFO(&smr_prov, FI_LOG_AV, "%s\n", (const char *) addr);
 
 		util_addr = FI_ADDR_NOTAVAIL;
-		if (smr_av->used < SMR_MAX_PEERS) {
+		shm_id = -1;
+		if (smr_av->used < smr_max_peers) {
 			smr_map_add(&smr_av->smr_map, addr, &shm_id);
 			ret = ofi_av_insert_addr(util_av, &shm_id, &util_addr);
 		} else {
@@ -422,7 +439,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			continue;
 		}
 
-		assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
+		assert(shm_id >= 0 && shm_id < smr_max_peers);
 		if (flags & FI_AV_USER_ID) {
 			assert(fi_addr);
 			smr_av->smr_map.peers[shm_id].fiaddr = fi_addr[i];
@@ -572,7 +589,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	util_attr.addrlen = sizeof(int64_t);
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
-	if (attr->count > SMR_MAX_PEERS) {
+	if (attr->count > smr_max_peers) {
 		FI_INFO(&smr_prov, FI_LOG_AV,
 			"count %d exceeds max peers\n", (int) attr->count);
 		ret = -FI_ENOSYS;
@@ -589,7 +606,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	(*av)->fid.ops = &smr_av_fi_ops;
 	(*av)->ops = &smr_av_ops;
 
-	ret = smr_map_init(&smr_av->smr_map, SMR_MAX_PEERS,
+	ret = smr_map_init(&smr_av->smr_map, smr_max_peers,
 			   util_domain->info_domain_caps & FI_HMEM ?
 			   SMR_FLAG_HMEM_ENABLED : 0);
 	if (ret)
