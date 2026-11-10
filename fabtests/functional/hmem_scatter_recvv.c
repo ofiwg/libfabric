@@ -27,7 +27,6 @@
  * SOFTWARE.
  */
 
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -41,20 +40,9 @@
 #include <shared.h>
 #include <hmem.h>
 
-#define SENTINEL	0xa5
 #define ITER_STRIDE	0x632be5abu
 #define KNUTH_HASH	2654435761u
 #define CANCEL_WAIT	5
-#define NAME_LEN	256
-
-struct segment {
-	void			*buf;
-	size_t			len;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
-	struct fid_mr		*mr;
-	void			*desc;
-};
 
 struct test_case {
 	const char	*source;
@@ -75,31 +63,9 @@ static const struct test_case default_cases[] = {
 	{ "d0", "d0,h,d0" },
 };
 
-enum source_kind {
-	SOURCE_CLIENT,
-	SOURCE_HOST,
-	SOURCE_DEVICE,
-};
-
-struct case_info {
-	uint64_t	nsegs;
-	uint64_t	seg_len;
-	uint64_t	source_kind;
-	uint64_t	source_device;
-	char		names[NAME_LEN];
-};
-
-static struct segment *segs;
-static size_t nsegs;
-static const char *layout;
-static size_t seg_len;
-static bool device_set;
-static enum fi_hmem_iface src_iface;
-static uint64_t src_device;
 static char *stage;
 static bool recv_posted;
 static bool send_posted;
-static char direction[2 * NAME_LEN + 3];
 static size_t failed_size;
 
 /* The byte expected at a position in the message, for a given iteration. It
@@ -128,329 +94,38 @@ static unsigned char pattern(size_t pos, int iter)
 	return (x * KNUTH_HASH >> 24) % 160 + 1;
 }
 
-static int parse_memory(const char *tok, enum fi_hmem_iface *iface,
-			uint64_t *device)
+static unsigned char pattern_byte(size_t pos, void *ctx)
 {
-	char *end;
-
-	if (!strcmp(tok, "h")) {
-		*iface = FI_HMEM_SYSTEM;
-		*device = 0;
-		return 0;
-	}
-
-	if (tok[0] != 'd' || !tok[1]) {
-		FT_ERR("invalid layout entry '%s'", tok);
-		return -FI_EINVAL;
-	}
-
-	*device = strtoul(tok + 1, &end, 0);
-	if (*end) {
-		FT_ERR("invalid layout entry '%s'", tok);
-		return -FI_EINVAL;
-	}
-
-	if (opts.iface == FI_HMEM_SYSTEM) {
-		FT_ERR("layout entry '%s' needs -D <iface>", tok);
-		return -FI_EINVAL;
-	}
-
-	*iface = opts.iface;
-	return 0;
+	return pattern(pos, *(int *) ctx);
 }
 
-static int parse_layout(const char *lay)
-{
-	size_t max_segs = fi->rx_attr->iov_limit, count = 1;
-	char *copy, *tok, *next;
-	const char *c;
-	int ret = 0;
-
-	if (!max_segs) {
-		FT_ERR("provider does not receive into iovs");
-		return -FI_EINVAL;
-	}
-
-	for (c = lay; *c; c++)
-		count += *c == ',';
-
-	if (count > max_segs) {
-		FT_ERR("layout '%s' has %zu entries, more than the %zu "
-		       "iovs the provider receives", lay, count, max_segs);
-		return -FI_EINVAL;
-	}
-
-	segs = calloc(count, sizeof(*segs));
-	copy = strdup(lay);
-	if (!segs || !copy) {
-		free(copy);
-		return -FI_ENOMEM;
-	}
-
-	for (tok = copy; tok && !ret; tok = next) {
-		next = strchr(tok, ',');
-		if (next)
-			*next++ = '\0';
-
-		ret = parse_memory(tok, &segs[nsegs].iface,
-				   &segs[nsegs].device);
-		nsegs++;
-	}
-
-	free(copy);
-	return ret;
-}
-
-static void set_direction(const char *src, const char *dst)
-{
-	snprintf(direction, sizeof(direction), "%s->%s", src, dst);
-}
-
-static const char *iface_name(enum fi_hmem_iface iface)
-{
-	switch (iface) {
-	case FI_HMEM_CUDA:
-		return "CUDA";
-	case FI_HMEM_ROCR:
-		return "ROCR";
-	case FI_HMEM_ZE:
-		return "ZE";
-	case FI_HMEM_NEURON:
-		return "NEURON";
-	case FI_HMEM_SYNAPSEAI:
-		return "SYNAPSEAI";
-	default:
-		return "?";
-	}
-}
-
-static int memory_name(char *name, size_t size, enum fi_hmem_iface iface,
-		       uint64_t device)
-{
-	int len;
-
-	if (iface == FI_HMEM_SYSTEM)
-		len = snprintf(name, size, "H");
-	else
-		len = snprintf(name, size, "%s:D%" PRIu64, iface_name(iface),
-			       device);
-
-	return len < (int) size ? 0 : -FI_EINVAL;
-}
-
-static int layout_name(char *name)
-{
-	size_t i, len = 0;
-	int ret;
-
-	for (i = 0; i < nsegs; i++) {
-		if (i)
-			name[len++] = ',';
-
-		ret = memory_name(name + len, NAME_LEN - len, segs[i].iface,
-				  segs[i].device);
-		if (ret) {
-			FT_ERR("the layout is longer than %d characters",
-			       NAME_LEN - 1);
-			return ret;
-		}
-		len += strlen(name + len);
-	}
-
-	return 0;
-}
-
-static int exchange_server(const struct test_case *tc)
-{
-	struct case_info info = { .seg_len = seg_len };
-	char src[NAME_LEN];
-	size_t i;
-	int ret;
-
-	ret = parse_layout(tc ? tc->layout : layout);
-	if (ret)
-		return ret;
-
-	for (i = 0; tc && device_set && i < nsegs; i++) {
-		if (segs[i].iface != FI_HMEM_SYSTEM)
-			segs[i].device = opts.device;
-	}
-
-	info.nsegs = nsegs;
-	info.source_kind = SOURCE_CLIENT;
-	if (tc && !strcmp(tc->source, "h")) {
-		info.source_kind = SOURCE_HOST;
-	} else if (tc) {
-		info.source_kind = SOURCE_DEVICE;
-		info.source_device = strtoul(tc->source + 1, NULL, 0);
-	}
-
-	ret = layout_name(info.names);
-	if (ret)
-		return ret;
-
-	ret = ft_sock_send(oob_sock, &info, sizeof(info));
-	if (ret)
-		return ret;
-
-	ret = ft_sock_recv(oob_sock, src, sizeof(src));
-	if (ret)
-		return ret;
-
-	src[NAME_LEN - 1] = '\0';
-	set_direction(src, info.names);
-	return 0;
-}
-
-static int pick_source(const struct case_info *info)
-{
-	if (info->source_kind == SOURCE_CLIENT) {
-		if (opts.iface == FI_HMEM_SYSTEM)
-			FT_DEBUG("no -D given, assuming -H and sending from "
-				 "host memory");
-
-		src_iface = opts.iface;
-		src_device = opts.device;
-		return 0;
-	}
-
-	if (info->source_kind == SOURCE_HOST) {
-		src_iface = FI_HMEM_SYSTEM;
-		src_device = 0;
-		return 0;
-	}
-
-	if (opts.iface == FI_HMEM_SYSTEM) {
-		FT_ERR("the server sends from device %" PRIu64 ", the client "
-		       "needs -D <iface>", info->source_device);
-		return -FI_EINVAL;
-	}
-
-	src_iface = opts.iface;
-	src_device = device_set ? opts.device : info->source_device;
-	return 0;
-}
-
-static int exchange_client(void)
-{
-	struct case_info info;
-	char src[NAME_LEN];
-	int ret;
-
-	ret = ft_sock_recv(oob_sock, &info, sizeof(info));
-	if (ret) {
-		FT_PRINTERR("receiving the test from the server", ret);
-		return ret;
-	}
-
-	nsegs = info.nsegs;
-	seg_len = info.seg_len;
-	if (!nsegs) {
-		FT_ERR("the server sent an empty layout");
-		return -FI_EINVAL;
-	}
-
-	ret = pick_source(&info);
-	if (ret)
-		return ret;
-
-	ret = memory_name(src, sizeof(src), src_iface, src_device);
-	if (ret)
-		return ret;
-
-	ret = ft_sock_send(oob_sock, src, sizeof(src));
-	if (ret)
-		return ret;
-
-	info.names[NAME_LEN - 1] = '\0';
-	set_direction(src, info.names);
-	return 0;
-}
-
-static size_t posted_len(size_t size)
-{
-	return seg_len ? seg_len : (size + nsegs - 1) / nsegs;
-}
-
-static bool fits(size_t size)
-{
-	return nsegs * posted_len(size) >= size;
-}
-
-static int fill_sentinel(struct segment *seg)
-{
-	memset(stage, SENTINEL, seg->len);
-	return ft_hmem_copy_to(seg->iface, seg->device, seg->buf, stage,
-			       seg->len);
-}
-
-static int alloc_segments(size_t seg_cap)
+static int prepare_layout(const struct test_case *tc)
 {
 	size_t i;
 	int ret;
 
-	for (i = 0; i < nsegs; i++) {
-		ret = ft_hmem_alloc(segs[i].iface, segs[i].device,
-				    &segs[i].buf, seg_cap);
-		if (ret)
-			return ret;
+	ret = ft_scatter_parse_layout(tc ? tc->layout : opts.scatter_layout);
+	if (ret)
+		return ret;
 
-		ret = ft_reg_mr(fi, segs[i].buf, seg_cap, FI_RECV,
-				FT_MR_KEY + i, segs[i].iface, segs[i].device,
-				&segs[i].mr, &segs[i].desc);
-		if (ret)
-			return ret;
+	for (i = 0; tc && opts.scatter_device && i < ft_scatter.nsegs; i++) {
+		if (ft_scatter.segs[i].iface != FI_HMEM_SYSTEM)
+			ft_scatter.segs[i].device = opts.device;
 	}
 
 	return 0;
-}
-
-static void free_segments(void)
-{
-	size_t i;
-
-	if (!segs)
-		return;
-
-	for (i = 0; i < nsegs; i++) {
-		FT_CLOSE_FID(segs[i].mr);
-		if (segs[i].buf)
-			(void) ft_hmem_free(segs[i].iface, segs[i].buf);
-		segs[i].buf = NULL;
-	}
-
-	free(segs);
-	segs = NULL;
-	nsegs = 0;
 }
 
 static int post_recvv(void)
 {
-	struct iovec iov[nsegs];
-	void *desc[nsegs];
-	size_t i;
 	int ret;
 
-	for (i = 0; i < nsegs; i++) {
-		ret = fill_sentinel(&segs[i]);
-		if (ret)
-			return ret;
-
-		iov[i].iov_base = segs[i].buf;
-		iov[i].iov_len = segs[i].len;
-		desc[i] = segs[i].desc;
-	}
-
-	do {
-		ret = (int) fi_recvv(ep, iov, desc, nsegs,
-				     FI_ADDR_UNSPEC, &rx_ctx);
-		if (ret == -FI_EAGAIN)
-			(void) fi_cq_read(rxcq, NULL, 0);
-	} while (ret == -FI_EAGAIN);
-
+	ret = ft_scatter_fill_sentinel();
 	if (ret)
-		FT_PRINTERR("fi_recvv", ret);
-	else
+		return ret;
+
+	ret = ft_post_rx_scatter(ep, FI_ADDR_UNSPEC, &rx_ctx);
+	if (!ret)
 		recv_posted = true;
 	return ret;
 }
@@ -544,60 +219,24 @@ static void cancel_pending(void)
 	}
 }
 
-/* The completion must report the message length, the message must fill the
- * posted buffers in order, and the bytes after its end must still hold the
- * sentinel.
- */
 static int check_recvv(size_t msg_len, struct fi_cq_data_entry *comp,
 		       int iter)
 {
-	size_t i, j, pos = 0, covered;
-	int ret;
-
 	if (comp->len != msg_len) {
 		FT_ERR("completion length %zu, expected %zu", comp->len,
 		       msg_len);
 		return -FI_EIO;
 	}
 
-	for (i = 0; i < nsegs; i++) {
-		ret = ft_hmem_copy_from(segs[i].iface, segs[i].device, stage,
-					segs[i].buf, segs[i].len);
-		if (ret)
-			return ret;
-
-		covered = msg_len > pos ? MIN(segs[i].len, msg_len - pos) : 0;
-		for (j = 0; j < covered; j++) {
-			if ((unsigned char) stage[j] !=
-			    pattern(pos + j, iter)) {
-				FT_ERR("buffer %zu byte %zu: got 0x%02x, "
-				       "expected 0x%02x", i, j,
-				       (unsigned char) stage[j],
-				       pattern(pos + j, iter));
-				return -FI_EIO;
-			}
-		}
-		for (; j < segs[i].len; j++) {
-			if ((unsigned char) stage[j] != SENTINEL) {
-				FT_ERR("buffer %zu byte %zu was written past "
-				       "the end of the message", i, j);
-				return -FI_EIO;
-			}
-		}
-		pos += covered;
-	}
-
-	return 0;
+	return ft_scatter_check(msg_len, pattern_byte, &iter);
 }
 
 static int run_server(void)
 {
 	struct fi_cq_data_entry comp;
-	size_t i;
 	int j, ret;
 
-	for (i = 0; i < nsegs; i++)
-		segs[i].len = posted_len(opts.transfer_size);
+	ft_scatter_set_size(opts.transfer_size);
 
 	for (j = 0; j < opts.iterations; j++) {
 		ret = post_recvv();
@@ -629,7 +268,8 @@ static int run_client(void)
 		for (i = 0; i < opts.transfer_size; i++)
 			stage[i] = pattern(i, j);
 
-		ret = ft_hmem_copy_to(src_iface, src_device, tx_buf, stage,
+		ret = ft_hmem_copy_to(ft_scatter.src_iface,
+				      ft_scatter.src_device, tx_buf, stage,
 				      opts.transfer_size);
 		if (ret)
 			return ret;
@@ -707,13 +347,13 @@ static size_t list_name_len(const char *list, size_t devlen)
 
 static size_t default_width(void)
 {
-	char dev[NAME_LEN], src[NAME_LEN];
+	char dev[FT_SCATTER_NAME_LEN], src[FT_SCATTER_NAME_LEN];
 	size_t i, len, max = 0;
 
-	(void) memory_name(dev, sizeof(dev), opts.iface,
-			   opts.dst_addr ? 0 : opts.device);
-	(void) memory_name(src, sizeof(src), opts.iface,
-			   opts.dst_addr ? opts.device : 0);
+	(void) ft_scatter_memory_name(dev, sizeof(dev), opts.iface,
+				      opts.dst_addr ? 0 : opts.device);
+	(void) ft_scatter_memory_name(src, sizeof(src), opts.iface,
+				      opts.dst_addr ? opts.device : 0);
 	for (i = 0; i < ARRAY_SIZE(default_cases); i++) {
 		if (!case_enabled(&default_cases[i]))
 			continue;
@@ -728,10 +368,10 @@ static size_t default_width(void)
 
 static void show_test(void)
 {
-	size_t i, len = strlen(direction);
+	size_t i, len = strlen(ft_scatter.direction);
 	size_t width = MAX(default_width(), len) + 2;
 
-	printf("%s ", direction);
+	printf("%s ", ft_scatter.direction);
 	for (i = len + 1; i < width; i++)
 		putchar('-');
 
@@ -759,63 +399,44 @@ static int run_size(void)
 	return ret;
 }
 
-static size_t max_size(void)
-{
-	size_t max = 0;
-	int i;
-
-	if (opts.options & FT_OPT_SIZE)
-		return opts.transfer_size;
-
-	for (i = 0; i < TEST_CNT; i++) {
-		if (ft_use_size(i, opts.sizes_enabled))
-			max = MAX(max, test_size[i].size);
-	}
-	return max;
-}
-
 static int alloc_case(void)
 {
-	size_t max = max_size(), cap;
+	size_t max = ft_scatter_max_size();
 	int ret;
+
+	if (!opts.dst_addr)
+		return ft_scatter_alloc();
 
 	if (!max) {
 		FT_ERR("no message sizes are enabled");
 		return -FI_EINVAL;
 	}
 
-	if (opts.dst_addr) {
-		stage = malloc(max);
-		if (!stage)
-			return -FI_ENOMEM;
-
-		ret = ft_hmem_alloc(src_iface, src_device, (void **) &tx_buf,
-				    max);
-		if (ret)
-			return ret;
-
-		return ft_reg_mr(fi, tx_buf, max, FI_SEND, FT_MR_KEY,
-				 src_iface, src_device, &mr, &mr_desc);
-	}
-
-	cap = posted_len(max);
-	stage = malloc(cap);
+	stage = malloc(max);
 	if (!stage)
 		return -FI_ENOMEM;
 
-	return alloc_segments(cap);
+	ret = ft_hmem_alloc(ft_scatter.src_iface, ft_scatter.src_device,
+			    (void **) &tx_buf, max);
+	if (ret)
+		return ret;
+
+	return ft_reg_mr(fi, tx_buf, max, FI_SEND, FT_MR_KEY,
+			 ft_scatter.src_iface, ft_scatter.src_device, &mr,
+			 &mr_desc);
 }
 
 static void free_case(void)
 {
-	free_segments();
-	free(stage);
-	stage = NULL;
 	FT_CLOSE_FID(mr);
 	if (tx_buf) {
-		(void) ft_hmem_free(src_iface, tx_buf);
+		(void) ft_hmem_free(ft_scatter.src_iface, tx_buf);
 		tx_buf = NULL;
 	}
+
+	free(stage);
+	stage = NULL;
+	ft_scatter_free();
 }
 
 static int run_sizes(void)
@@ -824,11 +445,12 @@ static int run_sizes(void)
 	int i, ret = 0;
 
 	if (opts.options & FT_OPT_SIZE) {
-		if (fits(opts.transfer_size))
+		if (ft_scatter_fits(opts.transfer_size))
 			return run_size();
 
 		FT_ERR("%zu buffers of %zu bytes cannot hold a %zu byte "
-		       "message", nsegs, posted_len(opts.transfer_size),
+		       "message", ft_scatter.nsegs,
+		       ft_scatter_posted_len(opts.transfer_size),
 		       opts.transfer_size);
 		return -FI_EINVAL;
 	}
@@ -838,10 +460,10 @@ static int run_sizes(void)
 			continue;
 
 		opts.transfer_size = test_size[i].size;
-		if (!fits(opts.transfer_size)) {
+		if (!ft_scatter_fits(opts.transfer_size)) {
 			FT_DEBUG("skipping %zu bytes, %zu buffers of %zu "
 				 "bytes cannot hold it", opts.transfer_size,
-				 nsegs, seg_len);
+				 ft_scatter.nsegs, ft_scatter.seg_len);
 			continue;
 		}
 
@@ -851,7 +473,7 @@ static int run_sizes(void)
 
 	if (!ret && !ran) {
 		FT_ERR("no message size fits in %zu buffers of %zu bytes",
-		       nsegs, seg_len);
+		       ft_scatter.nsegs, ft_scatter.seg_len);
 		ret = -FI_EINVAL;
 	}
 
@@ -862,7 +484,13 @@ static int run_case(const struct test_case *tc)
 {
 	int ret;
 
-	ret = opts.dst_addr ? exchange_client() : exchange_server(tc);
+	if (!opts.dst_addr) {
+		ret = prepare_layout(tc);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_scatter_exchange(tc ? tc->source : NULL);
 	if (ret)
 		return ret;
 
@@ -875,32 +503,6 @@ static int run_case(const struct test_case *tc)
 	free_case();
 	show_result(ret);
 	return ret;
-}
-
-static int check_hmem(void)
-{
-	struct fi_info *probe, *info;
-	int ret;
-
-	probe = fi_dupinfo(hints);
-	if (!probe)
-		return -FI_ENOMEM;
-
-	if (!probe->ep_attr->type)
-		probe->ep_attr->type = FI_EP_RDM;
-
-	probe->caps |= FI_HMEM;
-	probe->domain_attr->mr_mode |= FI_MR_HMEM;
-	ret = fi_getinfo(ft_fiversion, NULL, NULL, 0, probe, &info);
-	fi_freeinfo(probe);
-	if (ret) {
-		FT_ERR("the provider does not support FI_HMEM: %s",
-		       fi_strerror(-ret));
-		return ret;
-	}
-
-	fi_freeinfo(info);
-	return 0;
 }
 
 static int exchange_run_info(uint64_t *ncases)
@@ -923,14 +525,14 @@ static int exchange_run_info(uint64_t *ncases)
 
 		server_device = opts.iface != FI_HMEM_SYSTEM;
 		client_device = has_device;
-		if (!layout && !server_device)
+		if (!opts.scatter_layout && !server_device)
 			FT_DEBUG("the server has no -D, skipping the tests that "
 				 "receive into device memory");
-		if (!layout && !client_device)
+		if (!opts.scatter_layout && !client_device)
 			FT_DEBUG("the client has no -D, skipping the tests "
 				 "that send from device memory");
 
-		info.ncases = layout ? 1 : count_cases();
+		info.ncases = opts.scatter_layout ? 1 : count_cases();
 		info.server_device = server_device;
 		info.client_device = client_device;
 		ret = ft_sock_send(oob_sock, &info, sizeof(info));
@@ -952,7 +554,7 @@ static int run(void)
 	size_t idx = 0;
 	int ret;
 
-	ret = check_hmem();
+	ret = ft_check_hmem_support();
 	if (ret)
 		return ret;
 
@@ -963,7 +565,8 @@ static int run(void)
 
 	ret = exchange_run_info(&ncases);
 	for (k = 0; k < ncases && !ret; k++) {
-		tc = (opts.dst_addr || layout) ? NULL : next_case(&idx);
+		tc = (opts.dst_addr || opts.scatter_layout) ? NULL :
+		     next_case(&idx);
 		ret = run_case(tc);
 	}
 
@@ -1023,7 +626,6 @@ static void usage(char *name)
 
 int main(int argc, char **argv)
 {
-	char *end;
 	int op, ret, cleanup_ret;
 
 	opts = INIT_OPTS;
@@ -1035,12 +637,15 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "hHi:y:z:D:p:e:s:I:S:b::E::O:",
+	while ((op = getopt_long(argc, argv,
+				 "hHi:" HMEM_SCATTER_OPTS "D:p:e:s:I:S:"
+				 "b::E::O:",
 				 test_long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
 			if (!ft_parse_long_opts(op, optarg))
 				continue;
+			ft_parse_hmem_scatter_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
@@ -1048,21 +653,6 @@ int main(int argc, char **argv)
 			/* FI_HMEM is always requested, accepted so command
 			 * lines shared with other tests work
 			 */
-			break;
-		case 'i':
-			opts.device = strtoul(optarg, &end, 0);
-			if (!*optarg || *end) {
-				FT_ERR("invalid device number '%s'", optarg);
-				ret = EXIT_FAILURE;
-				goto out;
-			}
-			device_set = true;
-			break;
-		case 'y':
-			layout = optarg;
-			break;
-		case 'z':
-			seg_len = strtoul(optarg, NULL, 0);
 			break;
 		case '?':
 		case 'h':
@@ -1075,29 +665,9 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	if (opts.iterations < 1) {
-		FT_ERR("-I must be at least 1");
+	if (ft_check_hmem_scatter_opts(false)) {
 		ret = EXIT_FAILURE;
 		goto out;
-	}
-
-	if (opts.dst_addr && (layout || seg_len)) {
-		FT_ERR("-y and -z are only for the server, which receives");
-		ret = EXIT_FAILURE;
-		goto out;
-	}
-
-	if (device_set && opts.iface == FI_HMEM_SYSTEM) {
-		FT_ERR("-i needs -D <iface>");
-		ret = EXIT_FAILURE;
-		goto out;
-	}
-
-	if (!opts.dst_addr && device_set && layout) {
-		FT_DEBUG("ignoring -i on the server, the -y layout selects the "
-			 "devices");
-		device_set = false;
-		opts.device = 0;
 	}
 
 

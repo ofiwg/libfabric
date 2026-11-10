@@ -293,7 +293,7 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 void ft_addr_usage();
 void ft_hmem_usage();
 void ft_parse_hmem_scatter_opts(int op, char *optarg);
-int ft_check_hmem_scatter_opts(void);
+int ft_check_hmem_scatter_opts(bool default_layout);
 void ft_hmem_scatter_usage(void);
 
 #define FT_SCATTER_NAME_LEN 256
@@ -314,17 +314,28 @@ struct ft_scatter {
 	unsigned char *stage;
 	size_t nsegs;
 	size_t seg_len;
+	char source[FT_SCATTER_NAME_LEN];
+	enum fi_hmem_iface src_iface;
+	uint64_t src_device;
 	char direction[2 * FT_SCATTER_NAME_LEN + 3];
 };
 
 extern struct ft_scatter ft_scatter;
 
 int ft_scatter_setup(void);
-int ft_scatter_exchange(void);
+int ft_scatter_parse_layout(const char *layout);
+int ft_scatter_alloc(void);
+int ft_scatter_parse_entry(const char *entry, struct ft_scatter_seg *seg);
+int ft_scatter_memory_name(char *name, size_t size, enum fi_hmem_iface iface,
+			   uint64_t device);
+int ft_scatter_exchange(const char *source);
 size_t ft_scatter_posted_len(size_t size);
 bool ft_scatter_fits(size_t size);
+size_t ft_scatter_max_size(void);
 int ft_scatter_fill_sentinel(void);
-int ft_scatter_check(size_t msg_len);
+typedef unsigned char (*ft_scatter_pattern)(size_t pos, void *ctx);
+unsigned char ft_scatter_alphabet(size_t pos, void *ctx);
+int ft_scatter_check(size_t msg_len, ft_scatter_pattern pattern, void *ctx);
 void ft_scatter_set_size(size_t size);
 int ft_post_rx_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx);
 int ft_recvmsg_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx,

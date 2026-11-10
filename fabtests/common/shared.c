@@ -63,6 +63,7 @@ struct ft_scatter_layout_msg {
 	uint64_t nsegs;
 	uint64_t seg_len;
 	char names[FT_SCATTER_NAME_LEN];
+	char source[FT_SCATTER_NAME_LEN];
 };
 
 struct ft_scatter_params_msg {
@@ -1616,7 +1617,7 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (opts.scatter_layout) {
+	if (opts.scatter_layout && !ft_check_opts(FT_OPT_SKIP_MSG_ALLOC)) {
 		ret = ft_scatter_setup();
 		if (ret)
 			return ret;
@@ -3936,9 +3937,9 @@ void ft_parse_hmem_scatter_opts(int op, char *optarg)
 	}
 }
 
-int ft_check_hmem_scatter_opts(void)
+int ft_check_hmem_scatter_opts(bool default_layout)
 {
-	bool default_layout = false;
+	bool defaulted = false;
 	char *end;
 
 	if (opts.iterations < 1 || opts.window_size < 1 ||
@@ -3954,10 +3955,10 @@ int ft_check_hmem_scatter_opts(void)
 		opts.scatter_seg_len = 0;
 	}
 
-	if (!opts.dst_addr && !opts.scatter_layout) {
+	if (!opts.dst_addr && default_layout && !opts.scatter_layout) {
 		FT_DEBUG("no -y given, receiving into the host buffers h,h");
 		opts.scatter_layout = "h,h";
-		default_layout = true;
+		defaulted = true;
 	}
 
 	if (opts.scatter_device) {
@@ -3973,8 +3974,8 @@ int ft_check_hmem_scatter_opts(void)
 			return -FI_EINVAL;
 		}
 
-		if (!opts.dst_addr) {
-			if (default_layout)
+		if (!opts.dst_addr && opts.scatter_layout) {
+			if (defaulted)
 				FT_DEBUG("ignoring -i on the server, the "
 					 "default layout uses no device");
 			else
@@ -4012,8 +4013,8 @@ static const char *ft_scatter_iface_name(enum fi_hmem_iface iface)
 	}
 }
 
-static int ft_scatter_memory_name(char *name, size_t size,
-				  enum fi_hmem_iface iface, uint64_t device)
+int ft_scatter_memory_name(char *name, size_t size,
+			   enum fi_hmem_iface iface, uint64_t device)
 {
 	int len;
 
@@ -4050,7 +4051,7 @@ static int ft_scatter_layout_name(char *name)
 	return 0;
 }
 
-static int ft_scatter_parse_entry(char *entry, struct ft_scatter_seg *seg)
+int ft_scatter_parse_entry(const char *entry, struct ft_scatter_seg *seg)
 {
 	char *end;
 
@@ -4080,7 +4081,7 @@ static int ft_scatter_parse_entry(char *entry, struct ft_scatter_seg *seg)
 	return 0;
 }
 
-static int ft_scatter_parse_layout(void)
+int ft_scatter_parse_layout(const char *layout)
 {
 	size_t max_segs = fi->rx_attr->iov_limit, count = 1;
 	struct ft_scatter_seg *seg;
@@ -4088,12 +4089,14 @@ static int ft_scatter_parse_layout(void)
 	const char *c;
 	int ret = 0;
 
+	ft_scatter_free();
+
 	if (!max_segs) {
 		FT_ERR("provider does not receive into iovs");
 		return -FI_EINVAL;
 	}
 
-	for (c = opts.scatter_layout; *c; c++)
+	for (c = layout; *c; c++)
 		count += *c == ',';
 
 	if (count > max_segs) {
@@ -4105,7 +4108,7 @@ static int ft_scatter_parse_layout(void)
 	ft_scatter.segs = calloc(count, sizeof(*ft_scatter.segs));
 	ft_scatter.iov = calloc(count, sizeof(*ft_scatter.iov));
 	ft_scatter.desc = calloc(count, sizeof(*ft_scatter.desc));
-	copy = strdup(opts.scatter_layout);
+	copy = strdup(layout);
 	if (!ft_scatter.segs || !ft_scatter.iov || !ft_scatter.desc || !copy) {
 		free(copy);
 		return -FI_ENOMEM;
@@ -4133,7 +4136,7 @@ size_t ft_scatter_posted_len(size_t size)
 	return (size + ft_scatter.nsegs - 1) / ft_scatter.nsegs;
 }
 
-static size_t ft_scatter_max_size(void)
+size_t ft_scatter_max_size(void)
 {
 	size_t max = 0;
 	int i;
@@ -4149,7 +4152,7 @@ static size_t ft_scatter_max_size(void)
 	return max;
 }
 
-static int ft_scatter_alloc(void)
+int ft_scatter_alloc(void)
 {
 	size_t i, size, cap = ft_scatter_posted_len(ft_scatter_max_size());
 	struct ft_scatter_seg *seg;
@@ -4260,7 +4263,12 @@ int ft_scatter_fill_sentinel(void)
 	return 0;
 }
 
-int ft_scatter_check(size_t msg_len)
+unsigned char ft_scatter_alphabet(size_t pos, void *ctx)
+{
+	return integ_alphabet[pos % integ_alphabet_length];
+}
+
+int ft_scatter_check(size_t msg_len, ft_scatter_pattern pattern, void *ctx)
 {
 	struct ft_scatter_seg *seg;
 	size_t i, j, skip, covered, pos = 0;
@@ -4282,8 +4290,7 @@ int ft_scatter_check(size_t msg_len)
 			got = ft_scatter.stage[skip + j];
 			want = FT_SCATTER_SENTINEL;
 			if (j < covered)
-				want = integ_alphabet[(pos + j) %
-						      integ_alphabet_length];
+				want = pattern(pos + j, ctx);
 			if (got == want)
 				continue;
 
@@ -4302,7 +4309,7 @@ int ft_scatter_setup(void)
 {
 	int ret;
 
-	ret = ft_scatter_parse_layout();
+	ret = ft_scatter_parse_layout(opts.scatter_layout);
 	if (ret)
 		return ret;
 
@@ -4343,7 +4350,7 @@ static uint64_t ft_scatter_sizes_digest(void)
 	return digest;
 }
 
-static int ft_scatter_get_params(struct ft_scatter_params_msg *params)
+static void ft_scatter_get_params(struct ft_scatter_params_msg *params)
 {
 	memset(params, 0, sizeof(*params));
 	params->iterations = opts.iterations;
@@ -4352,9 +4359,33 @@ static int ft_scatter_get_params(struct ft_scatter_params_msg *params)
 	params->verify = !!(opts.options & FT_OPT_VERIFY_DATA);
 	params->prefix = opts.force_prefix;
 	params->sizes = ft_scatter_sizes_digest();
+}
+
+static int ft_scatter_pick_source(const char *entry,
+				  struct ft_scatter_params_msg *params)
+{
+	struct ft_scatter_seg seg;
+	int ret;
+
+	ft_scatter.src_iface = opts.iface;
+	ft_scatter.src_device = opts.device;
+	if (!entry[0] && opts.iface == FI_HMEM_SYSTEM)
+		FT_DEBUG("no -D given, assuming -H and sending from host "
+			 "memory");
+
+	if (entry[0]) {
+		ret = ft_scatter_parse_entry(entry, &seg);
+		if (ret)
+			return ret;
+
+		ft_scatter.src_iface = seg.iface;
+		ft_scatter.src_device = seg.iface == FI_HMEM_SYSTEM ? 0 :
+					opts.device ? opts.device : seg.device;
+	}
 
 	return ft_scatter_memory_name(params->source, sizeof(params->source),
-				      opts.iface, opts.device);
+				      ft_scatter.src_iface,
+				      ft_scatter.src_device);
 }
 
 static int ft_scatter_diff(const char *option, uint64_t server,
@@ -4371,12 +4402,9 @@ static int ft_scatter_diff(const char *option, uint64_t server,
 static int ft_scatter_compare(const struct ft_scatter_params_msg *client)
 {
 	struct ft_scatter_params_msg server;
-	int ret;
+	int ret = 0;
 
-	ret = ft_scatter_get_params(&server);
-	if (ret)
-		return ret;
-
+	ft_scatter_get_params(&server);
 	ret |= ft_scatter_diff("-I", server.iterations, client->iterations);
 	ret |= ft_scatter_diff("-w", server.warmup, client->warmup);
 	ret |= ft_scatter_diff("-W", server.window, client->window);
@@ -4396,7 +4424,7 @@ static void ft_scatter_set_direction(const char *source, const char *layout)
 		 source, layout);
 }
 
-static int ft_scatter_exchange_server(void)
+static int ft_scatter_exchange_server(const char *source)
 {
 	struct ft_scatter_layout_msg layout = {
 		.nsegs = ft_scatter.nsegs,
@@ -4409,6 +4437,9 @@ static int ft_scatter_exchange_server(void)
 	ret = ft_scatter_layout_name(layout.names);
 	if (ret)
 		return ret;
+
+	if (source)
+		snprintf(layout.source, sizeof(layout.source), "%s", source);
 
 	ret = ft_sock_send(oob_sock, &layout, sizeof(layout));
 	if (ret)
@@ -4424,6 +4455,8 @@ static int ft_scatter_exchange_server(void)
 	if (ret || status)
 		return ret ? ret : status;
 
+	snprintf(ft_scatter.source, sizeof(ft_scatter.source), "%s",
+		 client.source);
 	ft_scatter_set_direction(client.source, layout.names);
 	return 0;
 }
@@ -4446,11 +4479,9 @@ static int ft_scatter_exchange_client(void)
 		return -FI_EINVAL;
 	}
 
-	if (opts.iface == FI_HMEM_SYSTEM)
-		FT_DEBUG("no -D given, assuming -H and sending from host "
-			 "memory");
-
-	ret = ft_scatter_get_params(&params);
+	ft_scatter_get_params(&params);
+	layout.source[FT_SCATTER_NAME_LEN - 1] = '\0';
+	ret = ft_scatter_pick_source(layout.source, &params);
 	if (ret)
 		return ret;
 
@@ -4470,14 +4501,16 @@ static int ft_scatter_exchange_client(void)
 	layout.names[FT_SCATTER_NAME_LEN - 1] = '\0';
 	ft_scatter.nsegs = layout.nsegs;
 	ft_scatter.seg_len = layout.seg_len;
+	snprintf(ft_scatter.source, sizeof(ft_scatter.source), "%s",
+		 params.source);
 	ft_scatter_set_direction(params.source, layout.names);
 	return 0;
 }
 
-int ft_scatter_exchange(void)
+int ft_scatter_exchange(const char *source)
 {
 	return opts.dst_addr ? ft_scatter_exchange_client() :
-			       ft_scatter_exchange_server();
+			       ft_scatter_exchange_server(source);
 }
 
 int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
