@@ -775,7 +775,8 @@ static int bw_scatter_rx_comp(void)
 		return ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-		ret = ft_scatter_check(opts.transfer_size);
+		ret = ft_scatter_check(opts.transfer_size, ft_scatter_alphabet,
+				       NULL);
 		if (ret)
 			return ret;
 	}
