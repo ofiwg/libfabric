@@ -303,16 +303,40 @@ For performance reasons, it may be undesirable for the provider to
 allocate a thread for this purpose, which will compete with the
 application threads.
 
+Control operations are calls that do not directly involve the transfer
+of application data between endpoints.  They include discovery and
+capability queries (fi_getinfo, fi_query_atomic, fi_query_collective,
+and the fi_atomicvalid calls); opening, binding, configuring, and
+closing objects (for example, fi_endpoint, fi_cq_open, fi_ep_bind,
+fi_enable, fi_control, fi_setopt, fi_getopt, fi_poll_add, and
+fi_close); address vector and address vector set calls; memory
+registration calls, including fi_mr_desc and fi_mr_key; connection
+management calls; event queue calls (fi_eq_read, fi_eq_sread,
+fi_eq_write, and related calls); and the import and export calls (for
+example, fi_import_fid and fi_cq_export_xpu).  Most control operations
+complete synchronously; the progress model does not apply to them.
+
 Control progress indicates the method that the provider uses to make
-progress on asynchronous control operations.  Control operations are
-functions which do not directly involve the transfer of application
-data between endpoints.  They include address vector, memory
-registration, and connection management routines.
+progress on asynchronous control operations, which include fi_listen,
+fi_connect, fi_accept, fi_join, and fi_join_collective.  All other
+asynchronous calls are data transfer operations.
 
 Data progress indicates the method that the provider uses to make
-progress on data transfer operations.  This includes message queue,
-RMA, tagged messaging, and atomic operations, along with their
-completion processing.
+progress on data transfer operations.  Data operations are calls that
+initiate data transfers, act on transfer requests that have been posted
+or queued, or access the completion queues and counters that report
+their completion.  They include the message, tagged, RMA, atomic, and
+collective calls and their variants; the work request prepare, modify,
+queue, and flush calls; fi_cancel; completion queue and counter calls
+(for example, fi_cq_read, fi_cq_sread, fi_cq_strerror, fi_cntr_read,
+fi_cntr_wait, fi_cntr_add, and fi_cntr_set); fi_wait, fi_poll, and
+fi_trywait when waiting on completion queues or counters (when waiting
+only on event queues, these are control operations); and the fi_xpu
+device calls.
+
+Utility calls that do not operate on provider resources, such as
+fi_tostr, fi_strerror, and fi_version, are neither control nor data
+operations.
 
 The progress field defines the behavior of both control and data operations.
 For applications that require compilation portability between the version 1
