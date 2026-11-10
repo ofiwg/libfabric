@@ -152,6 +152,12 @@ typedef struct {
 struct ofi_sockctx {
 	void *context;
 	bool uring_sqe_inuse;
+#ifdef HAVE_LIBURING
+	/* msghdr referenced by a pending IORING_OP_SENDMSG/RECVMSG request.
+	 * It must stay valid until the request has been submitted.
+	 */
+	struct msghdr msg;
+#endif
 };
 
 struct ofi_sockapi_uring {
