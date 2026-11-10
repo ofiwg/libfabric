@@ -62,6 +62,7 @@ bin_PROGRAMS = \
 	unit/fi_mr_cache_evict \
 	unit/fi_cntr_test \
 	unit/fi_av_test \
+	unit/fi_av_capacity_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
 	unit/fi_setopt_test \
@@ -209,6 +210,7 @@ nobase_dist_config_DATA = \
 	pytest/shm/conftest.py \
 	pytest/shm/shm_common.py \
 	pytest/shm/test_av.py \
+	pytest/shm/test_av_capacity.py \
 	pytest/shm/test_cntr.py \
 	pytest/shm/test_cq.py \
 	pytest/shm/test_dom.py \
@@ -485,6 +487,11 @@ unit_fi_av_test_SOURCES = \
 	$(unit_srcs)
 unit_fi_av_test_LDADD = libfabtests.la
 
+unit_fi_av_capacity_test_SOURCES = \
+	unit/av_capacity_test.c \
+	$(unit_srcs)
+unit_fi_av_capacity_test_LDADD = libfabtests.la
+
 unit_fi_dom_test_SOURCES = \
 	unit/dom_test.c \
 	$(unit_srcs)
@@ -701,6 +708,7 @@ dummy_man_pages = \
 	man/man1/fi_rdm_tagged_pingpong.1 \
 	man/man1/fi_rma_bw.1 \
 	man/man1/fi_av_test.1 \
+	man/man1/fi_av_capacity_test.1 \
 	man/man1/fi_cntr_test.1 \
 	man/man1/fi_cq_test.1 \
 	man/man1/fi_dom_test.1 \
