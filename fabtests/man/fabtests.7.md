@@ -211,6 +211,11 @@ testing scope is limited.
 *fi_av_test*
 : Verify address vector interfaces.
 
+*fi_av_capacity_test*
+: Verify that an address vector accepts at least a given number of addresses,
+  rejects inserts beyond its limit, and accepts an insert again after a
+  remove. Supports providers using the FI_ADDR_STR address format.
+
 *fi_cntr_test*
 : Tests counter creation and destruction.
 
