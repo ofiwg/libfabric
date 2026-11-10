@@ -203,7 +203,7 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	int ret;
 
 	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
-	assert(id < SMR_MAX_PEERS);
+	assert(id < smr_max_peers);
 	if (id < 0)
 		return -1;
 
@@ -797,7 +797,7 @@ static void smr_ep_map_all_peers(struct smr_ep *ep)
 	int64_t i;
 
 	ofi_genlock_lock(&ep->util_ep.av->lock);
-	for (i = 0; i < SMR_MAX_PEERS; i++)
+	for (i = 0; i < smr_max_peers; i++)
 		smr_map_to_endpoint(ep, i);
 
 	ofi_genlock_unlock(&ep->util_ep.av->lock);

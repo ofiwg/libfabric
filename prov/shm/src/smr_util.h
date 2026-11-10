@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#define SMR_VERSION	10
+#define SMR_VERSION	11
 
 struct smr_env {
 	int	disable_cma;
@@ -251,7 +251,8 @@ struct smr_region {
 			struct ofi_xpmem_pinfo	xpmem_peer;
 
 			int			pid;
-			int			resv2;
+			uint16_t		max_peers;
+			uint16_t		resv2;
 
 			uintptr_t		base_addr;
 
@@ -399,6 +400,8 @@ void smr_cleanup(void);
 int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	       struct smr_region *volatile *smr);
 void smr_free(struct smr_region *smr);
+void smr_init_max_peers(void);
+extern int smr_max_peers;
 
 #ifdef __cplusplus
 }
