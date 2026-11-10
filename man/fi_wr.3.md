@@ -129,8 +129,9 @@ work request.  The fi_tx_flush, fi_recv_flush, and fi_trecv_flush calls then
 give a well-defined point at which queued work is initiated, including
 operations the provider deferred under the FI_MORE flag.
 
-Prepare is a control path operation; modify, queue, and flush are data path
-operations.  The transport behavior of a work request is identical to that of
+All work request operations, including prepare, are data operations.
+Prepare is typically called outside the performance-critical path.  The
+transport behavior of a work request is identical to that of
 the corresponding fi_*msg call, so a prepare-queue-flush sequence and the
 standard post calls are interchangeable.
 
