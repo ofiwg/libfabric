@@ -834,6 +834,7 @@ These OFI runtime parameters apply only to the RDM endpoint.
 
 *FI_EFA_SHM_AV_SIZE*
 : Defines the maximum number of entries in SHM provider's address vector.
+  (Default: number of online CPUs, minimum 256)
 
 *FI_EFA_SHM_MAX_MEDIUM_SIZE*
 : Defines the switch point between small/medium message and large message. The message
