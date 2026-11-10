@@ -1215,7 +1215,8 @@ static void xnet_uring_tx_done(struct xnet_ep *ep, int res)
 		else
 			xnet_complete_tx(ep, FI_SUCCESS);
 	}
-	xnet_progress_tx(ep);
+	if (ep->state == XNET_CONNECTED)
+		xnet_progress_tx(ep);
 }
 
 static void xnet_uring_rx_done(struct xnet_ep *ep, int res)
@@ -1252,7 +1253,12 @@ static void xnet_uring_rx_done(struct xnet_ep *ep, int res)
 		else
 			xnet_complete_rx(ep, FI_SUCCESS);
 	}
-	xnet_progress_rx(ep);
+	/* Completing the receive with an error, or failing to queue an
+	 * ack, disables the endpoint.  Its queues have been flushed then,
+	 * and there is nothing left to receive.
+	 */
+	if (ep->state == XNET_CONNECTED)
+		xnet_progress_rx(ep);
 	return;
 
 disable_ep:
