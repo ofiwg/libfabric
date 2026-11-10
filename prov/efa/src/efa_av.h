@@ -10,7 +10,6 @@
 #include "efa_thread_annotations.h"
 
 #define EFA_MIN_AV_SIZE (16384)
-#define EFA_SHM_MAX_AV_COUNT       (256)
 
 struct efa_rdm_av;
 struct efa_rdm_pke;
