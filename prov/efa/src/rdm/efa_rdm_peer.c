@@ -65,6 +65,40 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 }
 
 /**
+ * @brief release out-of-order packet entries still queued in a peer's reorder window
+ *
+ * The in-order drain stops at the first gap, so packets buffered past a gap
+ * that never fills are left in the window. Release them so their pool has no
+ * outstanding entries when it is destroyed at endpoint teardown.
+ *
+ * Only packets the window owns are released. When FI_EFA_RX_COPY_OOO is set an
+ * out-of-order packet is cloned from the OOO pool and owned by the window. When
+ * it is unset the slot holds a borrowed rx packet that the rx path releases, so
+ * freeing it here would double free. Each released slot is cleared, so repeated
+ * calls are safe.
+ *
+ * @param[in,out]	peer	rdm peer whose reorder window to drain
+ * @relates efa_rdm_peer
+ */
+void efa_rdm_peer_release_pending_items_in_robuf(struct efa_rdm_peer *peer)
+{
+	struct recvwin_cirq *pending = peer->robuf.pending;
+	struct efa_rdm_pke **slot;
+	size_t i;
+
+	if (!pending)
+		return;
+
+	for (i = 0; i < pending->size; i++) {
+		slot = &pending->buf[i];
+		if (*slot && (*slot)->alloc_type == EFA_RDM_PKE_FROM_OOO_POOL) {
+			efa_rdm_pke_release_rx_list(*slot);
+			*slot = NULL;
+		}
+	}
+}
+
+/**
  * @brief clear resources accociated with a peer
  *
  * release reorder buffer, txe list and rxe list of a peer
@@ -80,8 +114,10 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 
-	if (peer->robuf.pending)
+	if (peer->robuf.pending) {
+		efa_rdm_peer_release_pending_items_in_robuf(peer);
 		efa_recvwin_free(&peer->robuf, true);
+	}
 
 	if (!ep) {
 		/* ep is NULL means the endpoint has been closed.
