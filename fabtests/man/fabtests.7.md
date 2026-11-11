@@ -141,8 +141,10 @@ features of libfabric.
 *fi_unmap_mem*
 : Tests data transfers where the transmit buffer is mmapped and
   unmapped between each transfer, but the virtual address of the transmit
-  buffer tries to remain the same.  This test is used to validate the
-  correct behavior of memory registration caches.
+  buffer tries to remain the same.  Each transfer sends different data, so
+  a memory registration cache that reuses the registration of an unmapped
+  buffer fails the data check.  This test is used to validate the correct
+  behavior of memory registration caches.
 
 *fi_flood*
 : The test performs a one-sided transfer by utilizing Bulk Memory Region (MR)
