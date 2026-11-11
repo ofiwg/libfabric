@@ -96,6 +96,17 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 
 #endif /* OFI_THREAD_SAFETY_ANALYSIS */
 
+/*
+ * Mark a function whose reads are intentionally unsynchronized, where a stale
+ * value is harmless, so ThreadSanitizer does not instrument it. The writers
+ * stay instrumented. Expands to nothing unless built with --enable-tsan.
+ */
+#if defined(ENABLE_TSAN) && ENABLE_TSAN
+#  define EFA_TSAN_IGNORE_RACY_READS	__attribute__((no_sanitize_thread))
+#else
+#  define EFA_TSAN_IGNORE_RACY_READS
+#endif
+
 /* EFA lock symbols (one per lock role), declared outermost lock first. */
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_domain_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_av_lock_sym,

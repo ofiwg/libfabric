@@ -135,6 +135,35 @@ efa_data_path_direct_is_valid_wrid_qp_gen(struct efa_io_cdesc_common *cqe,
 }
 
 /**
+ * @brief Check, without the CQ lock, whether the device CQ has no new entry
+ *
+ * Peeks at the next CQE's phase bit without consuming it. The poller
+ * updates consumed_cnt and phase under ep_list_lock, so a concurrent CQ
+ * drain (EP close) can make these reads stale. A stale result only delays
+ * or wastes one read, and the peek never touches qp_table or a QP.
+ *
+ * @param ibv_cq Pointer to the IBV completion queue
+ * @return true if the next CQE is not yet written by the device
+ */
+static inline EFA_TSAN_IGNORE_RACY_READS bool
+efa_data_path_direct_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq)
+{
+	struct efa_data_path_direct_cq *dpd = &ibv_cq->data_path_direct;
+	uint16_t consumed_cnt = __atomic_load_n(&dpd->consumed_cnt, __ATOMIC_RELAXED);
+	int phase = __atomic_load_n(&dpd->phase, __ATOMIC_RELAXED);
+	struct efa_io_cdesc_common *cqe;
+
+	/*
+	 * Open-coded efa_device_cq_get_cqe()/efa_cqe_is_pending(): they are
+	 * always-inline, and GCC refuses to inline an instrumented function
+	 * into one marked EFA_TSAN_IGNORE_RACY_READS.
+	 */
+	cqe = (struct efa_io_cdesc_common *)
+		(dpd->buffer + (consumed_cnt & dpd->qmask) * dpd->entry_size);
+	return EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_PHASE) != phase;
+}
+
+/**
  * @brief Start polling for completion queue entries
  *
  * Initiates completion queue polling by retrieving the next available

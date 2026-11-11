@@ -25,6 +25,8 @@ void efa_test_dropped_completion_advances_cc(
 	struct fid_cq *cq_fid, struct fid_ep *ep_fid,
 	struct efa_test_dropped_cqe_result *result);
 
+void efa_test_cq_use_util_cq_ops(struct fid_cq *cq_fid);
+
 #ifdef __cplusplus
 }
 #endif
