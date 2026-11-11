@@ -174,3 +174,17 @@ TEST_F(EfaRdmPeerTest, av_remove_releases_held_unexp_pkt)
 	EXPECT_EQ(res.ope_count_after, res.ope_count_before);
 	EXPECT_TRUE(res.unspec_unexp_queue_empty);
 }
+
+TEST_F(EfaRdmPeerTest, av_remove_releases_reorder_window_pke)
+{
+	struct efa_test_av_remove_robuf_result res = {};
+
+	ASSERT_EQ(efa_test_av_remove_releases_robuf_pke(
+			  resource.ep, resource.av, peer_addr, &res),
+		  0);
+	ASSERT_TRUE(res.was_queued);
+	EXPECT_EQ(res.ooo_pool_outstanding_queued,
+		  res.ooo_pool_outstanding_before + 1);
+	EXPECT_EQ(res.ooo_pool_outstanding_after,
+		  res.ooo_pool_outstanding_before);
+}
