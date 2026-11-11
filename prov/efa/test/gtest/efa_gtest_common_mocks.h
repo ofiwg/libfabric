@@ -85,6 +85,8 @@ struct dlist_entry;
 	  (struct efa_av_array * cur_reverse_av,                               \
 	   struct efa_av_entry * entry),                                       \
 	  (cur_reverse_av, entry))                                             \
+	X(bool, efa_ibv_cq_is_empty_unlocked, (struct efa_ibv_cq * ibv_cq),    \
+	  (ibv_cq))                                                            \
 	X(int, efa_ibv_cq_start_poll,                                          \
 	  (struct efa_ibv_cq * ibv_cq, struct ibv_poll_cq_attr * attr),        \
 	  (ibv_cq, attr))                                                      \

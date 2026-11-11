@@ -399,6 +399,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=cuda_set_sync_memops \
 	-Wl,--wrap=ofi_cuDevicePrimaryCtxGetState \
 	-Wl,--wrap=ofi_cuDevicePrimaryCtxSetFlags \
+	-Wl,--wrap=efa_ibv_cq_is_empty_unlocked \
 	-Wl,--wrap=efa_ibv_cq_start_poll \
 	-Wl,--wrap=efa_ibv_cq_next_poll \
 	-Wl,--wrap=efa_ibv_cq_next_poll_unsafe \
