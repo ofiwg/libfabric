@@ -647,13 +647,7 @@ static ssize_t efa_wr_queue_tx(struct fid_ep *ep_fid, const fi_wr wr,
 		return (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
 
-	if (!sq->num_wqe_pending)
-		mmio_wc_start();
-
-	if (sq->num_wqe_pending == sq->wq.max_batch) {
-		efa_data_path_direct_send_wr_ring_db(sq);
-		mmio_wc_start();
-	}
+	efa_data_path_direct_tx_prepare_sq_for_new_wqe(sq);
 
 	/*
 	 * The prepared WR is const and may be queued concurrently, so copy it
@@ -667,8 +661,7 @@ static ssize_t efa_wr_queue_tx(struct fid_ep *ep_fid, const fi_wr wr,
 
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
-	efa_sq_advance_post_idx(sq);
-	sq->num_wqe_pending++;
+	efa_data_path_direct_tx_wqe_posted(sq);
 
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 	return 0;
