@@ -46,3 +46,8 @@ void efa_test_dropped_completion_advances_cc(
 	memset(result, 0, sizeof(*result));
 #endif
 }
+
+void efa_test_cq_use_util_cq_ops(struct fid_cq *cq_fid)
+{
+	cq_fid->ops = &efa_cq_ops;
+}

@@ -195,6 +195,7 @@ int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t 
 		       uintptr_t wr_id, uint64_t data,
 		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
 		       uint32_t qkey);
+bool efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq);
 int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
@@ -311,6 +312,21 @@ efa_qp_post_write(struct efa_qp *qp,
 }
 
 /* CQ wrapper functions */
+
+/*
+ * Lock-free emptiness check. Only data path direct can peek at the next CQE
+ * without consuming it, so the rdma-core path always reports "not empty".
+ */
+static inline EFA_TSAN_IGNORE_RACY_READS bool
+efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (ibv_cq->data_path_direct_enabled)
+		return efa_data_path_direct_cq_is_empty_unlocked(ibv_cq);
+#endif
+	return false;
+}
+
 static inline int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT

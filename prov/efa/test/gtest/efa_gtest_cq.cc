@@ -98,6 +98,68 @@ TEST_F(EfaCqTest, dropped_completion_advances_cc)
 	EXPECT_EQ(result.second_cc, 1);
 }
 
+TEST_F(EfaCqTest, empty_read_skips_device_poll)
+{
+	struct fi_cq_data_entry data_entry = {};
+
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_is_empty_unlocked, ibv_cq)
+		.WillOnce(Return(true));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).Times(0);
+
+	EXPECT_EQ(fi_cq_readfrom(resource.cq, &data_entry, 1, nullptr),
+		  -FI_EAGAIN);
+}
+
+TEST_F(EfaCqTest, util_cq_empty_read_skips_device_poll)
+{
+	struct fi_cq_data_entry data_entry = {};
+
+	efa_test_cq_use_util_cq_ops(resource.cq);
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_is_empty_unlocked, ibv_cq)
+		.WillOnce(Return(true));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).Times(0);
+
+	EXPECT_EQ(fi_cq_read(resource.cq, &data_entry, 1), -FI_EAGAIN);
+}
+
+TEST_F(EfaCqTest, util_cq_read_polls_device_when_not_empty)
+{
+	struct fi_cq_data_entry data_entry = {};
+
+	efa_test_cq_use_util_cq_ops(resource.cq);
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_is_empty_unlocked, ibv_cq)
+		.WillOnce(Return(false));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll)
+		.WillOnce(Return(ENOENT));
+
+	EXPECT_EQ(fi_cq_read(resource.cq, &data_entry, 1), -FI_EAGAIN);
+}
+
+TEST_F(EfaCqTest, read_after_error_cqe_ignores_empty_device_cq)
+{
+	struct fi_cq_data_entry data_entry = {};
+	struct fi_cq_err_entry err_entry = {};
+
+	struct efa_context *ctx =
+		efa_test_alloc_context(FI_SEND | FI_MSG, FI_ADDR_NOTAVAIL);
+	ASSERT_NE(ctx, nullptr);
+
+	set_expectations_for_cq_err();
+	efa_test_set_ibv_cq_ex(ibv_cq, 1, (uint64_t) (uintptr_t) ctx);
+	ASSERT_EQ(fi_cq_readfrom(resource.cq, &data_entry, 1, nullptr),
+		  -FI_EAVAIL);
+
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_is_empty_unlocked)
+		.WillRepeatedly(Return(true));
+	EXPECT_EQ(fi_cq_readfrom(resource.cq, &data_entry, 1, nullptr),
+		  -FI_EAVAIL);
+
+	EXPECT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);
+	EXPECT_EQ(err_entry.prov_errno, kProvErrno);
+
+	free(ctx);
+}
+
 /**
  * @brief fi_cq_readerr must not write past the caller's err_data buffer.
  */
