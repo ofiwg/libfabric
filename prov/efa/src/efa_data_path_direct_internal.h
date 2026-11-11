@@ -859,7 +859,34 @@ efa_data_path_direct_send_wr_ring_db(struct efa_data_path_direct_sq *sq)
 {
 	mmio_flush_writes();
 	efa_sq_ring_doorbell(sq, sq->wq.pc);
+	sq->num_uncommitted_wqes = sq->num_wqe_pending;
 	sq->num_wqe_pending = 0;
+}
+
+/*
+ * 1. There must be a barrier before a doorbell ring to ensure that all WQE writes
+ * are ordered before the doorbell write, so that the IPP engine reads the correct data.
+ * 
+ * 2. In a string of batched work queue entries, there must be a barrier between the
+ *  doorbell write and the write of the N+1th entry  after that doorbell, so that 
+ * the device starts clearing the buffers before writes for new entries start arriving.
+ */
+EFA_ALWAYS_INLINE void efa_data_path_direct_tx_prepare_sq_for_new_wqe(struct efa_data_path_direct_sq *sq)
+{
+	if (sq->num_wqe_pending == sq->wq.max_batch)
+		efa_data_path_direct_send_wr_ring_db(sq);
+
+	if (sq->num_uncommitted_wqes == sq->wq.max_batch) {
+		mmio_flush_writes();
+		sq->num_uncommitted_wqes = sq->num_wqe_pending;
+	}
+}
+
+EFA_ALWAYS_INLINE void efa_data_path_direct_tx_wqe_posted(struct efa_data_path_direct_sq *sq)
+{
+	efa_sq_advance_post_idx(sq);
+	sq->num_wqe_pending++;
+	sq->num_uncommitted_wqes++;
 }
 
 /**

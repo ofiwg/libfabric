@@ -467,17 +467,7 @@ static inline int efa_data_path_direct_post_send(
 		return err;
 	}
 
-	/* This means we are starting from fresh after a db ring so we need a barrier */
-	if (!sq->num_wqe_pending)
-		mmio_wc_start();
-
-	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch) {
-		efa_data_path_direct_send_wr_ring_db(sq);
-		/* we will prepare more WQE after db ring, so we need a barrier */
-		mmio_wc_start();
-	}
-
+	efa_data_path_direct_tx_prepare_sq_for_new_wqe(sq);
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
 	efa_set_sq_comp_wrid(meta_desc, &sq->wq, wr_id);
@@ -500,8 +490,7 @@ static inline int efa_data_path_direct_post_send(
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
 	/* Update queue state */
-	efa_sq_advance_post_idx(sq);
-	sq->num_wqe_pending++;
+	efa_data_path_direct_tx_wqe_posted(sq);
 
 	if (!(flags & FI_MORE))
 		efa_data_path_direct_send_wr_ring_db(sq);
@@ -558,16 +547,7 @@ static inline int efa_data_path_direct_post_read(
 		return EINVAL;
 	}
 
-	/* This means we are starting from fresh after a db ring so we need a barrier */
-	if (!sq->num_wqe_pending)
-		mmio_wc_start();
-
-	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch) {
-		efa_data_path_direct_send_wr_ring_db(sq);
-		/* we will prepare more WQE after db ring, so we need a barrier */
-		mmio_wc_start();
-	}
+	efa_data_path_direct_tx_prepare_sq_for_new_wqe(sq);
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
@@ -586,8 +566,7 @@ static inline int efa_data_path_direct_post_read(
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
 	/* Update queue state */
-	efa_sq_advance_post_idx(sq);
-	sq->num_wqe_pending++;
+	efa_data_path_direct_tx_wqe_posted(sq);
 
 	/* Ring doorbell if required */
 	if (!(flags & FI_MORE))
@@ -652,16 +631,7 @@ efa_data_path_direct_post_write(
 		return err;
 	}
 
-	/* This means we are starting from fresh after a db ring so we need a barrier */
-	if (!sq->num_wqe_pending)
-		mmio_wc_start();
-
-	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch) {
-		efa_data_path_direct_send_wr_ring_db(sq);
-		/* we will prepare more WQE after db ring, so we need a barrier */
-		mmio_wc_start();
-	}
+	efa_data_path_direct_tx_prepare_sq_for_new_wqe(sq);
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
@@ -694,8 +664,7 @@ efa_data_path_direct_post_write(
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
 	/* Update queue state */
-	efa_sq_advance_post_idx(sq);
-	sq->num_wqe_pending++;
+	efa_data_path_direct_tx_wqe_posted(sq);
 
 	/* Ring doorbell if required */
 	if (!(flags & FI_MORE))
