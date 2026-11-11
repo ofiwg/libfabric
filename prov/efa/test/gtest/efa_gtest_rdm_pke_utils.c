@@ -997,3 +997,87 @@ int efa_test_av_remove_releases_unexp_pkt(
 		dlist_empty(&srx->unspec_unexp_msg_queue);
 	return 0;
 }
+
+static struct efa_rdm_pke *
+efa_test_reorder_pke(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
+		     uint32_t msg_id)
+{
+	struct efa_rdm_eager_msgrtm_hdr hdr = {0};
+	struct efa_rdm_req_opt_connid_hdr connid = {0};
+	struct efa_rdm_pke *pke =
+		efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				  EFA_RDM_PKE_FROM_EFA_RX_POOL);
+
+	if (!pke)
+		return NULL;
+
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	pke->peer = peer;
+	hdr.hdr.version = EFA_RDM_PROTOCOL_VERSION;
+	hdr.hdr.type = EFA_RDM_EAGER_MSGRTM_PKT;
+	hdr.hdr.flags = EFA_RDM_PKT_CONNID_HDR | EFA_RDM_REQ_MSG;
+	hdr.hdr.msg_id = msg_id;
+	connid.connid = 0x1234;
+	memcpy(pke->wiredata, &hdr, sizeof hdr);
+	memcpy(pke->wiredata + sizeof hdr, &connid, sizeof connid);
+	pke->pkt_size = sizeof hdr + sizeof connid;
+	return pke;
+}
+
+static size_t efa_test_ep_ooo_pool_outstanding(struct efa_rdm_ep *ep)
+{
+	struct ofi_bufpool *pool = ep->rx_ooo_pkt_pool;
+	struct slist_entry *item;
+	size_t free_cnt = 0;
+
+	for (item = pool->free_list.entries.head; item; item = item->next)
+		free_cnt++;
+
+	return pool->entry_cnt - free_cnt;
+}
+
+int efa_test_av_remove_releases_robuf_pke(
+	struct fid_ep *ep_fid, struct fid_av *av, fi_addr_t peer_addr,
+	struct efa_test_av_remove_robuf_result *out)
+{
+	struct efa_rdm_ep *ep = container_of(
+		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct util_srx_ctx *srx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	int saved_rx_copy_ooo = efa_env.rx_copy_ooo;
+	struct efa_rdm_pke *pke;
+	uint32_t msg_id;
+	ssize_t ret;
+
+	memset(out, 0, sizeof *out);
+	if (!peer || !ep->rx_ooo_pkt_pool)
+		return -FI_EINVAL;
+
+	msg_id = ofi_recvwin_next_exp_id(&peer->robuf) + 1;
+	pke = efa_test_reorder_pke(ep, peer, msg_id);
+	if (!pke)
+		return -FI_ENOMEM;
+
+	out->ooo_pool_outstanding_before = efa_test_ep_ooo_pool_outstanding(ep);
+
+	ofi_genlock_lock(srx->lock);
+	efa_env.rx_copy_ooo = 1;
+	ret = efa_rdm_peer_reorder_msg(peer, ep, pke);
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+	if (ret != 1) {
+		efa_rdm_pke_release_rx(pke);
+		ofi_genlock_unlock(srx->lock);
+		return ret < 0 ? ret : -FI_EINVAL;
+	}
+	out->was_queued = 1;
+	out->ooo_pool_outstanding_queued =
+		efa_test_ep_ooo_pool_outstanding(ep);
+
+	ret = fi_av_remove(av, &peer_addr, 1, 0);
+	ofi_genlock_unlock(srx->lock);
+	if (ret)
+		return ret;
+
+	out->ooo_pool_outstanding_after = efa_test_ep_ooo_pool_outstanding(ep);
+	return 0;
+}
