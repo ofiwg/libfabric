@@ -325,10 +325,14 @@ void ofi_get_local_rank_info(int *local_rank_count, int *local_rank)
 	} launchers[] = {
 		{ "MPI_LOCALNRANKS", "MPI_LOCALRANKID" },
 		{ "OMPI_COMM_WORLD_LOCAL_SIZE", "OMPI_COMM_WORLD_LOCAL_RANK" },
+		{ "MV2_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_RANK" },
+		{ "PALS_LOCAL_SIZE", "PALS_LOCAL_RANKID" },
 		{ "PSC_MPI_PPN", "PSC_MPI_NODE_RANK" },
 		{ "LOCAL_WORLD_SIZE", "LOCAL_RANK" },
-		{ "SLURM_NTASKS_PER_NODE", "SLURM_LOCALID" },
 		{ "CCL_LOCAL_SIZE", "CCL_LOCAL_RANK" },
+		{ "SLURM_NTASKS_PER_NODE", "SLURM_LOCALID" },
+		{ "SLURM_STEP_TASKS_PER_NODE", "SLURM_LOCALID" },
+		{ "SLURM_TASKS_PER_NODE", "SLURM_LOCALID" },
 	};
 
 	if (local_rank_count)
