@@ -61,7 +61,7 @@ static inline void efa_rdm_mr_free(struct efa_rdm_mr *efa_rdm_mr)
 /*
  * Disable MR cache by default under ASAN. The memhooks monitor is
  * incompatible with ASAN, and userfaultfd may not be available on
- * all systems. Without a working monitor, efa_mr_cache_open fails.
+ * all systems.
  * Can be overridden at runtime with FI_EFA_MR_CACHE_ENABLE=1.
  */
 #ifdef ENABLE_ASAN
@@ -72,90 +72,126 @@ int efa_mr_cache_enable	= 1;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
+/**
+ * @brief Choose and start the memory monitor for system memory
+ *
+ * Without FI_MR_CACHE_MONITOR, if the default monitor cannot start, try
+ * memhooks and then uffd. For example, kdreg2 cannot start if its kernel
+ * module is not loaded, and memhooks cannot install if an upper layer
+ * patched the memory functions without exporting a monitor, as Open MPI
+ * 4.1.0 and 4.1.1 do. If no monitor starts, the domain has no MR cache, as
+ * with FI_EFA_MR_CACHE_ENABLE=0.
+ *
+ * With FI_MR_CACHE_MONITOR, use only the default monitor, which is the one
+ * it names, and fail if that monitor cannot start, so that the setting is
+ * never silently ignored. FI_MR_CACHE_MONITOR=disabled means no MR cache.
+ *
+ * A monitor that an upper layer imported is used as is.
+ *
+ * kdreg2 sizes its region table from cache_params.max_cnt when it starts,
+ * so set cache_params.max_cnt before calling this function. Starting a
+ * monitor that is already running has no effect, so ofi_mr_cache_init()
+ * can start the chosen monitor again.
+ *
+ * @param[out] monitor	The monitor to use, or NULL for no MR cache
+ * @return 0 on success, -FI_ENOSYS if the monitor that FI_MR_CACHE_MONITOR
+ *	   names is not available or cannot start
+ */
+static int efa_rdm_mr_cache_select_monitor(struct ofi_mem_monitor **monitor)
+{
+	struct ofi_mem_monitor *candidates[] = {
+		default_monitor,
+		memhooks_monitor,
+		uffd_monitor,
+	};
+	size_t i;
+	int err = 0;
+
+	*monitor = NULL;
+
+	if (!default_monitor) {
+		if (cache_params.monitor &&
+		    strcmp(cache_params.monitor, "disabled")) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "FI_MR_CACHE_MONITOR=%s, but that memory monitor is not available\n",
+				 cache_params.monitor);
+			return -FI_ENOSYS;
+		}
+		EFA_INFO(FI_LOG_DOMAIN,
+			 "No memory monitor for system memory. MR cache disabled.\n");
+		return 0;
+	}
+
+	if (default_monitor != kdreg2_monitor &&
+	    default_monitor != memhooks_monitor &&
+	    default_monitor != uffd_monitor) {
+		*monitor = default_monitor;
+		return 0;
+	}
+
+	/* The util code starts and stops monitors with mm_state_lock held */
+	pthread_mutex_lock(&mm_state_lock);
+	for (i = 0; i < ARRAY_SIZE(candidates); i++) {
+		if (i > 0 && candidates[i] == default_monitor)
+			continue;
+
+		err = candidates[i]->start(candidates[i]);
+		if (!err) {
+			*monitor = candidates[i];
+			break;
+		}
+
+		EFA_INFO(FI_LOG_DOMAIN, "Memory monitor %s failed to start: %s\n",
+			 candidates[i]->name, fi_strerror(-err));
+
+		if (cache_params.monitor)
+			break;
+	}
+	pthread_mutex_unlock(&mm_state_lock);
+
+	if (*monitor == default_monitor) {
+		EFA_INFO(FI_LOG_DOMAIN, "MR cache uses memory monitor %s\n",
+			 default_monitor->name);
+		return 0;
+	}
+
+	if (cache_params.monitor) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "FI_MR_CACHE_MONITOR=%s, but memory monitor %s failed to start: %s\n",
+			 cache_params.monitor, default_monitor->name,
+			 fi_strerror(-err));
+		return -FI_ENOSYS;
+	}
+
+	if (*monitor)
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Default memory monitor %s failed to start. MR cache uses memory monitor %s.\n",
+			 default_monitor->name, (*monitor)->name);
+	else
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "No memory monitor could be started. MR cache disabled.\n");
+	return 0;
+}
+
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code.
  *
- * @param cache		The ofi_mr_cache that is to be set up.
+ * @param cache		The ofi_mr_cache that is to be set up. Set to NULL
+ *			if no memory monitor can be started for system
+ *			memory; see efa_rdm_mr_cache_select_monitor().
  * @param domain	The EFA domain where cache will be used.
  * @return 0 on success, fi_errno on failure.
  */
 int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 {
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
-		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = cuda_monitor,
 		[FI_HMEM_ROCR] = rocr_monitor,
 	};
 	int err;
 
-	/* Both Open MPI (and possibly other MPI implementations) and
-	 * Libfabric use the same live binary patching to enable memory
-	 * monitoring, but the patching technique only allows a single
-	 * "winning" patch.  The Libfabric memhooks monitor will not
-	 * overwrite a previous patch, but instead return
-	 * -FI_EALREADY.  There are three cases of concern, and in all
-	 * but one of them, we can avoid changing the default monitor.
-	 *
-	 * (1) Upper layer does not patch, such as Open MPI 4.0 and
-	 * earlier.  In this case, the default monitor will be used,
-	 * as the default monitor is either not the memhooks monitor
-	 * (because the user specified a different monitor) or the
-	 * default monitor is the memhooks monitor, but we were able
-	 * to install the patches.  We will use the default monitor in
-	 * this case.
-	 *
-	 * (2) Upper layer does patch, but does not export a memory
-	 * monitor, such as Open MPI 4.1.0 and 4.1.1.  In this case,
-	 * if the default memory monitor is not memhooks, we will use
-	 * the default monitor.  If the default monitor is memhooks,
-	 * the patch will fail to apply, and we will change the
-	 * requested monitor to UFFD to avoid a broken configuration.
-	 * If the user explicitly requested memhooks, we will return
-	 * an error, as we can not satisfy that request.
-	 *
-	 * (3) Upper layer does patch and exports a memory monitor,
-	 * such as Open MPI 4.1.2 and later.  In this case, the
-	 * default monitor will have been changed from the memhooks
-	 * monitor to the imported monitor, so we will use the
-	 * imported monitor.
-	 *
-	 * The only known cases in which we will not use the default
-	 * monitor are Open MPI 4.1.0/4.1.1.
-	 *
-	 * It is possible that this could be better handled at the
-	 * mem_monitor level in Libfabric, but so far we have not
-	 * reached agreement on how that would work.
-	 */
-	if (default_monitor == memhooks_monitor) {
-		err = memhooks_monitor->start(memhooks_monitor);
-		if (err == -FI_EALREADY) {
-			if (cache_params.monitor) {
-				EFA_WARN(FI_LOG_DOMAIN,
-					 "Memhooks monitor requested via FI_MR_CACHE_MONITOR, but memhooks failed to\n"
-					 "install.  No working monitor availale.\n");
-				return -FI_ENOSYS;
-			}
-			EFA_INFO(FI_LOG_DOMAIN,
-				 "Detected potential memhooks monitor conflict. Switching to UFFD.\n");
-			memory_monitors[FI_HMEM_SYSTEM] = uffd_monitor;
-		}
-	} else if (default_monitor == NULL) {
-		/* TODO: Fail if we don't find a system monitor.  This
-		 * is a debatable decision, as the VERBS provider
-		 * falls back to a no-cache mode in this case.  We
-		 * fail the domain creation because the rest of the MR
-		 * code hasn't been audited to deal with a NULL
-		 * monitor.
-		 */
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "No default SYSTEM monitor available.\n");
-		return -FI_ENOSYS;
-	}
-
-	*cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
-	if (!*cache)
-		return -FI_ENOMEM;
+	*cache = NULL;
 
 	if (!efa_mr_max_cached_count)
 		efa_mr_max_cached_count = domain->device->ibv_attr.max_mr *
@@ -169,6 +205,28 @@ int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain
 	 */
 	cache_params.max_cnt = efa_mr_max_cached_count;
 	cache_params.max_size = efa_mr_max_cached_size;
+
+	/*
+	 * Check the limits that ofi_mr_cache_init() rejects, and allocate the
+	 * cache, before starting a monitor, since nothing stops a monitor that
+	 * starts here if this function fails before ofi_mr_cache_init() adds
+	 * the cache to it.
+	 */
+	if (!cache_params.max_cnt || !cache_params.max_size) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "MR cache limits must not be 0 (max_cnt: %zu max_size: %zu)\n",
+			 cache_params.max_cnt, cache_params.max_size);
+		return -FI_ENOSPC;
+	}
+
+	*cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
+	if (!*cache)
+		return -FI_ENOMEM;
+
+	err = efa_rdm_mr_cache_select_monitor(&memory_monitors[FI_HMEM_SYSTEM]);
+	if (err || !memory_monitors[FI_HMEM_SYSTEM])
+		goto free_cache;
+
 	(*cache)->entry_data_size = sizeof(struct efa_rdm_mr);
 	(*cache)->add_region = efa_rdm_mr_cache_entry_reg;
 	(*cache)->delete_region = efa_rdm_mr_cache_entry_dereg;
@@ -177,14 +235,17 @@ int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain
 	if (err) {
 		EFA_WARN_FI_ERRNO(FI_LOG_DOMAIN, "EFA MR cache init failed",
 		         -err);
-		free(*cache);
-		*cache = NULL;
-		return err;
+		goto free_cache;
 	}
 
 	EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
 		 cache_params.max_cnt, cache_params.max_size);
 	return 0;
+
+free_cache:
+	free(*cache);
+	*cache = NULL;
+	return err;
 }
 
 static int efa_rdm_mr_cache_close(fid_t fid)

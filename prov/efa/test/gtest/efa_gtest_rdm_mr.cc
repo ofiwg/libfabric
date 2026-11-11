@@ -4,9 +4,11 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
+#include "efa_gtest_rdm_mr_utils.h"
 #include "fi_ext_efa.h"
 #include <cstring>
 #include <functional>
+#include <string>
 #include <gtest/gtest.h>
 
 using testing::AtLeast;
@@ -302,3 +304,114 @@ TEST_F(EfaRdmMrNonP2pTest, registration_fails_when_random_source_fails)
 
 	EXPECT_EQ(fi_mr_regattr(resource.domain, &attr, 0, &mr), -FI_EIO);
 }
+
+struct EfaRdmMrCacheMonitorCase {
+	const char *name;
+	const char *requested;
+	enum efa_test_mr_monitor default_monitor;
+	enum efa_test_mr_monitor_start kdreg2_start;
+	enum efa_test_mr_monitor_start memhooks_start;
+	enum efa_test_mr_monitor_start uffd_start;
+	int expected_ret;
+	enum efa_test_mr_monitor expected_monitor;
+	int expected_failed_starts;
+};
+
+class EfaRdmMrCacheMonitorTest
+	: public testing::TestWithParam<EfaRdmMrCacheMonitorCase>
+{
+	protected:
+	struct efa_resource resource = {};
+
+	void SetUp() override
+	{
+		const EfaRdmMrCacheMonitorCase &c = GetParam();
+		struct fi_info *hints;
+
+		memset(&resource, 0, sizeof(resource));
+		hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+		ASSERT_NO_FATAL_FAILURE(efa_test_resource_getinfo(&resource, hints));
+
+		efa_test_mr_monitor_save();
+		saved = true;
+
+		if (c.memhooks_start == EFA_TEST_MR_MONITOR_START_REAL &&
+		    c.expected_monitor == EFA_TEST_MR_MONITOR_MEMHOOKS &&
+		    !efa_test_memhooks_monitor_built())
+			GTEST_SKIP() << "memhooks monitor not built";
+
+		efa_test_mr_monitor_set_default(c.default_monitor, c.requested);
+		efa_test_mr_monitor_set_start(EFA_TEST_MR_MONITOR_KDREG2,
+					      c.kdreg2_start);
+		efa_test_mr_monitor_set_start(EFA_TEST_MR_MONITOR_MEMHOOKS,
+					      c.memhooks_start);
+		efa_test_mr_monitor_set_start(EFA_TEST_MR_MONITOR_UFFD,
+					      c.uffd_start);
+	}
+
+	void TearDown() override
+	{
+		efa_test_resource_destruct(&resource);
+		if (saved)
+			efa_test_mr_monitor_restore();
+	}
+
+	private:
+	bool saved = false;
+};
+
+TEST_P(EfaRdmMrCacheMonitorTest, domain_open)
+{
+	const EfaRdmMrCacheMonitorCase &c = GetParam();
+	struct fid_domain *domain = nullptr;
+	int ret;
+
+	ASSERT_EQ(fi_fabric(resource.info->fabric_attr, &resource.fabric,
+			    nullptr),
+		  0);
+
+	ret = fi_domain(resource.fabric, resource.info, &domain, nullptr);
+	if (!ret)
+		resource.domain = domain;
+	ASSERT_EQ(ret, c.expected_ret);
+
+	if (!ret)
+		EXPECT_EQ(efa_test_rdm_domain_mr_cache_monitor(domain),
+			  c.expected_monitor);
+	EXPECT_EQ(efa_test_mr_monitor_failed_starts(),
+		  c.expected_failed_starts);
+}
+
+static const EfaRdmMrCacheMonitorCase kMrCacheMonitorCases[] = {
+	{"default_starts", nullptr, EFA_TEST_MR_MONITOR_KDREG2,
+	 EFA_TEST_MR_MONITOR_START_SUCCEED, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, 0, EFA_TEST_MR_MONITOR_KDREG2, 0},
+	{"default_fails_uses_memhooks", nullptr, EFA_TEST_MR_MONITOR_KDREG2,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_REAL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, 0, EFA_TEST_MR_MONITOR_MEMHOOKS, 1},
+	{"memhooks_fails_uses_uffd", nullptr, EFA_TEST_MR_MONITOR_MEMHOOKS,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_SUCCEED, 0, EFA_TEST_MR_MONITOR_UFFD, 1},
+	{"no_monitor_starts", nullptr, EFA_TEST_MR_MONITOR_KDREG2,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, 0, EFA_TEST_MR_MONITOR_NONE, 3},
+	{"requested_fails", "kdreg2", EFA_TEST_MR_MONITOR_KDREG2,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, -FI_ENOSYS, EFA_TEST_MR_MONITOR_NONE,
+	 1},
+	{"requested_unavailable", "kdreg2", EFA_TEST_MR_MONITOR_NONE,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, -FI_ENOSYS, EFA_TEST_MR_MONITOR_NONE,
+	 0},
+	{"disabled", "disabled", EFA_TEST_MR_MONITOR_NONE,
+	 EFA_TEST_MR_MONITOR_START_FAIL, EFA_TEST_MR_MONITOR_START_FAIL,
+	 EFA_TEST_MR_MONITOR_START_FAIL, 0, EFA_TEST_MR_MONITOR_NONE, 0},
+};
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmMrCacheMonitorTest, testing::ValuesIn(kMrCacheMonitorCases),
+	[](const testing::TestParamInfo<EfaRdmMrCacheMonitorCase> &info) {
+		return std::string(info.param.name);
+	});

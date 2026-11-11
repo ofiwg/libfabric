@@ -1213,6 +1213,17 @@ These OFI runtime parameters apply only to the RDM endpoint.
   buffer for iov's larger than max_memcpy_size. Defaults to true. When
   disabled, only uses a bounce buffer
 
+  The MR cache uses the memory monitor that FI_MR_CACHE_MONITOR names (see
+  fi_mr(3)), or the default monitor if FI_MR_CACHE_MONITOR is not set. If
+  the default monitor cannot start, for example because the kdreg2 kernel
+  module is not loaded, the provider tries memhooks and then userfaultfd,
+  and disables the MR cache if neither starts. If the monitor that
+  FI_MR_CACHE_MONITOR names cannot start, opening the domain fails.
+  FI_MR_CACHE_MONITOR=disabled disables the MR cache. A memory monitor that
+  the application imports (see fi_provider(3)) is used as is. None of this
+  applies when the domain has no MR cache, that is, when the application
+  requests FI_MR_LOCAL or FI_EFA_MR_CACHE_ENABLE is false.
+
 *FI_EFA_MR_MAX_CACHED_COUNT*
 : Sets the maximum number of memory registrations that can be cached at
   any time.
