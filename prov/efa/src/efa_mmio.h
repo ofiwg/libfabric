@@ -49,7 +49,7 @@
       Must not issue a read TLP if cond is false.
 
    If these are used with WC memory then #1 and #4 do not apply, and all WC
-   accesses must be bracketed with mmio_wc_start() // mmio_flush_writes()
+   accesses must be bracketed with mmio_flush_writes()
 */
 
 #ifndef __EFA_MMIO_H

@@ -154,6 +154,12 @@ struct efa_data_path_direct_sq {
 	 * built, but doorbell is deferred for batching efficiency.
 	 */
 	uint32_t num_wqe_pending;
+
+	/**
+	 * Number of WQEs written since the last doorbell that is guaranteed
+	 * to have reached the device.
+	 */
+	uint32_t num_uncommitted_wqes;
 };
 
 /**
