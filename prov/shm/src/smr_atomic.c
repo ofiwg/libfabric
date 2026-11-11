@@ -86,26 +86,58 @@ static inline int smr_atomic_get_target_len(const struct fi_rma_ioc *rma_ioc,
 	return FI_SUCCESS;
 }
 
-static void smr_format_inline_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
-				     const struct iovec *iov, size_t count)
-{
-	cmd->hdr.proto = smr_proto_inline;
-	cmd->hdr.tx_ctx = 0;
-	cmd->hdr.size = ofi_copy_from_mr_iov(cmd->data.msg, SMR_MSG_DATA_LEN,
-					     mr, iov, count, 0);
-}
-
-static void smr_do_atomic_inline(
-			struct smr_ep *ep, struct smr_region *peer_smr,
-			int64_t tx_id, int64_t rx_id, uint32_t op,
-			uint8_t datatype, uint8_t atomic_op,
-			struct ofi_mr **desc, const struct iovec *iov,
-			size_t iov_count, size_t total_len, uint8_t smr_flags,
+static int smr_do_atomic_inline(
+			struct smr_ep *ep, int64_t tx_id, int64_t rx_id,
+			uint32_t op, uint64_t op_flags, uint8_t datatype,
+			uint8_t atomic_op, struct ofi_mr **desc,
+			const struct iovec *iov, size_t iov_count,
+			struct ofi_mr **res_desc, const struct iovec *resultv,
+			size_t result_count, struct ofi_mr **comp_desc,
+			const struct iovec *compv, size_t comp_count,
+			size_t size, void *context, uint8_t smr_flags,
 			struct smr_cmd *cmd)
 {
+	struct smr_pend_entry *pend = NULL;
+	ssize_t copied;
+
+	if (smr_flags & SMR_RETURN_CMD) {
+		pend = ofi_buf_alloc(ep->pend_pool);
+		if (!pend)
+			return -FI_ENOMEM;
+	}
+
 	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, smr_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
-	smr_format_inline_atomic(cmd, desc, iov, iov_count);
+	cmd->hdr.proto = smr_proto_inline;
+	cmd->hdr.size = size;
+
+	if (atomic_op != FI_ATOMIC_READ) {
+		copied = ofi_copy_from_mr_iov(cmd->data.msg, size, desc, iov,
+					      iov_count, 0);
+		if (copied != (ssize_t) size) {
+			if (pend)
+				ofi_buf_free(pend);
+			return copied < 0 ? (int) copied : -FI_ETRUNC;
+		}
+	}
+	if (op == ofi_op_atomic_compare) {
+		copied = ofi_copy_from_mr_iov(cmd->data.msg + size, size,
+					      comp_desc, compv, comp_count, 0);
+		if (copied != (ssize_t) size) {
+			if (pend)
+				ofi_buf_free(pend);
+			return copied < 0 ? (int) copied : -FI_ETRUNC;
+		}
+	}
+
+	if (pend) {
+		cmd->hdr.tx_ctx = (uintptr_t) pend;
+		smr_format_tx_pend(pend, cmd, context, res_desc, resultv,
+				   result_count, op_flags);
+	} else {
+		cmd->hdr.tx_ctx = 0;
+	}
+	return FI_SUCCESS;
 }
 
 static void smr_format_inject_atomic(
@@ -164,8 +196,7 @@ static int smr_do_atomic_inject(
 	struct smr_pend_entry *pend;
 	struct smr_inject_buf *tx_buf;
 
-	if (op == ofi_op_atomic_compare || op == ofi_op_atomic_fetch) {
-		smr_flags |= SMR_RETURN_CMD;
+	if (smr_flags & SMR_RETURN_CMD) {
 		tx_buf = smr_get_inject_buf(ep->region);
 		cmd->hdr.proto_data = smr_get_offset(ep->region, tx_buf);
 	} else {
@@ -204,10 +235,8 @@ static int smr_select_atomic_proto(uint32_t op, uint64_t total_len,
 	*smr_flags = 0;
 	assert(!(op_flags & FI_REMOTE_CQ_DATA));
 	if (op == ofi_op_atomic_compare || op == ofi_op_atomic_fetch ||
-	    op_flags & FI_DELIVERY_COMPLETE) {
+	    (op_flags & FI_DELIVERY_COMPLETE))
 		*smr_flags |= SMR_RETURN_CMD;
-		return smr_proto_inject;
-	}
 
 	return total_len > SMR_MSG_DATA_LEN ? smr_proto_inject :
 					      smr_proto_inline;
@@ -232,7 +261,7 @@ static ssize_t smr_generic_atomic(
 	int64_t tx_id, rx_id, pos;
 	int proto;
 	ssize_t ret;
-	size_t total_len;
+	size_t size, total_len;
 	size_t datatype_size;
 	uint64_t atomic_flags;
 	uint8_t smr_flags;
@@ -258,7 +287,7 @@ static ssize_t smr_generic_atomic(
 	}
 
 	datatype_size = ofi_datatype_size(datatype);
-	ret = smr_atomic_get_target_len(rma_ioc, rma_count, datatype_size, op, &total_len);
+	ret = smr_atomic_get_target_len(rma_ioc, rma_count, datatype_size, op, &size);
 	if (ret)
 		return ret;
 
@@ -281,6 +310,7 @@ static ssize_t smr_generic_atomic(
 		goto unlock;
 	}
 
+	total_len = size;
 	switch (op) {
 	case ofi_op_atomic_compare:
 		assert(compare_ioc);
@@ -324,10 +354,21 @@ static ssize_t smr_generic_atomic(
 	}
 
 	if (proto == smr_proto_inline) {
-		smr_do_atomic_inline(ep, peer_smr, tx_id, rx_id, ofi_op_atomic,
-				     datatype, atomic_op,
-				     (struct ofi_mr **) desc, iov, count,
-				     total_len, smr_flags, cmd);
+		ret = smr_do_atomic_inline(ep, tx_id, rx_id, op, op_flags,
+					   datatype, atomic_op,
+					   (struct ofi_mr **) desc, iov, count,
+					   (struct ofi_mr **) result_desc,
+					   result_iov, result_count,
+					   (struct ofi_mr **) compare_desc,
+					   compare_iov, compare_count, size,
+					   context, smr_flags, cmd);
+		if (ret) {
+			if (smr_flags & SMR_RETURN_CMD)
+				smr_freestack_push(smr_cmd_stack(ep->region),
+						   cmd);
+			smr_cmd_queue_discard(ce, pos);
+			goto unlock;
+		}
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, tx_id, rx_id, op,
 					   op_flags, datatype, atomic_op,
@@ -338,7 +379,9 @@ static ssize_t smr_generic_atomic(
 					   compare_iov, compare_count,
 					   total_len, context, smr_flags, cmd);
 		if (ret) {
-			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
+			if (smr_flags & SMR_RETURN_CMD)
+				smr_freestack_push(smr_cmd_stack(ep->region),
+						   cmd);
 			smr_cmd_queue_discard(ce, pos);
 			goto unlock;
 		}
@@ -480,9 +523,14 @@ static ssize_t smr_atomic_inject(
 	rma_ioc.key = key;
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
-		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
-				     datatype, op, NULL, &iov, 1, total_len,
-				     0, ce);
+		ret = smr_do_atomic_inline(ep, id, peer_id, ofi_op_atomic, 0,
+					   datatype, op, NULL, &iov, 1, NULL,
+					   NULL, 0, NULL, NULL, 0, total_len,
+					   NULL, 0, ce);
+		if (ret) {
+			smr_cmd_queue_discard(ce, pos);
+			goto unlock;
+		}
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,
 					   ofi_op_atomic, 0, datatype, op, NULL,
