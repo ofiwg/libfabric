@@ -271,6 +271,17 @@ int efa_test_av_remove_releases_unexp_pkt(
 	struct fid_ep *ep, struct fid_av *av, fi_addr_t peer_addr,
 	int copy_unexp, struct efa_test_av_remove_unexp_result *out);
 
+struct efa_test_av_remove_robuf_result {
+	int was_queued;
+	size_t ooo_pool_outstanding_before;
+	size_t ooo_pool_outstanding_queued;
+	size_t ooo_pool_outstanding_after;
+};
+
+int efa_test_av_remove_releases_robuf_pke(
+	struct fid_ep *ep, struct fid_av *av, fi_addr_t peer_addr,
+	struct efa_test_av_remove_robuf_result *out);
+
 #ifdef __cplusplus
 }
 #endif
