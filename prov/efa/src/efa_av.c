@@ -685,6 +685,7 @@ int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
 
 	av->domain = efa_domain;
 	av->type = attr->type;
+	av->strict_mode = efa_env.strict_mode;
 	return 0;
 }
 
