@@ -22,14 +22,12 @@ struct efa_rdm_cq {
 	size_t entry_size;
 	bool need_to_scan_ep_list;
 	/*
-	 * FI_AV_MAP: completions written through the peer CQ (by shm and by
-	 * util_srx) carry the util_av index as their source; map_av turns it into
-	 * the application fi_addr. Set when an endpoint bound to a FI_AV_MAP AV is
+	 * FI_AV_MAP: every completion carries the util_av index as its source;
+	 * map_av turns it into the application fi_addr when the application reads
+	 * it (readfrom/readerr). Set when an endpoint bound to a FI_AV_MAP AV is
 	 * enabled on this CQ.
 	 */
 	struct efa_av *map_av;
-	const struct fi_ops_cq_owner *util_owner_ops;
-	struct fi_ops_cq_owner owner_ops;
 };
 
 void efa_rdm_cq_set_map_av(struct efa_rdm_cq *cq, struct efa_av *av);

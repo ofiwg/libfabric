@@ -204,10 +204,11 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
 
 		/* Only check the explicit AV when writing completions */
-		src_addr = efa_rdm_av_reverse_lookup(efa_av,
+		src_addr = efa_av_fi_addr_to_index(efa_av,
+				efa_rdm_av_reverse_lookup(efa_av,
 						efa_ibv_cq_wc_read_slid(ibv_cq),
 						efa_ibv_cq_wc_read_src_qp(ibv_cq),
-						NULL);
+						NULL));
 		ret = ofi_cq_write_src(target_cq, NULL, flags, len, NULL, imm_data, 0, src_addr);
 	} else {
 		ret = ofi_cq_write(target_cq, NULL, flags, len, NULL, imm_data, 0);
@@ -1105,7 +1106,23 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	ret = ofi_cq_readfrom(&cq->efa_cq.util_cq.cq_fid, buf, count, src_addr);
 
 out:
+	/* sources are stored as util_av indices; hand FI_AV_MAP fi_addrs out */
+	if (ret > 0 && src_addr && cq->map_av) {
+		for (ssize_t i = 0; i < ret; i++)
+			src_addr[i] = efa_av_index_to_fi_addr(cq->map_av, src_addr[i]);
+	}
+	return ret;
+}
 
+static ssize_t efa_rdm_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+				  uint64_t flags)
+{
+	struct efa_rdm_cq *cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ssize_t ret;
+
+	ret = ofi_cq_readerr(cq_fid, buf, flags);
+	if (ret > 0 && cq->map_av && buf->src_addr != FI_ADDR_NOTAVAIL)
+		buf->src_addr = efa_av_index_to_fi_addr(cq->map_av, buf->src_addr);
 	return ret;
 }
 
@@ -1249,7 +1266,7 @@ static struct fi_ops_cq efa_rdm_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = efa_rdm_cq_readfrom,
-	.readerr = ofi_cq_readerr,
+	.readerr = efa_rdm_cq_readerr,
 	.sread = efa_rdm_cq_sread,
 	.sreadfrom = efa_rdm_cq_sreadfrom,
 	.signal = efa_rdm_cq_signal,
@@ -1400,46 +1417,6 @@ static int efa_rdm_cq_init_entry_size(struct efa_rdm_cq *cq,
 }
 
 /**
- * @brief the application fi_addr of a completion source written through the
- * peer CQ
- *
- * shm and util_srx report the source as the util_av index; with FI_AV_MAP it
- * must be the entry's address. Unchanged for FI_AV_TABLE.
- */
-static inline fi_addr_t efa_rdm_cq_src_index_to_fi_addr(struct fid_peer_cq *peer_cq,
-							 fi_addr_t src)
-{
-	struct util_cq *util_cq = peer_cq->fid.context;
-	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
-
-	return cq->map_av ? efa_av_index_to_fi_addr(cq->map_av, src) : src;
-}
-
-static ssize_t efa_rdm_cq_peer_write(struct fid_peer_cq *peer_cq, void *context,
-				     uint64_t flags, size_t len, void *buf,
-				     uint64_t data, uint64_t tag, fi_addr_t src)
-{
-	struct util_cq *util_cq = peer_cq->fid.context;
-	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
-
-	return cq->util_owner_ops->write(peer_cq, context, flags, len, buf, data,
-					 tag, efa_rdm_cq_src_index_to_fi_addr(peer_cq, src));
-}
-
-static ssize_t efa_rdm_cq_peer_writeerr(struct fid_peer_cq *peer_cq,
-					const struct fi_cq_err_entry *err_entry)
-{
-	struct util_cq *util_cq = peer_cq->fid.context;
-	struct efa_rdm_cq *cq = container_of(util_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	struct fi_cq_err_entry entry = *err_entry;
-
-	entry.src_addr = (err_entry->src_addr == FI_ADDR_NOTAVAIL)
-				 ? FI_ADDR_NOTAVAIL
-				 : efa_rdm_cq_src_index_to_fi_addr(peer_cq, err_entry->src_addr);
-	return cq->util_owner_ops->writeerr(peer_cq, &entry);
-}
-
-/**
  * @brief translate peer-CQ completion sources for an endpoint on a FI_AV_MAP AV
  *
  * @param[in]	cq	CQ the endpoint is bound to
@@ -1515,13 +1492,10 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto close_util_cq;
 
-	/* wrap the peer CQ writes so completion sources can be translated */
+	/* completions keep the util_av index as their source, whoever writes
+	 * them (efa, shm, util_srx); FI_AV_MAP sources are translated when the
+	 * application reads them, see efa_rdm_cq_readfrom() */
 	cq->map_av = NULL;
-	cq->util_owner_ops = cq->efa_cq.util_cq.peer_cq->owner_ops;
-	cq->owner_ops = *cq->util_owner_ops;
-	cq->owner_ops.write = efa_rdm_cq_peer_write;
-	cq->owner_ops.writeerr = efa_rdm_cq_peer_writeerr;
-	cq->efa_cq.util_cq.peer_cq->owner_ops = &cq->owner_ops;
 
 	ret = efa_cq_open_ibv_cq(
 		attr, rdm_domain->efa_domain.device->ibv_ctx, &cq->efa_cq.ibv_cq,
