@@ -590,151 +590,262 @@ static uint64_t set_fi_more_flag(int i, int j, uint64_t flags)
 	return flags;
 }
 
-int bandwidth(void)
+static int bw_start(size_t *inject_size)
 {
-	int ret, i, j;
-	uint64_t flags = 0;
-	size_t inject_size = fi->tx_attr->inject_size;
+	int ret;
+
+	*inject_size = fi->tx_attr->inject_size;
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
-			&inject_size, &(size_t){sizeof inject_size});
+			inject_size, &(size_t){sizeof *inject_size});
 	if (ret && ret != -FI_ENOPROTOOPT) {
 		FT_PRINTERR("fi_getopt(FI_OPT_INJECT_MSG_SIZE)", ret);
 		return ret;
 	}
 
 	if (inject_size_set)
-		inject_size = opts.inject_size;
+		*inject_size = opts.inject_size;
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
-		inject_size = 0;
+		*inject_size = 0;
 
 	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	/* The loop structured allows for the possibility that the sender
-	 * immediately overruns the receiving side on the first transfer (or
-	 * the entire window). This could result in exercising parts of the
-	 * provider's implementation of FI_RM_ENABLED. For better or worse,
-	 * some MPI-level benchmarks tend to use this type of loop for measuring
-	 * bandwidth.  */
-
 	ft_wr_batching_enabled = true;
 
-	if (opts.dst_addr) {
-		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
-			if (i == opts.warmup_iterations)
-				ft_start();
+	return 0;
+}
 
-			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-				ret = ft_fill_buf(tx_ctx_arr[j].buf,
-						  opts.transfer_size);
-				if (ret)
-					return ret;
-			}
-			if (opts.transfer_size <= inject_size) {
-				ret = ft_post_inject_buf(ep, remote_fi_addr,
-						opts.transfer_size, NO_CQ_DATA,
-						tx_ctx_arr[j].buf, tx_seq);
-			} else if (opts.use_fi_more) {
-				flags = set_fi_more_flag(i, j, flags);
-				ret = ft_sendmsg(ep, remote_fi_addr,
-						tx_ctx_arr[j].buf,
-						opts.transfer_size,
-						&tx_ctx_arr[j].context, flags);
-				if (!ret && opts.use_fi_flush &&
-				    fi_more_last_post(i, j)) {
-					ret = fi_tx_flush(ep, 0);
-					if (ret) {
-						FT_PRINTERR("fi_tx_flush", ret);
-						return ret;
-					}
-				}
-			} else {
-				ret = ft_post_tx_buf(ep, remote_fi_addr,
-						opts.transfer_size, NO_CQ_DATA,
-						&tx_ctx_arr[j].context,
-						tx_ctx_arr[j].buf,
-						mr_desc, tx_seq);
-			}
+static int bw_tx_loop(size_t inject_size)
+{
+	int ret, i, j;
+	uint64_t flags = 0;
+
+	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = ft_fill_buf(tx_ctx_arr[j].buf,
+					  opts.transfer_size);
 			if (ret)
 				return ret;
-
-			if (++j == opts.window_size) {
-				ret = ft_wr_flush_tx_queued(ep);
-				if (ret)
-					return ret;
-				ret = bw_tx_comp();
-				if (ret)
-					return ret;
-				j = 0;
-			}
 		}
-		ret = ft_wr_flush_tx_queued(ep);
-		if (ret)
-			return ret;
-		ret = bw_tx_comp();
-		if (ret)
-			return ret;
-	} else {
-		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
-			if (i == opts.warmup_iterations)
-				ft_start();
-
-			if (opts.use_fi_more) {
-				flags = set_fi_more_flag(i, j, flags);
-				ret = ft_recvmsg(ep, remote_fi_addr,
-						 rx_ctx_arr[j].buf,
-						 MAX(opts.transfer_size,
-						     FT_MAX_CTRL_MSG) +
-							 ft_rx_prefix_size(),
-						 &rx_ctx_arr[j].context, flags);
-				if (!ret && opts.use_fi_flush &&
-				    fi_more_last_post(i, j)) {
-					ret = (hints->caps & FI_TAGGED) ?
-						fi_trecv_flush(ep, 0) :
-						fi_recv_flush(ep, 0);
-					if (ret) {
-						FT_PRINTERR("fi_recv_flush", ret);
-						return ret;
-					}
+		if (opts.transfer_size <= inject_size) {
+			ret = ft_post_inject_buf(ep, remote_fi_addr,
+					opts.transfer_size, NO_CQ_DATA,
+					tx_ctx_arr[j].buf, tx_seq);
+		} else if (opts.use_fi_more) {
+			flags = set_fi_more_flag(i, j, flags);
+			ret = ft_sendmsg(ep, remote_fi_addr,
+					tx_ctx_arr[j].buf,
+					opts.transfer_size,
+					&tx_ctx_arr[j].context, flags);
+			if (!ret && opts.use_fi_flush &&
+			    fi_more_last_post(i, j)) {
+				ret = fi_tx_flush(ep, 0);
+				if (ret) {
+					FT_PRINTERR("fi_tx_flush", ret);
+					return ret;
 				}
-			} else {
-				ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
-						     &rx_ctx_arr[j].context,
-						     rx_ctx_arr[j].buf, mr_desc,
-						     ft_tag);
 			}
+		} else {
+			ret = ft_post_tx_buf(ep, remote_fi_addr,
+					opts.transfer_size, NO_CQ_DATA,
+					&tx_ctx_arr[j].context,
+					tx_ctx_arr[j].buf,
+					mr_desc, tx_seq);
+		}
+		if (ret)
+			return ret;
+
+		if (++j == opts.window_size) {
+			ret = ft_wr_flush_tx_queued(ep);
 			if (ret)
 				return ret;
-
-			if (++j == opts.window_size) {
-				ret = ft_wr_flush_rx_queued(ep);
-				if (ret)
-					return ret;
-				ret = bw_rx_comp(j);
-				if (ret)
-					return ret;
-				j = 0;
-			}
+			ret = bw_tx_comp();
+			if (ret)
+				return ret;
+			j = 0;
 		}
-		ret = ft_wr_flush_rx_queued(ep);
-		if (ret)
-			return ret;
-		ret = bw_rx_comp(j);
-		if (ret)
-			return ret;
 	}
-	ft_wr_batching_enabled = false;
+	ret = ft_wr_flush_tx_queued(ep);
+	if (ret)
+		return ret;
+	ret = bw_tx_comp();
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int bw_rx_loop(void)
+{
+	int ret, i, j;
+	uint64_t flags = 0;
+
+	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
+
+		if (opts.use_fi_more) {
+			flags = set_fi_more_flag(i, j, flags);
+			ret = ft_recvmsg(ep, remote_fi_addr,
+					 rx_ctx_arr[j].buf,
+					 MAX(opts.transfer_size,
+					     FT_MAX_CTRL_MSG) +
+						 ft_rx_prefix_size(),
+					 &rx_ctx_arr[j].context, flags);
+			if (!ret && opts.use_fi_flush &&
+			    fi_more_last_post(i, j)) {
+				ret = (hints->caps & FI_TAGGED) ?
+					fi_trecv_flush(ep, 0) :
+					fi_recv_flush(ep, 0);
+				if (ret) {
+					FT_PRINTERR("fi_recv_flush", ret);
+					return ret;
+				}
+			}
+		} else {
+			ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
+					     &rx_ctx_arr[j].context,
+					     rx_ctx_arr[j].buf, mr_desc,
+					     ft_tag);
+		}
+		if (ret)
+			return ret;
+
+		if (++j == opts.window_size) {
+			ret = ft_wr_flush_rx_queued(ep);
+			if (ret)
+				return ret;
+			ret = bw_rx_comp(j);
+			if (ret)
+				return ret;
+			j = 0;
+		}
+	}
+	ret = ft_wr_flush_rx_queued(ep);
+	if (ret)
+		return ret;
+	ret = bw_rx_comp(j);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static void bw_finish(void)
+{
 	ft_stop();
+	ft_wr_batching_enabled = false;
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1,
 				opts.argc, opts.argv);
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+}
 
+int bandwidth(void)
+{
+	size_t inject_size;
+	int ret;
+
+	ret = bw_start(&inject_size);
+	if (ret)
+		return ret;
+
+	ret = opts.dst_addr ? bw_tx_loop(inject_size) : bw_rx_loop();
+	if (ret)
+		return ret;
+
+	bw_finish();
+	return 0;
+}
+
+static int bw_scatter_rx_comp(void)
+{
+	int ret;
+
+	ret = ft_get_rx_comp(rx_seq);
+	if (ret)
+		return ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_scatter_check(opts.transfer_size);
+		if (ret)
+			return ret;
+	}
+
+	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
+}
+
+static int bw_scatter_rx_loop(void)
+{
+	int ret, i, j;
+	uint64_t flags = 0;
+
+	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
+
+		if (opts.use_fi_more) {
+			flags = set_fi_more_flag(i, j, flags);
+			ret = ft_recvmsg_scatter(ep, remote_fi_addr,
+						 &rx_ctx_arr[j].context, flags);
+			if (!ret && opts.use_fi_flush &&
+			    fi_more_last_post(i, j)) {
+				ret = fi_recv_flush(ep, 0);
+				if (ret) {
+					FT_PRINTERR("fi_recv_flush", ret);
+					return ret;
+				}
+			}
+		} else {
+			ret = ft_post_rx_scatter(ep, remote_fi_addr,
+						 &rx_ctx_arr[j].context);
+		}
+		if (ret)
+			return ret;
+
+		if (++j == opts.window_size) {
+			ret = bw_scatter_rx_comp();
+			if (ret)
+				return ret;
+			j = 0;
+		}
+	}
+
+	return bw_scatter_rx_comp();
+}
+
+int bandwidth_scatter(void)
+{
+	size_t inject_size;
+	int ret;
+
+	if (!opts.dst_addr) {
+		ft_scatter_set_size(opts.transfer_size);
+
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = ft_scatter_fill_sentinel();
+			if (ret)
+				return ret;
+		}
+	}
+
+	ret = bw_start(&inject_size);
+	if (ret)
+		return ret;
+
+	ret = opts.dst_addr ? bw_tx_loop(inject_size) : bw_scatter_rx_loop();
+	if (ret)
+		return ret;
+
+	bw_finish();
 	return 0;
 }
 
