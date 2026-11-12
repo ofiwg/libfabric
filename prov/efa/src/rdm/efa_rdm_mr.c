@@ -179,7 +179,7 @@ int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain
 		         -err);
 		free(*cache);
 		*cache = NULL;
-		return -err;
+		return err;
 	}
 
 	EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
