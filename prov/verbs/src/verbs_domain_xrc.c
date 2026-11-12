@@ -204,17 +204,14 @@ void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 	dlist_insert_tail(&ep->ini_conn_entry, &ep->ini_conn->pending_list);
 }
 
-/* Caller must hold domain:eq:lock */
 static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 {
 	struct fi_eq_cm_entry entry = {
 		.fid = &ep->base_ep.util_ep.ep_fid.fid,
 	};
-	struct vrb_eq_entry *eq_entry;
 
-	eq_entry = vrb_eq_alloc_entry(FI_SHUTDOWN, &entry, sizeof(entry));
-	if (eq_entry)
-		dlistfd_insert_tail(&eq_entry->item, &ep->base_ep.eq->list_head);
+	(void) vrb_eq_write_event(ep->base_ep.eq, FI_SHUTDOWN,
+				  &entry, sizeof(entry));
 }
 
 /* Caller must hold domain:xrc.ini_lock */
