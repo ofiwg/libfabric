@@ -6227,7 +6227,6 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
  * @brief A one-sided eager RTW (write) failing with INVALID_LKEY must
  *        NOT take the MSG_ID_SKIP path: it is not a two-sided RTM, owes
  *        the target no completion, and consumes no reorder-window slot.
- *        Guards efa_rdm_pkt_type_is_eager_rtm() excluding RTW.
  */
 void test_efa_rdm_pke_handle_tx_error_eager_rtw_no_emit(void **state)
 {

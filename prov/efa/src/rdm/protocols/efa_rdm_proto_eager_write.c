@@ -87,23 +87,6 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	return ret;
 }
 
-/**
- * @brief handle the send completion event of an EAGER RTW packet
- *
- * This function apply to both EFA_RDM_EAGER_RTW_PKT and
- * EFA_RDM_DC_EAGER_RTW_PKT
- *
- * @param[in]		pkt_entry	packet entry
- */
-void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = pkt_entry->ope;
-	assert(txe->total_len == pkt_entry->payload_size);
-	efa_rdm_ope_handle_send_completed(txe);
-}
-
 /* RX path functions */
 
 /**
