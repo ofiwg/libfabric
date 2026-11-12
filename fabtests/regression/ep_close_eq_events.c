@@ -59,6 +59,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "shared.h"
+
 #define DEFAULT_PORT "29385"
 
 struct test_resources {
@@ -119,12 +121,9 @@ static int setup(struct test_resources *r, const char *provider,
 
 static void teardown(struct test_resources *r)
 {
-	if (r->domain)
-		fi_close(&r->domain->fid);
-	if (r->eq)
-		fi_close(&r->eq->fid);
-	if (r->fabric)
-		fi_close(&r->fabric->fid);
+	FT_CLOSE_FID(r->domain);
+	FT_CLOSE_FID(r->eq);
+	FT_CLOSE_FID(r->fabric);
 	if (r->info)
 		fi_freeinfo(r->info);
 }
@@ -238,10 +237,8 @@ static int test_close_purges_own_events(struct test_resources *r)
 	}
 
 out:
-	if (ep_a)
-		fi_close(&ep_a->fid);
-	if (ep_b)
-		fi_close(&ep_b->fid);
+	FT_CLOSE_FID(ep_a);
+	FT_CLOSE_FID(ep_b);
 	return ret;
 }
 
@@ -287,10 +284,8 @@ static int test_close_keeps_other_events(struct test_resources *r)
 	ret = 0;
 
 out:
-	if (ep_c)
-		fi_close(&ep_c->fid);
-	if (ep_d)
-		fi_close(&ep_d->fid);
+	FT_CLOSE_FID(ep_c);
+	FT_CLOSE_FID(ep_d);
 	return ret;
 }
 
