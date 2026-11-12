@@ -136,6 +136,29 @@ static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
 	&efa_rdm_proto_longcts_rtr,
 };
 
+static void efa_rdm_proto_define_bound_params_for_proto(struct efa_rdm_proto *proto){
+	if (proto->min_param_name)
+		fi_param_define(&efa_prov, proto->min_param_name, FI_PARAM_SIZE_T,
+				"The inclusive minimum message size eligible for the %s protocol.",
+				proto->name);
+
+	if (proto->max_param_name)
+		fi_param_define(&efa_prov, proto->max_param_name, FI_PARAM_SIZE_T,
+				"The inclusive maximum message size eligible for the %s protocol.",
+				proto->name);
+}
+
+void efa_rdm_proto_define_bound_params(void){
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i)
+		efa_rdm_proto_define_bound_params_for_proto(efa_rdm_protocols[i]);
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_write_protocols); ++i)
+		efa_rdm_proto_define_bound_params_for_proto(efa_rdm_emulated_write_protocols[i]);
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_read_protocols); ++i)
+		efa_rdm_proto_define_bound_params_for_proto(efa_rdm_emulated_read_protocols[i]);
+}
+
 static void efa_rdm_proto_init_bounds(struct efa_rdm_proto *proto, enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface){
 	bool apply_param = true;
 

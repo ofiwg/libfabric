@@ -156,6 +156,7 @@ struct efa_rdm_proto {
 
 size_t efa_rdm_proto_max_eager_msg_size_with_largest_header(void);
 
+void efa_rdm_proto_define_bound_params(void);
 void efa_rdm_proto_init_bounds_for_iface(enum fi_hmem_iface target_iface, enum fi_hmem_iface bounds_profile_iface);
 void efa_rdm_proto_configure_force_send(const char *proto_name);
 

@@ -2824,6 +2824,28 @@ static const char *const test_proto_bound_envs[][2] = {
 	{ "FI_EFA_INTER_MIN_READ_WRITE_SIZE", "3000" },
 };
 
+void test_proto_bound_param_registration(void **state){
+	struct fi_param *params;
+	size_t i;
+	int count, j;
+	bool found;
+
+	(void) state;
+	assert_int_equal(fi_getparams(&params, &count), FI_SUCCESS);
+
+	for (i = 0; i < ARRAY_SIZE(test_proto_bound_envs); ++i) {
+		found = false;
+		for (j = 0; j < count; ++j) {
+			if (strcmp(params[j].name, test_proto_bound_envs[i][0]))
+				continue;
+			found = true;
+			assert_int_equal(params[j].type, FI_PARAM_SIZE_T);
+		}
+		assert_true(found);
+	}
+	fi_freeparams(params);
+}
+
 /**
  * @brief Test the bound defaults of each policy, and that the bound
  *        environment variables set the bounds they map to, as the
