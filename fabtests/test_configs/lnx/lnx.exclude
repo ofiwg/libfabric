@@ -9,6 +9,7 @@ cm_data
 
 # Exclude tests with unsupported capabilities
 atomic
+hmem_scatter
 scalable_ep
 shared_ctx
 

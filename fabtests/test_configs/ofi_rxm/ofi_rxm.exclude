@@ -16,3 +16,6 @@ scalable_ep
 shared_av
 multi_mr
 atomic
+
+# FI_HMEM not supported
+hmem_scatter
