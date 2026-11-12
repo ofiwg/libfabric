@@ -274,15 +274,6 @@ ssize_t efa_rdm_pke_proc_rtm_after_robuf(struct efa_rdm_pke *pkt_entry)
 		pkt_entry, proto->handle_unexp_pke_match);
 }
 
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_proto *proto = pkt_entry->proto;
-
-	assert(proto);
-	return efa_rdm_pke_proc_msgrtm_with_callback(
-		pkt_entry, proto->handle_unexp_pke_match);
-}
-
 static void
 efa_rdm_pke_handle_ordered_req_recv(struct efa_rdm_pke *pkt_entry)
 {

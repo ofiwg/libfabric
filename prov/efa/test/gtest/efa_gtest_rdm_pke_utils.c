@@ -1324,7 +1324,7 @@ int efa_test_av_remove_releases_unexp_pkt(
 
 	ofi_genlock_lock(srx->lock);
 	efa_env.rx_copy_unexp = copy_unexp;
-	ret = efa_rdm_pke_proc_msgrtm(pke);
+	ret = efa_rdm_pke_proc_rtm_after_robuf(pke);
 	efa_env.rx_copy_unexp = saved_rx_copy_unexp;
 	if (ret) {
 		ofi_genlock_unlock(srx->lock);

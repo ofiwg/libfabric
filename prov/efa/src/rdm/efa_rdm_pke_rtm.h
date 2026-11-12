@@ -92,8 +92,6 @@ void efa_rdm_pke_set_rtm_tag(struct efa_rdm_pke *pkt_entry, uint64_t tag)
 void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *rxe);
 
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry);
-
 void efa_rdm_pke_handle_rtm_recv(struct efa_rdm_pke *pkt_entry,
 				 struct efa_rdm_proto *proto);
 

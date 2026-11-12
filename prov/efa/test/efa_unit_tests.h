@@ -337,7 +337,6 @@ void test_ep_getopt_inject_size_wide_wqe(void **state);
 void test_efa_srx_min_multi_recv_size(void **state);
 void test_efa_srx_cq(void **state);
 void test_efa_srx_lock(void **state);
-void test_efa_srx_unexp_pkt(void **state);
 void test_efa_srx_foreach_unspec_skips_other_provider(void **state);
 void test_efa_srx_free_unqueued_entry_msg(void **state);
 void test_efa_srx_free_unqueued_entry_tagged(void **state);
