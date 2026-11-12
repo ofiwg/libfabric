@@ -790,8 +790,9 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
  * stored on the efa_rdm_mr.
  *
  * The shm provider does not understand EFA-device-specific hints, so any such
- * hint (e.g. FI_EFA_MR_RELAXED_ORDERING) is stripped here. Device memory is
- * marked with FI_HMEM_DEVICE_ONLY so shm can handle it correctly.
+ * hint (e.g. FI_EFA_MR_RELAXED_ORDERING) is stripped here, along with
+ * FI_MR_RELAXED_ORDERING, which only applies to EFA device writes. Device
+ * memory is marked with FI_HMEM_DEVICE_ONLY so shm can handle it correctly.
  *
  * This is factored out (rather than inlined in efa_rdm_mr_regattr) so the flag
  * derivation can be unit tested directly. In particular it guards against a
@@ -811,11 +812,11 @@ uint64_t efa_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface)
 		shm_flags |= FI_HMEM_DEVICE_ONLY;
 
 	/*
-	 * FI_EFA_MR_RELAXED_ORDERING is an EFA-device-specific hint; the shm
-	 * provider does not understand it, so strip it from the shm MR
-	 * registration.
+	 * Relaxed ordering applies to EFA device writes only; the shm provider
+	 * does not understand FI_EFA_MR_RELAXED_ORDERING, so strip both
+	 * relaxed ordering flags from the shm MR registration.
 	 */
-	shm_flags &= ~FI_EFA_MR_RELAXED_ORDERING;
+	shm_flags &= ~(FI_MR_RELAXED_ORDERING | FI_EFA_MR_RELAXED_ORDERING);
 
 	return shm_flags;
 }
