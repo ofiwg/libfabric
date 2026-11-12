@@ -275,6 +275,16 @@ static int efa_ep_close(fid_t fid)
 
 	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
 
+	/*
+	 * Destroy the QP before closing the util_ep. The QP's work queues use
+	 * util_ep.lock as their wqlock, and while the QP is still in the QP
+	 * table another thread reading a shared CQ can process one of its
+	 * completions and take that lock. efa_base_ep_destruct_qp() removes
+	 * the QP from the table and drains the CQ under the CQ locks, so no
+	 * reader can reach the work queues once it returns.
+	 */
+	efa_base_ep_destruct_qp(ep);
+
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cntr. */
 	efa_base_ep_close_util_ep(ep);
