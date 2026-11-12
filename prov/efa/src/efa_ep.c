@@ -319,6 +319,7 @@ static int efa_ep_close(fid_t fid)
  */
 static int efa_ep_commit_cq_context_mode(struct efa_base_ep *ep,
 					 struct efa_ibv_cq *ibv_cq)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 	if (ibv_cq->context_mode != UNASSIGNED &&
 	    ibv_cq->context_mode != ep->context_mode) {
@@ -371,7 +372,14 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EOPNOTSUPP;
 		}
 
+		/*
+		 * Endpoints may be bound to a shared CQ from several threads at
+		 * once, and CQ reads use the mode, so check and commit it under
+		 * the CQ's ep_list_lock.
+		 */
+		EFA_GENLOCK_LOCK(&cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		ret = efa_ep_commit_cq_context_mode(ep, &cq->ibv_cq);
+		EFA_GENLOCK_UNLOCK(&cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		if (ret)
 			return ret;
 
