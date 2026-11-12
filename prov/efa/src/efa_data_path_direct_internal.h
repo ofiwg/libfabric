@@ -132,6 +132,8 @@ efa_wq_get_next_wrid_idx(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 	/* Get the next wrid index to be used from the free index pool */
 	wrid_idx = wq->wrid_idx_pool[wq->wrid_idx_pool_next];
 	wq->wrid[wrid_idx] = wr_id;
+	/* Read by the completion path once the device returns the CQE */
+	EFA_TSAN_RELEASE(&wq->wrid[wrid_idx]);
 
 	/* Advance to next pool entry - will never overflow as validate
 	 * succeeded */
@@ -238,6 +240,7 @@ efa_get_sq_comp_wrid(struct efa_data_path_direct_wq *wq,
 		return efa_get_req_id_64(tcqe);
 	}
 
+	EFA_TSAN_ACQUIRE(&wq->wrid[cqe->req_id & ~wq->gen_mask]);
 	return wq->wrid[cqe->req_id & ~wq->gen_mask];
 }
 
@@ -420,6 +423,7 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 			ibv_cq->data_path_direct.cur_wq =
 				&qp->data_path_direct_qp.rq.wq;
 			wrid_idx = cqe->req_id & ~ibv_cq->data_path_direct.cur_wq->gen_mask;
+			EFA_TSAN_ACQUIRE(&ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx]);
 			ibvcqx->wr_id = ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
 		}
 		ibvcqx->status = to_ibv_status(cqe->status);
