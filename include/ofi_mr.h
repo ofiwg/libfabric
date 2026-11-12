@@ -120,6 +120,12 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 	}
 }
 
+/*
+ * Lock order when nesting: mm_state_lock, then mm_list_rwlock, then mm_lock.
+ * A thread that holds mm_state_lock may be waiting for a monitor's thread to
+ * exit, and that thread takes mm_list_rwlock and mm_lock to deliver events.
+ */
+
 /* Single lock used by all memory monitors and MR caches. */
 extern pthread_mutex_t mm_lock;
 
