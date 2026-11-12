@@ -1066,6 +1066,11 @@ out:
 }
 
 static void cleanup_worker_resourses(struct worker_context *worker) {
+	/*
+	 * Close the endpoint before deregistering the buffer MR: the last
+	 * cycle's endpoint can still have receives posted on those buffers.
+	 */
+	cleanup_endpoint(worker);
 	context_pool_destroy(&worker->pool);
 	free(worker->sender_addrs);
 	worker->sender_addrs = NULL;
@@ -1075,7 +1080,6 @@ static void cleanup_worker_resourses(struct worker_context *worker) {
 		worker->peer_ids = NULL;
 		worker->num_peers = 0;
 	}
-	cleanup_endpoint(worker);
 }
 
 // Common function for buffer and MR setup
