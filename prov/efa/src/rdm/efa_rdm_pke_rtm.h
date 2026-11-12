@@ -125,18 +125,6 @@ struct efa_rdm_dc_medium_rtm_base_hdr *efa_rdm_pke_get_dc_medium_rtm_base_hdr(st
 }
 
 static inline
-struct efa_rdm_dc_medium_msgrtm_hdr *efa_rdm_pke_get_dc_medium_msgrtm_hdr(struct efa_rdm_pke *pke)
-{
-	return (struct efa_rdm_dc_medium_msgrtm_hdr *)pke->wiredata;
-}
-
-static inline
-struct efa_rdm_dc_medium_tagrtm_hdr *efa_rdm_pke_get_dc_medium_tagrtm_hdr(struct efa_rdm_pke *pke)
-{
-	return (struct efa_rdm_dc_medium_tagrtm_hdr *)pke->wiredata;
-}
-
-static inline
 struct efa_rdm_longcts_rtm_base_hdr *efa_rdm_pke_get_longcts_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
 	return (struct efa_rdm_longcts_rtm_base_hdr *)pke->wiredata;

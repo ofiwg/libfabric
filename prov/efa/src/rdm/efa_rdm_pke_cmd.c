@@ -744,28 +744,6 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
-void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
-{
-	struct efa_rdm_ope *rxe = pkt_entry->ope;
-
-	assert(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
-	assert(rxe);
-
-	if (has_imm_data) {
-		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rxe->cq_entry.data = imm_data;
-	}
-
-	rxe->peer = pkt_entry->peer;
-	dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
-	rxe->total_len = pkt_entry->pkt_size;
-	rxe->cq_entry.len = pkt_entry->pkt_size;
-
-	efa_rdm_rxe_report_completion(rxe);
-	efa_rdm_rxe_release(rxe);
-	efa_rdm_pke_release_rx(pkt_entry);
-}
-
 /**
  * @brief process a received packet
  *
