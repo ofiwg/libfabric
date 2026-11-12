@@ -372,9 +372,42 @@ release:
 	return ret;
 }
 
-static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
+/* Block until one of the wait set's fds is ready or the timeout expires.
+ * Returns > 0 if an fd is ready, 0 on timeout, or a negative error code.
+ */
+static int util_wait_fd_poll(struct util_wait_fd *wait, int timeout)
 {
 	struct ofi_epollfds_event event;
+
+	if (wait->util_wait.wait_obj != FI_WAIT_FD)
+		return ofi_pollfds_wait(wait->pollfds, &event, 1, timeout);
+
+#ifdef HAVE_EPOLL
+	/* Wait for the epoll fd to become readable with poll() rather than
+	 * calling epoll_wait().  Both report the same readiness, but they
+	 * differ when the thread is notified without a signal being
+	 * delivered.  This happens routinely when a provider uses io_uring:
+	 * the kernel runs a completion of a request submitted by this
+	 * thread as task work, which interrupts the thread's blocking system
+	 * call.  epoll_wait() then fails with EINTR, while poll() is
+	 * restarted by the kernel.  poll() only fails with EINTR when a
+	 * signal handler ran, so that real signals are still reported to the
+	 * caller.
+	 */
+	{
+		struct pollfd pfd = { .fd = wait->epoll_fd, .events = POLLIN };
+		int ret;
+
+		ret = poll(&pfd, 1, timeout);
+		return ret < 0 ? -ofi_syserr() : ret;
+	}
+#else
+	return ofi_epoll_wait(wait->epoll_fd, &event, 1, timeout);
+#endif
+}
+
+static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
+{
 	struct util_wait_fd *wait;
 	uint64_t endtime;
 	int ret;
@@ -390,20 +423,15 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 
-		ret = (wait->util_wait.wait_obj == FI_WAIT_FD) ?
-		      ofi_epoll_wait(wait->epoll_fd, &event, 1, timeout) :
-		      ofi_pollfds_wait(wait->pollfds, &event, 1, timeout);
+		ret = util_wait_fd_poll(wait, timeout);
 		if (ret > 0)
 			return FI_SUCCESS;
 
 		if (ret < 0) {
-#if ENABLE_DEBUG
-			/* ignore interrupts in order to enable debugging */
-			if (ret == -FI_EINTR)
-				continue;
-#endif
-			FI_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
-				"poll failed\n");
+			/* -FI_EINTR: a signal handler ran, report it */
+			if (ret != -FI_EINTR)
+				FI_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
+					"poll failed\n");
 			return ret;
 		}
 	}
