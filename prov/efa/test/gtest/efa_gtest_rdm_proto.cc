@@ -521,6 +521,40 @@ TEST_F(EfaRdmProtoReadTest, runtread_declined_for_delivery_complete)
 	EXPECT_STREQ(res.proto_name, "longread");
 }
 
+struct EfaRdmProtoBeforeHandshakeCase {
+	const char *name;
+	int homogeneous_peers;
+	const char *expected_proto;
+};
+
+class EfaRdmProtoBeforeHandshakeTest
+	: public EfaRdmProtoReadTest,
+	  public testing::WithParamInterface<EfaRdmProtoBeforeHandshakeCase>
+{
+};
+
+TEST_P(EfaRdmProtoBeforeHandshakeTest, selects_before_handshake)
+{
+	const EfaRdmProtoBeforeHandshakeCase &c = GetParam();
+	struct efa_test_proto_select_result res = {};
+
+	ASSERT_EQ(efa_test_proto_select_before_handshake(
+			  resource.ep, resource.av, resource.domain,
+			  c.homogeneous_peers, &res),
+		  0);
+	ASSERT_EQ(res.ret, 0);
+	EXPECT_STREQ(res.proto_name, c.expected_proto);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmProtoBeforeHandshakeTest,
+	Values(EfaRdmProtoBeforeHandshakeCase{"longcts", 0, "longcts"},
+	       EfaRdmProtoBeforeHandshakeCase{"homogeneous_peers_runtread", 1,
+					      "runtread"}),
+	[](const testing::TestParamInfo<EfaRdmProtoBeforeHandshakeCase> &info) {
+		return std::string(info.param.name);
+	});
+
 TEST_F(EfaRdmProtoReadTest, longread_construct_builds_one_pke)
 {
 	struct efa_test_proto_longread_construct_result res = {};

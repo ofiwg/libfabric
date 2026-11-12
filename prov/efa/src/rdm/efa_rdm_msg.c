@@ -251,6 +251,10 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	 * selected above assumed the peer accepts headers, so the repost after
 	 * the handshake revisits that choice; see
 	 * efa_rdm_proto_zero_copy_reselect_queued_before_handshake().
+	 *
+	 * Other protos check for peer capabilities during proto selection
+	 * via efa_rdm_interop_rdma_read(), so no need to wait for a
+	 * handshake
 	 */
 	if (ep->peer_may_have_zcpy_rx &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
