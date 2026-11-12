@@ -605,6 +605,7 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 				       enum efa_test_rtm_variant variant)
 {
 	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	ssize_t ret;
 
 	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR) {
@@ -618,7 +619,15 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 	if (EFA_TEST_RTM_IS_DC(variant))
 		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
+
+	ret = efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe, efa_rdm_pke_get_req_hdr_size(pkt_entry), 0,
+		txe->total_len);
 	if (ret)
 		return ret;
 
