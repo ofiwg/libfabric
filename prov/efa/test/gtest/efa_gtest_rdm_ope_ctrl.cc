@@ -305,6 +305,23 @@ TEST_F(EfaRdmOpeContinuationTest, success_posts_continuation_and_advances)
 	EXPECT_GT(res.ope_bytes_sent, bytes_sent_before);
 }
 
+TEST_F(EfaRdmOpeContinuationTest, short_read_posts_continuation_and_advances)
+{
+	struct efa_test_cont_result res = {};
+	uint64_t bytes_sent_before;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_ctrl_setup_short_rtr_continuation(
+			  resource.ep, resource.av, &res),
+		  0);
+	bytes_sent_before = res.ope_bytes_sent;
+
+	efa_test_ctrl_drive_continuation(resource.ep, 0 /* tx_full */, &res);
+
+	EXPECT_GT(res.ope_bytes_sent, bytes_sent_before);
+}
+
 TEST_F(EfaRdmOpeContinuationTest, write_eagain_leaves_ope_queued)
 {
 	struct efa_test_cont_result res = {};

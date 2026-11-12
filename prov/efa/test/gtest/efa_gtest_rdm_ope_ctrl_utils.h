@@ -151,6 +151,10 @@ int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
 					     struct fid_av *av,
 					     struct efa_test_cont_result *out);
 
+int efa_test_ctrl_setup_short_rtr_continuation(
+	struct fid_ep *ep, struct fid_av *av,
+	struct efa_test_cont_result *out);
+
 /**
  * @brief Run the progress engine's long CTS send-list drain once. When
  * @p tx_full is set, the TX pool is exhausted for the duration of the drain so

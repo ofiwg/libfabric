@@ -17,6 +17,7 @@
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longcts_rtr.h"
 #include "rdm/protocols/efa_rdm_proto_longcts_write.h"
+#include "rdm/protocols/efa_rdm_proto_short_rtr.h"
 #include "ofi_util.h"
 
 #define EFA_TEST_CTRL_SOURCE_LEN 64
@@ -509,9 +510,9 @@ size_t efa_test_ctrl_readrsp_max_payload(struct fid_ep *ep)
 	return efa_rdm_ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr);
 }
 
-int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
-					     struct fid_av *av,
-					     struct efa_test_cont_result *out)
+static int efa_test_ctrl_setup_rtr_continuation(
+	struct fid_ep *ep, struct fid_av *av, struct efa_rdm_proto *proto,
+	struct efa_test_cont_result *out)
 {
 	struct efa_rdm_ope *rxe;
 	size_t len = 128;
@@ -530,7 +531,7 @@ int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
 	g_ctrl.ope = rxe;
 
 	efa_test_ctrl_set_source(rxe, len);
-	rxe->proto = &efa_rdm_proto_longcts_rtr;
+	rxe->proto = proto;
 	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
 	/*
@@ -547,6 +548,22 @@ int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
 	out->on_longcts_send_list = 1;
 	out->ope_bytes_sent = rxe->bytes_sent;
 	return 0;
+}
+
+int efa_test_ctrl_setup_longcts_continuation(struct fid_ep *ep,
+					     struct fid_av *av,
+					     struct efa_test_cont_result *out)
+{
+	return efa_test_ctrl_setup_rtr_continuation(
+		ep, av, &efa_rdm_proto_longcts_rtr, out);
+}
+
+int efa_test_ctrl_setup_short_rtr_continuation(
+	struct fid_ep *ep, struct fid_av *av,
+	struct efa_test_cont_result *out)
+{
+	return efa_test_ctrl_setup_rtr_continuation(
+		ep, av, &efa_rdm_proto_short_rtr, out);
 }
 
 void efa_test_ctrl_drive_continuation(struct fid_ep *ep, int tx_full,
