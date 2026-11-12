@@ -81,14 +81,14 @@ int efa_test_srx_dispatches_receive_callback(
 	ofi_genlock_lock(srx->lock);
 	if (unexpected) {
 		efa_env.rx_copy_unexp = 0;
-		ret = efa_rdm_pke_proc_msgrtm(pke);
+		ret = efa_rdm_pke_proc_rtm_after_robuf(pke);
 		rxe = pke->ope;
 		out->was_unexpected = rxe && rxe->state == EFA_RDM_RXE_UNEXP;
 		out->callback_set = pke->handle_pke != NULL;
 		pke->handle_pke = efa_test_srx_callback;
 	} else {
 		proto->handle_unexp_pke_match = efa_test_srx_callback;
-		ret = efa_rdm_pke_proc_msgrtm(pke);
+		ret = efa_rdm_pke_proc_rtm_after_robuf(pke);
 		proto->handle_unexp_pke_match = saved_callback;
 		rxe = pke->ope;
 	}
