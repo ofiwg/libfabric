@@ -233,6 +233,10 @@ struct ft_opts {
 	int expect_error;
 	uint64_t sync_comp_flags; /* completion semantic for inband sync */
 
+	char *scatter_layout;
+	char *scatter_device;
+	size_t scatter_seg_len;
+
 	char **argv;
 };
 
@@ -288,6 +292,44 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
 void ft_addr_usage();
 void ft_hmem_usage();
+void ft_parse_hmem_scatter_opts(int op, char *optarg);
+int ft_check_hmem_scatter_opts(void);
+void ft_hmem_scatter_usage(void);
+
+#define FT_SCATTER_NAME_LEN 256
+
+struct ft_scatter_seg {
+	void *buf;
+	size_t len;
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	struct fid_mr *mr;
+	void *desc;
+};
+
+struct ft_scatter {
+	struct ft_scatter_seg *segs;
+	struct iovec *iov;
+	void **desc;
+	unsigned char *stage;
+	size_t nsegs;
+	size_t seg_len;
+	char direction[2 * FT_SCATTER_NAME_LEN + 3];
+};
+
+extern struct ft_scatter ft_scatter;
+
+int ft_scatter_setup(void);
+int ft_scatter_exchange(void);
+size_t ft_scatter_posted_len(size_t size);
+bool ft_scatter_fits(size_t size);
+int ft_scatter_fill_sentinel(void);
+int ft_scatter_check(size_t msg_len);
+void ft_scatter_set_size(size_t size);
+int ft_post_rx_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx);
+int ft_recvmsg_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx,
+		       uint64_t flags);
+void ft_scatter_free(void);
 void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
@@ -319,6 +361,7 @@ extern int listen_sock;
 #define HMEM_OPTS "D:i:HR"
 #define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
+#define HMEM_SCATTER_OPTS "y:z:"
 #define API_OPTS "o:"
 #define NO_CQ_DATA 0
 
@@ -498,6 +541,7 @@ int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_open_domain_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
+int ft_check_hmem_support(void);
 int ft_init_fabric();
 int ft_init_oob();
 int ft_close_oob();
