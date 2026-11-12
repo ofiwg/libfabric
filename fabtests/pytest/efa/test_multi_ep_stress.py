@@ -1,5 +1,6 @@
 import pytest
 from common import ClientServerTest
+from efa.efa_common import has_rdma
 
 @pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
@@ -142,4 +143,28 @@ def test_multi_ep_stress_thread_completion_shared_av_shm_lookup_remove(cmdline_a
           "--receiver-ep-cycles 5"
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa",
                             additional_env="FI_EFA_ENABLE_SHM_TRANSFER=1")
+    test.run()
+
+@pytest.mark.unstable
+@pytest.mark.parametrize("op_type", ["untagged", "writedata"])
+def test_multi_ep_stress_efa_direct_shared_cq_ep_recycling(cmdline_args, op_type):
+    # Workers serialize their reads of the shared CQ, but enable and close their own endpoints
+    # bound to it outside that lock, so endpoint setup and teardown race with fi_cq_read on the same CQ.
+    if op_type == "writedata" and not has_rdma(cmdline_args, "writedata"):
+        pytest.skip("FI_RMA is not supported. Skip writedata test on efa-direct.")
+    cmd = f"fi_efa_multi_ep_stress --shared-cq --sender-workers 4 --receiver-workers 4 " \
+          f"--sender-ep-cycles 5 --receiver-ep-cycles 5 --op-type {op_type}"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa-direct")
+    test.run()
+
+@pytest.mark.unstable
+@pytest.mark.parametrize("op_type", ["untagged", "writedata"])
+def test_multi_ep_stress_efa_direct_thread_completion_ep_recycling(cmdline_args, op_type):
+    # Under FI_THREAD_COMPLETION each worker polls its own CQ while other workers enable and close
+    # their endpoints, updating the device-wide QP table that every CQ poll reads.
+    if op_type == "writedata" and not has_rdma(cmdline_args, "writedata"):
+        pytest.skip("FI_RMA is not supported. Skip writedata test on efa-direct.")
+    cmd = f"fi_efa_multi_ep_stress --threading completion --sender-workers 4 --receiver-workers 4 " \
+          f"--sender-ep-cycles 5 --receiver-ep-cycles 5 --op-type {op_type}"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa-direct")
     test.run()
