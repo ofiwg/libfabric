@@ -324,7 +324,7 @@ static inline uint32_t efa_rdm_ope_get_ope_id(struct efa_rdm_ope *ope)
  * @brief Initialize the txe fields that every TX path needs.
  *
  * Does not touch txe->mr, txe->desc or the MR generation snapshot: the
- * refactored protocol path populates those before the txe is filled, so that
+ * protocol path populates those before the txe is filled, so that
  * protocol selection can attempt memory registration. Callers that have not
  * already populated them must use efa_rdm_txe_construct() instead.
  */
@@ -668,12 +668,6 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  size_t rx_data_offset,
 					  struct efa_rdm_pke *pkt_entry,
 					  char *pkt_data, size_t data_size);
-
-ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
-					 size_t *pkt_entry_cnt,
-					 size_t *pkt_entry_data_size_vec);
-
-ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
 
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 

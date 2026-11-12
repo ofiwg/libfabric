@@ -100,7 +100,6 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
 		.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
 		.efa_rdm_pke_read = __real_efa_rdm_pke_read,
-		.efa_rdm_ope_post_send = __real_efa_rdm_ope_post_send,
 		.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 
@@ -469,11 +468,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 
 		/* begin of efa_unit_test_ope.c */
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_host_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_host_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_unhappy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_happy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rxe_post_local_read_or_queue_clone_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

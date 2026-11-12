@@ -594,11 +594,10 @@ static struct efa_rdm_ope *efa_test_rtm_alloc_txe(struct efa_rdm_ep *ep,
 /*
  * Build an eager RTM packet the way the eager protocol does.
  *
- * The eager protocol moved to the refactored code path
- * (efa_rdm_proto_eager_construct_tx_pkes), which allocates its own packet
- * entry and so cannot stamp a caller-supplied one. This mirrors the header and
- * payload it writes, so the assertions below still describe the eager wire
- * format.
+ * The eager protocol (efa_rdm_proto_eager_construct_tx_pkes) allocates its own
+ * packet entry and so cannot stamp a caller-supplied one. This mirrors the
+ * header and payload it writes, so the assertions below still describe the
+ * eager wire format.
  */
 static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 				       struct efa_rdm_ope *txe,
@@ -647,11 +646,10 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 /*
  * Build one segment of a medium RTM message the way the medium protocol does.
  *
- * Like eager, the medium protocol moved to the refactored code path
- * (efa_rdm_proto_medium_construct_tx_pkes), which allocates its own packet
- * entries and so cannot stamp a caller-supplied one. This mirrors the header and
- * payload it writes for a single segment, so the assertions below still describe
- * the medium wire format.
+ * Like eager, the medium protocol (efa_rdm_proto_medium_construct_tx_pkes)
+ * allocates its own packet entries and so cannot stamp a caller-supplied one.
+ * This mirrors the header and payload it writes for a single segment, so the
+ * assertions below still describe the medium wire format.
  */
 static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *txe,
@@ -769,9 +767,9 @@ static ssize_t efa_test_rtm_init_longread(struct efa_rdm_pke *pkt_entry,
  * Build one segment of a runt read RTM message the way the runt read protocol
  * does.
  *
- * Like eager and medium, the runt read protocol moved to the refactored code
- * path (efa_rdm_proto_runtread_construct_tx_pkes), which allocates its own
- * packet entries and so cannot stamp a caller-supplied one. This mirrors the
+ * Like eager and medium, the runt read protocol
+ * (efa_rdm_proto_runtread_construct_tx_pkes) allocates its own packet entries
+ * and so cannot stamp a caller-supplied one. This mirrors the
  * header, read iov array and payload it writes for a single segment, so the
  * assertions below still describe the runt read wire format.
  */
@@ -1026,7 +1024,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		switch (family) {
 		case EFA_TEST_RTM_FAM_MEDIUM:
 			/*
-			 * The refactored medium protocol posts every packet of
+			 * The medium protocol posts every packet of
 			 * the message in one go, so its post-send hook accounts
 			 * for the whole message rather than for one packet.
 			 */
@@ -1045,7 +1043,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			break;
 		case EFA_TEST_RTM_FAM_RUNTREAD:
 			/*
-			 * The refactored runt read protocol posts the whole runt
+			 * The runt read protocol posts the whole runt
 			 * in one go, so its post-send hook accounts for
 			 * bytes_runt rather than for one packet, and it bumps the
 			 * read count once per message instead of on the first
@@ -1080,19 +1078,12 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 	switch (family) {
 	case EFA_TEST_RTM_FAM_EAGER:
-		/*
-		 * The eager protocol moved to the refactored code path, where
-		 * the send completion handler lives on the packet entry. It
-		 * releases the packet entry itself, unlike the handlers below,
-		 * so remember not to release it again.
-		 */
 		pkt_entry->handle_pke =
 			&efa_rdm_proto_eager_handle_rtm_send_completion;
 		pkt_entry_released = true;
 		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_MEDIUM:
-		/* Also refactored; see the eager case above. */
 		pkt_entry->handle_pke =
 			&efa_rdm_proto_medium_handle_rtm_send_completion;
 		pkt_entry_released = true;
@@ -1105,7 +1096,6 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_RUNTREAD:
-		/* Also refactored; see the eager case above. */
 		pkt_entry->handle_pke =
 			&efa_rdm_proto_runtread_handle_rtm_send_completion;
 		pkt_entry_released = true;

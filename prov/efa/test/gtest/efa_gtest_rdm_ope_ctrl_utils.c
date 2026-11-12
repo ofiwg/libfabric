@@ -188,7 +188,7 @@ static int efa_test_ctrl_build_ope(int which, struct efa_test_ctrl_result *out)
 		out->ids.prov_errno = EFA_TEST_CTRL_PROV_ERRNO;
 		break;
 	case EFA_TEST_CTRL_PEER_ERROR_TXE_PROTO:
-		/* A migrated protocol on the ope must not divert a non-REQ
+		/* A protocol on the ope must not divert a non-REQ
 		 * packet into that protocol's construct_tx_pkes(). */
 		ope->proto = &efa_rdm_proto_eager;
 		ope->req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT;

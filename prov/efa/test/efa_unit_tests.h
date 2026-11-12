@@ -348,11 +348,6 @@ void test_efa_rnr_queue_and_resend_tagged(void **state);
 void test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error(void **state);
 
 /* begin of efa_unit_test_ope.c */
-void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts(void **state);
-void test_efa_rdm_ope_prepare_to_post_send_host_memory(void **state);
-void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(void **state);
-void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(void **state);
-void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(void **state);
 void test_efa_rdm_ope_post_write_0_byte_no_shm(void);
 void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(void **state);
 void test_efa_rdm_rxe_post_local_read_or_queue_happy(void **state);

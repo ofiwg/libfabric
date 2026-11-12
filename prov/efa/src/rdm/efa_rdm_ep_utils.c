@@ -23,7 +23,6 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_rtw.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
-#include "protocols/efa_rdm_proto_longcts.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -451,7 +450,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
  *
  * Sometimes we need release TX pkt_entry without
  * decreasing the tx_op counter. For example, when
- * efa_rdm_ope_post_send() failed to post a pkt entry.
+ * a pkt entry fails to post.
  *
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains
@@ -1293,9 +1292,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 
 		if (ope->window > 0) {
 			if (efa_rdm_mr_gen_check_ope(ope)) {
-				/* A protocol that owns its continuation sends the
-				 * next batch itself; otherwise fall back to the
-				 * shared CTSDATA send.
+				/* The protocol sends the next batch.
 				 *
 				 * TODO: Future protocols that need to send packets
 				 * in response to a received packet should NOT
@@ -1304,15 +1301,28 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 				 * construction and sending in the receive
 				 * completion callback itself.
 				 */
-				if (ope->proto) {
-					assert(ope->proto->post_continuation);
+				if (OFI_UNLIKELY(!ope->proto ||
+						 !ope->proto->post_continuation)) {
+					EFA_WARN(FI_LOG_EP_DATA,
+						 "ope type %d, op %u, ope id %u, msg_id %u is on the long CTS send list, but its protocol %s has no continuation\n",
+						 ope->type, ope->op,
+						 efa_rdm_ope_get_ope_id(ope),
+						 ope->msg_id,
+						 ope->proto ? ope->proto->name : "(none)");
+					assert(0 && "ope on the long CTS send list has no continuation");
+					ret = -FI_EINVAL;
+				} else {
 					ret = ope->proto->post_continuation(ope);
-				} else
-					ret = efa_rdm_proto_post_ctsdata(ope);
+				}
 			} else
 				ret = -FI_ECANCELED;
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "Posting CTSDATA failed: ope type %d, ope id %u, msg_id %u, bytes_sent %" PRIu64 " of %" PRIu64 ": %s\n",
+					 ope->type, efa_rdm_ope_get_ope_id(ope),
+					 ope->msg_id, ope->bytes_sent,
+					 ope->total_len, fi_strerror(-ret));
 				efa_rdm_txe_handle_error(ope, -ret,
 							 FI_EFA_ERR_PKT_POST);
 			}

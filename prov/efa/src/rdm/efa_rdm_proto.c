@@ -301,6 +301,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
 
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No send protocol can carry a %" PRIu64 " byte op %u send (flags 0x%" PRIx64 ", iface %d, p2p %d)\n",
+		 txe->total_len, op, effective_flags, iface, use_p2p);
 	*proto = NULL;
 	txe->proto = NULL;
 	return -FI_EOPNOTSUPP;
@@ -427,6 +430,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
+			EFA_DBG(FI_LOG_EP_DATA,
+				"Selected the %s protocol for a %" PRIu64 " byte write\n",
+				selected_proto->name, txe->total_len);
 			return;
 		}
 	}
@@ -435,6 +441,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 	 * No emulated write protocol matched. This is not expected; the caller
 	 * reports an error.
 	 */
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No emulated write protocol can carry a %" PRIu64 " byte write\n",
+		 txe->total_len);
 	*proto = NULL;
 	txe->proto = NULL;
 }
@@ -466,6 +475,9 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
+			EFA_DBG(FI_LOG_EP_DATA,
+				"Selected the %s protocol for a %" PRIu64 " byte read\n",
+				selected_proto->name, txe->total_len);
 			return;
 		}
 	}
@@ -474,6 +486,9 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 	 * No emulated read protocol matched. This is not expected; the caller
 	 * asserts that a protocol was selected.
 	 */
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No emulated read protocol can carry a %" PRIu64 " byte read\n",
+		 txe->total_len);
 	*proto = NULL;
 	txe->proto = NULL;
 }
