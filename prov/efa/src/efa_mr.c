@@ -92,7 +92,7 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
 		supported_flags |= FI_MR_DMABUF;
 
-	supported_flags |= FI_EFA_MR_RELAXED_ORDERING;
+	supported_flags |= FI_MR_RELAXED_ORDERING | FI_EFA_MR_RELAXED_ORDERING;
 
 	if (flags & (~supported_flags)) {
 		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
@@ -449,7 +449,8 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
  * Set ofi_access to FI_SEND | FI_RECV if not already set,
  * Convert ofi_access flags to ibv_access flags. The EFA-specific @flags
  * (as passed to fi_mr_regattr) can request additional access attributes, e.g.
- * FI_EFA_MR_RELAXED_ORDERING maps to IBV_ACCESS_RELAXED_ORDERING.
+ * FI_MR_RELAXED_ORDERING (or FI_EFA_MR_RELAXED_ORDERING) maps to
+ * IBV_ACCESS_RELAXED_ORDERING.
  * TODO: Figure out how to split this call for efa-direct and efa-protocol
  * (support emulation) access modes
  */
@@ -488,7 +489,7 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 
 	/* Opt-in relaxed PCIe ordering. Without this flag the region keeps
 	 * EFA's default (strict) ordering. */
-	if (flags & FI_EFA_MR_RELAXED_ORDERING)
+	if (flags & (FI_MR_RELAXED_ORDERING | FI_EFA_MR_RELAXED_ORDERING))
 		ibv_access |= IBV_ACCESS_RELAXED_ORDERING;
 
 	return ibv_access;

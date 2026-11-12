@@ -2257,7 +2257,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access sets IBV_ACCESS_RELAXED_ORDERING only
- * when FI_EFA_MR_RELAXED_ORDERING is passed in flags.
+ * when FI_MR_RELAXED_ORDERING or FI_EFA_MR_RELAXED_ORDERING is passed in flags.
  */
 void test_efa_mr_ofi_to_ibv_access_relaxed_ordering(void **state)
 {
@@ -2274,11 +2274,18 @@ void test_efa_mr_ofi_to_ibv_access_relaxed_ordering(void **state)
 	assert_true(ibv_access & IBV_ACCESS_RELAXED_ORDERING);
 	assert_int_equal(ibv_access & ~IBV_ACCESS_RELAXED_ORDERING,
 			 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
+
+	/* The generic flag behaves the same way. */
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND | FI_RECV, true, true,
+					      FI_MR_RELAXED_ORDERING);
+	assert_true(ibv_access & IBV_ACCESS_RELAXED_ORDERING);
+	assert_int_equal(ibv_access & ~IBV_ACCESS_RELAXED_ORDERING,
+			 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
 }
 
 /**
- * @brief FI_EFA_MR_RELAXED_ORDERING is accepted by efa_mr_regattr_validate on
- * both the efa-direct and efa (RDM) fabrics.
+ * @brief FI_MR_RELAXED_ORDERING and FI_EFA_MR_RELAXED_ORDERING are accepted by
+ * efa_mr_regattr_validate on both the efa-direct and efa (RDM) fabrics.
  */
 static void test_efa_mr_relaxed_ordering_validate_impl(struct efa_resource *resource,
 						       char *fabric_name,
@@ -2297,6 +2304,9 @@ static void test_efa_mr_relaxed_ordering_validate_impl(struct efa_resource *reso
 
 	assert_int_equal(efa_mr_regattr_validate(&resource->domain->fid, &attr,
 						 FI_EFA_MR_RELAXED_ORDERING),
+			 expected_ret);
+	assert_int_equal(efa_mr_regattr_validate(&resource->domain->fid, &attr,
+						 FI_MR_RELAXED_ORDERING),
 			 expected_ret);
 }
 
