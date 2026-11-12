@@ -5,3 +5,6 @@
 -e dgram
 dgram
 multinode_coll
+
+# FI_HMEM not supported
+hmem_scatter
