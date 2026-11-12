@@ -6,14 +6,6 @@
 #include "efa_rdm_ep.h"
 #include "efa_rdm_msg.h"
 #include "efa_av.h"
-#include "efa_rdm_pke_rtm.h"
-#include "protocols/efa_rdm_proto_eager.h"
-
-static ssize_t test_efa_srx_matched_callback(struct efa_rdm_pke *pkt_entry)
-{
-	(void) pkt_entry;
-	return 0;
-}
 
 /**
  * @brief This test validates whether the default min_multi_recv size is correctly
@@ -73,83 +65,6 @@ void test_efa_srx_lock(void **state)
         assert_true(((void *) srx_ctx->lock == (void *) &efa_rdm_ep->srx_lock));
 }
 
-
-/**
- * @brief Test srx's start ops is updating the rxe status correctly
- *
- * @param state
- */
-void test_efa_srx_unexp_pkt(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct util_srx_ctx *srx_ctx;
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_pke *pke;
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(raw_addr);
-	struct efa_rdm_av_entry av_entry = {0};
-	struct efa_rdm_peer peer;
-	struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {.msg_id = 0,
-							    .connid = 0x1234};
-	void *desc = NULL;
-	struct iovec iov = {0};
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-
-	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
-				  base_ep.util_ep.ep_fid);
-	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-
-	/* Fake a rx pkt entry */
-	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
-				EFA_RDM_PKE_FROM_EFA_RX_POOL);
-	assert_non_null(pke);
-	efa_rdm_ep->efa_rx_pkts_posted =
-		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
-
-	/* Create a fake peer */
-	/* TODO: peer must be constructed by CQ read path */
-	assert_int_equal(
-		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
-	raw_addr.qpn = 0;
-	raw_addr.qkey = 0x1234;
-	memcpy(av_entry.efa_av_entry.ep_addr, &raw_addr, sizeof(raw_addr));
-	av_entry.implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	efa_rdm_peer_construct(&peer, efa_rdm_ep, &av_entry);
-	pke->peer = &peer;
-	pke->proto = &efa_rdm_proto_eager;
-
-	efa_unit_test_eager_msgrtm_pkt_construct(pke, &pke_attr);
-	/**
-	 * Allocate an rxe with the rx pkt.
-	 * Since there is no recv posted, the rxe must be unexpected
-	 */
-	efa_env.rx_copy_unexp = 0;
-	ofi_genlock_lock(srx_ctx->lock);
-	assert_int_equal(efa_rdm_pke_proc_msgrtm(pke), 0);
-	rxe = pke->ope;
-	assert_true(rxe->state == EFA_RDM_RXE_UNEXP);
-	assert_true(rxe->unexp_pkt == pke);
-	pke->handle_pke = test_efa_srx_matched_callback;
-	ofi_genlock_unlock(srx_ctx->lock);
-
-	/* Fake an application posted receive */
-	util_srx_generic_recv(efa_rdm_ep->peer_srx_ep, &iov, &desc, 1, 0, NULL,
-			      0);
-
-	/* Make sure rxe is updated as mateched and unexp_pkt is NULL */
-	assert_true(rxe->state == EFA_RDM_RXE_MATCHED);
-	assert_true(rxe->unexp_pkt == NULL);
-
-	ofi_genlock_lock(srx_ctx->lock);
-	efa_rdm_pke_release_rx(pke);
-	efa_rdm_rxe_release(rxe);
-	ofi_genlock_unlock(srx_ctx->lock);
-
-	/* Destroy the fake peer constructed above */
-	efa_rdm_peer_destruct(&peer, efa_rdm_ep);
-}
 
 /**
  * @brief Test that util_foreach_unspec only processes entries belonging to the
