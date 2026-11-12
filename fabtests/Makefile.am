@@ -680,6 +680,7 @@ dummy_man_pages = \
 	man/man1/fi_cq_data.1 \
 	man/man1/fi_dgram.1 \
 	man/man1/fi_directed_recv.1 \
+	man/man1/fi_hmem_scatter_recvv.1 \
 	man/man1/fi_inj_complete.1 \
 	man/man1/fi_mcast.1 \
 	man/man1/fi_msg.1 \
@@ -707,6 +708,7 @@ dummy_man_pages = \
 	man/man1/fi_msg_bw.1 \
 	man/man1/fi_msg_pingpong.1 \
 	man/man1/fi_rdm_cntr_pingpong.1 \
+	man/man1/fi_rdm_hmem_scatter_bw.1 \
 	man/man1/fi_rdm_pingpong.1 \
 	man/man1/fi_rdm_tagged_bw.1 \
 	man/man1/fi_rdm_tagged_pingpong.1 \
