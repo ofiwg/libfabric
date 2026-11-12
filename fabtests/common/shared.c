@@ -4387,6 +4387,20 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	ssize_t ret, err = 0;
 
 	for (rcvd = 0; rcvd < len; ) {
+		if (timeout >= 0) {
+			ret = ft_poll_fd(fd, timeout * 1000);
+			if (ret == -FI_EAGAIN) {
+				FT_ERR("%ds timeout expired waiting for the "
+				       "peer", timeout);
+				err = -FI_ETIMEDOUT;
+				break;
+			}
+			if (ret) {
+				err = ret;
+				break;
+			}
+		}
+
 		ret = ofi_recv_socket(fd, ((char *) msg) + rcvd, len - rcvd, 0);
 		if (ret > 0) {
 			rcvd += ret;

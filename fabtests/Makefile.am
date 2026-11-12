@@ -41,6 +41,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_atomic \
 	functional/fi_rdm_stress \
 	functional/fi_multi_recv \
+	functional/fi_hmem_scatter_recvv \
 	functional/fi_flood \
 	functional/fi_rdm_multi_client \
 	functional/fi_loopback \
@@ -381,6 +382,10 @@ functional_fi_rdm_stress_LDADD = libfabtests.la
 functional_fi_multi_recv_SOURCES = \
 	functional/multi_recv.c
 functional_fi_multi_recv_LDADD = libfabtests.la
+
+functional_fi_hmem_scatter_recvv_SOURCES = \
+	functional/hmem_scatter_recvv.c
+functional_fi_hmem_scatter_recvv_LDADD = libfabtests.la
 
 functional_fi_flood_SOURCES = \
 	 functional/flood.c
