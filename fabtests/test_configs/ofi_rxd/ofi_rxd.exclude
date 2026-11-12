@@ -24,3 +24,6 @@ multi_mr
 av_test
 inject_test
 multinode
+
+# FI_HMEM not supported
+hmem_scatter
