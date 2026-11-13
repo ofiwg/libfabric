@@ -1999,8 +1999,12 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 				ope->desc[iov_idx], pkt_entry, ope,
 				sizeof(struct efa_rdm_rma_context_pkt), 0,
 				ope->total_len);
-			assert(copied == ope->total_len);
-			(void) copied; /* suppress compiler warning for non-debug build */
+			if (OFI_UNLIKELY(copied < 0)) {
+				EFA_WARN(FI_LOG_CQ, "copy from user buffer failed! err: %zd\n",
+					 copied);
+				efa_rdm_pke_release_tx(pkt_entry);
+				return copied;
+			}
 			ope->desc[0] = fi_mr_desc(pkt_entry->mr);
 			efa_rdm_mr_gen_capture_in_ope_desc(ope);
 			ope->iov[0].iov_base = pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt);

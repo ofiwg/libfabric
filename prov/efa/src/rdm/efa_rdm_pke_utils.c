@@ -42,7 +42,8 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 {
 	int tx_iov_index, ret;
 	bool mr_p2p_available;
-	size_t tx_iov_offset, copied;
+	size_t tx_iov_offset;
+	ssize_t copied;
 	struct efa_rdm_mr *iov_mr;
 
 	efa_rdm_pke_set_ope(pke, ope);
@@ -93,8 +94,11 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 
 	copied = efa_rdm_pke_copy_from_hmem_iov(
 		iov_mr, pke, ope, payload_offset, segment_offset, data_size);
-
-	assert(copied == data_size);
+	if (OFI_UNLIKELY(copied < 0)) {
+		EFA_WARN(FI_LOG_EP_DATA, "copy from user buffer failed: %s\n",
+			 fi_strerror(-copied));
+		return copied;
+	}
 	pke->payload = pke->wiredata + payload_offset;
 	pke->payload_size = copied;
 	pke->payload_mr = pke->mr;
