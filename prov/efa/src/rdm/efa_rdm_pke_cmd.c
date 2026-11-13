@@ -208,8 +208,9 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				 * the source MR and the receiver needs it.
 				 */
 				efa_rdm_pke_release_tx(pkt_entry);
-				efa_rdm_txe_handle_error(txe, FI_ECANCELED,
-							 FI_EFA_ERR_PEER_ABORTED);
+				if (!efa_rdm_txe_handle_error(txe, FI_ECANCELED,
+							      FI_EFA_ERR_PEER_ABORTED))
+					efa_rdm_txe_release_error_if_drained(txe);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such
@@ -220,22 +221,23 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			}
 		} else {
 			/*
-			 * Read atomic_proto first: efa_rdm_txe_handle_error()
-			 * can release a peer-aborting txe.
+			 * The handler reports whether peer-abort cleanup owns
+			 * the TXE lifetime after this call.
 			 */
 			bool release_atomic_txe = (txe->atomic_proto != NULL);
+			bool peer_abort_owns_txe = efa_rdm_txe_handle_error(txe, err, prov_errno);
 
-			efa_rdm_txe_handle_error(txe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			/*
-			 * This error CQE retires the atomic request's only WR.
-			 * The success-completion callback is not invoked for error CQEs,
-			 * so release the TXE here.
+			 * The success-completion callback is not invoked for
+			 * error CQEs. Release an atomic request's only WR, or
+			 * let an opted-in protocol release its drained TXE.
 			 */
-			if (release_atomic_txe) {
+			if (!peer_abort_owns_txe && release_atomic_txe) {
 				assert(txe->efa_outstanding_tx_ops == 0);
 				efa_rdm_txe_release(txe);
-			}
+			} else if (!peer_abort_owns_txe)
+				efa_rdm_txe_release_error_if_drained(txe);
 		}
 		break;
 	case EFA_RDM_RXE:

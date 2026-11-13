@@ -13,6 +13,11 @@
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
 
+static void efa_rdm_txe_handle_error_ignore_result(struct efa_rdm_ope *txe, int err, int prov_errno)
+{
+	(void) efa_rdm_txe_handle_error(txe, err, prov_errno);
+}
+
 /* Compose the self-detected (RDMA READ) call-site behavior: mark the
  * rxe peer-aborted, notify the sender, then drain-release the rxe.
  * Mirrors the efa_rdm_pke_handle_tx_error dispatch so the emission
@@ -331,7 +336,7 @@ void test_efa_rdm_txe_handle_error_write_cq(void **state)
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
 	assert_non_null(txe);
 
-	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, true);
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error_ignore_result, txe, true);
 
 	efa_rdm_txe_release(txe);
 }
@@ -348,7 +353,7 @@ void test_efa_rdm_txe_handle_error_not_write_cq(void **state)
 
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
-	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, false);
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error_ignore_result, txe, false);
 
 	efa_rdm_txe_release(txe);
 }
@@ -5977,6 +5982,7 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->msg_id = 0x99;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	peer = txe->peer;
 	/* Handshake received but feature bit NOT advertised -- old peer. */
@@ -5988,9 +5994,9 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_EAGER_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* No PEER_ERROR_PKT posted, not flagged for abort. */
-	assert_false(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+	assert_cq_peer_aborted_error(resource);
 }
 
 /**

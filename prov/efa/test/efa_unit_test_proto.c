@@ -456,16 +456,18 @@ void test_proto_eager_queue_dequeue_handshake(void **state)
 	struct efa_unit_test_buff send_buff;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *txe;
+	struct efa_rdm_ope *txe[3];
+	struct efa_rdm_pke *pkt_entry;
+	struct fi_cq_err_entry err_entry = {0};
 	fi_addr_t peer_addr;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
-	struct fi_cq_tagged_entry cq_entry;
-	int ret;
+	uint32_t initial_msg_id;
+	int submitted_before_abort;
+	size_t i;
 
 	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 	efa_unit_test_buff_construct(&send_buff, resource, 64);
-
 	ep = container_of(resource->ep, struct efa_rdm_ep,
 			  base_ep.util_ep.ep_fid);
 
@@ -480,38 +482,62 @@ void test_proto_eager_queue_dequeue_handshake(void **state)
 	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	ep->peer_may_have_zcpy_rx = true;
+	initial_msg_id = peer->next_msg_id;
 
-	/*
-	 * The handshake trigger and the queued send's repost each post at
-	 * least once, and the progress engine may retry, so let every post
-	 * succeed rather than queueing a fixed number of return values. The
-	 * mock reads its value with mock_int(), so it needs the int variant.
-	 */
-	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
-	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+	for (i = 0; i < ARRAY_SIZE(txe); i++) {
+		assert_int_equal(
+			fi_send(resource->ep, send_buff.buff, send_buff.size,
+				fi_mr_desc(send_buff.mr), peer_addr, NULL),
+			0);
+		txe[i] = container_of(ep->ope_queued_list.prev,
+				      struct efa_rdm_ope, queued_entry);
+		assert_true(txe[i]->internal_flags &
+			    EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	}
 
-	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
-	assert_int_equal(ret, 0);
+	assert_int_equal(peer->next_msg_id, initial_msg_id);
 
-	/* Verify the OPE is in the queued list */
-	assert_int_equal(ep->ope_queued_before_handshake_cnt, 1);
-	txe = container_of(ep->ope_queued_list.next,
-			   struct efa_rdm_ope, queued_entry);
-	assert_true(dlist_entry_in_list(&txe->queued_entry,
-					&ep->ope_queued_list));
-
-	/* Simulate handshake received */
+	/* Retire the handshake trigger before processing the queued sends. */
+	efa_rdm_pke_handle_send_completion(
+		efa_rdm_cq_get_pke_from_wr_id_solicited(
+			(uintptr_t) g_ibv_submitted_wr_id_vec[0]));
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 
-	/* Progress via fi_cq_read which calls efa_domain_progress */
-	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	assert_int_equal(ret, -FI_EAGAIN);
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, EIO);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe[0]), -FI_EIO);
+	assert_int_equal(peer->next_msg_id, initial_msg_id);
 
-	/* Verify the OPE was dequeued and sent */
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, EAGAIN);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe[1]), -FI_EAGAIN);
+	assert_int_equal(peer->next_msg_id, initial_msg_id);
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe[2]), 0);
+	assert_false(txe[2]->internal_flags &
+		     EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	assert_int_equal(peer->next_msg_id, initial_msg_id + 1);
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	assert_int_equal(efa_rdm_pke_get_rtm_msg_id(pkt_entry), initial_msg_id);
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	submitted_before_abort = g_ibv_submitted_wr_id_cnt;
+	txe[1]->desc_gen[0] = txe[1]->desc_gen[0] == 1 ? 2 : 1;
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe[1]), -FI_ECANCELED);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, submitted_before_abort);
+	assert_int_equal(peer->next_msg_id, initial_msg_id + 1);
 	assert_int_equal(ep->ope_queued_before_handshake_cnt, 0);
 	assert_true(dlist_empty(&ep->ope_queued_list));
 
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), 1);
+	assert_int_equal(err_entry.err, FI_EIO);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PKT_POST);
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), 1);
+	assert_int_equal(err_entry.err, FI_ECANCELED);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 	efa_unit_test_buff_destruct(&send_buff);
 }
 

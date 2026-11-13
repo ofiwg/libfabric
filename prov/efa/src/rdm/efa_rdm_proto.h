@@ -67,6 +67,9 @@ struct efa_rdm_proto {
 			   enum fi_hmem_iface target_iface,
 			   enum fi_hmem_iface bounds_profile_iface);
 
+	/* Fatal errors can release the TXE after all of its WRs drain. */
+	bool release_txe_on_error;
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given

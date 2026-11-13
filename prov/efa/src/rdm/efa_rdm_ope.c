@@ -180,6 +180,17 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	ofi_buf_free(txe);
 }
 
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe){
+
+	if (txe->state != EFA_RDM_OPE_ERR || !txe->proto ||
+	    !txe->proto->release_txe_on_error ||
+	    (txe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING | EFA_RDM_OPE_QUEUED_FLAGS)) ||
+	    txe->efa_outstanding_tx_ops || !dlist_empty(&txe->queued_pkts))
+		return;
+
+	efa_rdm_txe_release(txe);
+}
+
 /**
  * @brief Release the efa specific resources in efa_rdm_rxe
  *
@@ -892,7 +903,7 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 		return false;
 
 	/*
-	 * Any two-sided RTM: its msg_id was consumed at init, so the
+	 * Any posted two-sided RTM: its msg_id was consumed before posting, so the
 	 * receiver's reorder window is (or will be) waiting on it. That
 	 * includes a LONGREAD RTM, which carries no MR-backed payload of
 	 * its own; abandoning a canceled one without notifying the peer
@@ -931,14 +942,18 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
  *
  * 4. print warning message with self and peer's raw address
  *
- * Note It does NOT release txe because it is still possible to receive
- * send completion for this txe
+ * For an ordinary error, this function does not release the txe because it is
+ * still possible to receive a send completion for it. Peer-abort handling is
+ * the exception and may retain, park, or synchronously release the txe.
  *
  * @param[in]	txe	txe that encountered error
  * @param[in]	err			positive libfabric error code
  * @param[in]	prov_errno	positive EFA provider specific error code
+ * @param[in]	rtm_was_posted	whether an RTM carrying this txe's msg_id may have reached the peer
+ * @return	true if peer-abort handling owns the txe lifetime
  */
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
+static bool efa_rdm_txe_handle_error_impl(struct efa_rdm_ope *txe, int err, int prov_errno,
+										bool rtm_was_posted)
 {
 	struct efa_rdm_ep *ep;
 	struct fi_cq_err_entry err_entry;
@@ -967,9 +982,11 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		 * withheld completion + release happen once the WRs drain; an
 		 * ordinary errored txe needs nothing here. Nothing touches txe
 		 * after this. */
-		if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
 			efa_rdm_txe_progress_peer_abort_if_drained(txe);
-		return;
+			return true;
+		}
+		return false;
 	default:
 		EFA_WARN(FI_LOG_CQ, "txe unknown state %d\n",
 			txe->state);
@@ -1026,7 +1043,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		EFA_WARN(FI_LOG_CQ,
 			"Writing eq error for txe from internal operations\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		return;
+		return false;
 	}
 
 	/*
@@ -1052,15 +1069,22 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	 */
 	if ((txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION) &&
 	    (txe->internal_flags & EFA_RDM_TXE_NO_COUNTER))
-		return;
+		return false;
 
-	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
+	if (rtm_was_posted &&
+	    efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);
-		return;
+		return true;
 	}
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "TXE");
+	return false;
+}
+
+bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
+{
+	return efa_rdm_txe_handle_error_impl(txe, err, prov_errno, true);
 }
 
 /**
@@ -2302,6 +2326,7 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 {
 	int ret = 0;
+	bool peer_abort_owns_txe = false;
 	bool release_atomic_response = false;
 	bool release_atomic_txe = false;
 	struct efa_rdm_ep *ep = ope->ep;
@@ -2367,15 +2392,13 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 			return ret;
 
 		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
-		/*
-		 * An atomic-protocol TXE has no outstanding WR left to retire it
-		 * after a non-FI_EAGAIN repost failure, so release it below.
-		 */
+		/* Release terminal atomic responses after queue bookkeeping. */
 		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
 		release_atomic_response =
 			efa_rdm_ope_is_internal_atomic_response(ope, queued_response_pkt_type);
 		if (ope->type == EFA_RDM_TXE)
-			efa_rdm_txe_handle_error(ope, -ret, prov_errno);
+			peer_abort_owns_txe = efa_rdm_txe_handle_error_impl(
+				ope, -ret, prov_errno, flag != EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 		else
 			efa_rdm_rxe_handle_error(ope, -ret, prov_errno);
 
@@ -2387,9 +2410,11 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	if (flag == EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 		--ep->ope_queued_before_handshake_cnt;
 
-	if (release_atomic_txe) {
+	if (!peer_abort_owns_txe && release_atomic_txe) {
 		assert(ope->efa_outstanding_tx_ops == 0);
 		efa_rdm_txe_release(ope);
+	} else if (!peer_abort_owns_txe && ope->type == EFA_RDM_TXE) {
+		efa_rdm_txe_release_error_if_drained(ope);
 	} else if (release_atomic_response) {
 		assert(ope->efa_outstanding_tx_ops == 0);
 		efa_rdm_rxe_release(ope);
