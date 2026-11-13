@@ -233,6 +233,7 @@ SHM_INI
 			"buffering. (default: 1)");
 
 	smr_init_env();
+	smr_init_max_peers();
 
 	if (smr_env.use_dsa_sar)
 		smr_dsa_init();

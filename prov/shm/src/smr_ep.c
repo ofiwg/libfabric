@@ -203,7 +203,7 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	int ret;
 
 	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
-	assert(id < SMR_MAX_PEERS);
+	assert(id < smr_max_peers);
 	if (id < 0)
 		return -1;
 
@@ -335,7 +335,8 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	int i, ret;
 
 	if (ep->region->max_sar_buf_per_peer == 0 ||
-	    smr_peer_data(ep->region)[cmd->hdr.tx_id].sar_status)
+	    smr_peer_data(ep->region)[cmd->hdr.tx_id].sar_status ||
+	    !smr_freestack_avail(smr_sar_pool(ep->region)))
 		return -FI_EAGAIN;
 
 	cmd->data.buf_batch_size = MIN3(
@@ -796,7 +797,7 @@ static void smr_ep_map_all_peers(struct smr_ep *ep)
 	int64_t i;
 
 	ofi_genlock_lock(&ep->util_ep.av->lock);
-	for (i = 0; i < SMR_MAX_PEERS; i++)
+	for (i = 0; i < smr_max_peers; i++)
 		smr_map_to_endpoint(ep, i);
 
 	ofi_genlock_unlock(&ep->util_ep.av->lock);

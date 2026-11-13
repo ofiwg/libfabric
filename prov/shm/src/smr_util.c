@@ -88,6 +88,16 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 	}
 }
 
+int smr_max_peers = SMR_MAX_PEERS;
+
+void smr_init_max_peers(void)
+{
+	long cores = ofi_sysconf(_SC_NPROCESSORS_ONLN);
+
+	if (cores > 0)
+		smr_max_peers = MIN(MAX((long) SMR_MAX_PEERS, cores), INT16_MAX);
+}
+
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 				  size_t *cmd_offset, size_t *cs_offset,
 				  size_t *inject_offset, size_t *rq_offset,
@@ -113,9 +123,9 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	sar_pool_offset = ret_queue_offset + sizeof(struct smr_return_queue) +
 		sizeof(struct smr_return_queue_entry) * tx_size;
 	peer_data_offset = sar_pool_offset +
-		freestack_size(sizeof(struct smr_sar_buf), SMR_MAX_PEERS);
+		freestack_size(sizeof(struct smr_sar_buf), SMR_SAR_POOL_SIZE);
 	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
-		SMR_MAX_PEERS;
+		smr_max_peers;
 
 	total_size = ep_name_offset + SMR_NAME_MAX;
 
@@ -260,6 +270,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	*smr = mapped_addr;
 
 	(*smr)->version = SMR_VERSION;
+	(*smr)->max_peers = smr_max_peers;
 
 	(*smr)->flags = attr->flags;
 
@@ -288,9 +299,9 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 
 	smr_freestack_init(smr_cmd_stack(*smr), tx_size,
 			   sizeof(struct smr_cmd));
-	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
+	smr_freestack_init(smr_sar_pool(*smr), SMR_SAR_POOL_SIZE,
 			   sizeof(struct smr_sar_buf));
-	for (i = 0; i < SMR_MAX_PEERS; i++) {
+	for (i = 0; i < smr_max_peers; i++) {
 		smr_peer_data(*smr)[i].id = -1;
 		smr_peer_data(*smr)[i].sar_status = SMR_SAR_FREE;
 		smr_peer_data(*smr)[i].name_sent = 0;

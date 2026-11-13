@@ -20,12 +20,12 @@ static int efa_unit_test_mocks_group_setup(void **state)
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
 
-	orig_efa_env = efa_env;
-
 	/* run fi_getinfo to populate g_efa_hmem_info and copy it */
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, NULL, &info);
 	memcpy(g_efa_hmem_info_backup, g_efa_hmem_info, sizeof(g_efa_hmem_info));
 	fi_freeinfo(info);
+
+	orig_efa_env = efa_env;
 
 	/* Initialize the random number generator */
 	srand(time(NULL));

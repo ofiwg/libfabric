@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#define SMR_VERSION	10
+#define SMR_VERSION	11
 
 struct smr_env {
 	int	disable_cma;
@@ -234,6 +234,7 @@ struct smr_peer {
 };
 
 #define SMR_MAX_PEERS	256
+#define SMR_SAR_POOL_SIZE	256
 #define SMR_PREFETCH_SZ	128
 
 struct smr_region {
@@ -250,7 +251,8 @@ struct smr_region {
 			struct ofi_xpmem_pinfo	xpmem_peer;
 
 			int			pid;
-			int			resv2;
+			uint16_t		max_peers;
+			uint16_t		resv2;
 
 			uintptr_t		base_addr;
 
@@ -332,6 +334,13 @@ static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
 	return (struct smr_return_queue *)
 			((char *) smr + smr->ret_queue_offset);
 }
+static inline uint16_t smr_sar_bufs_per_peer(int num_peers)
+{
+	if (num_peers <= 0)
+		return SMR_BUF_BATCH_MAX;
+	return MAX(1, MIN(SMR_BUF_BATCH_MAX, SMR_SAR_POOL_SIZE / num_peers));
+}
+
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
 	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
@@ -391,6 +400,8 @@ void smr_cleanup(void);
 int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	       struct smr_region *volatile *smr);
 void smr_free(struct smr_region *smr);
+void smr_init_max_peers(void);
+extern int smr_max_peers;
 
 #ifdef __cplusplus
 }
