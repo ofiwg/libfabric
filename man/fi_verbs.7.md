@@ -160,6 +160,16 @@ directly. Use of atomics on Mellanox cards on little-endian machines is allowed
 but users should make note of this verbs limitation and do any conversion
 necessary.
 
+# MEMORY REGISTRATION
+
+The verbs provider supports the *FI_MR_RELAXED_ORDERING* flag of
+`fi_mr_reg*()` (see [`fi_mr`(3)](fi_mr.3.html)) by registering the region
+with `IBV_ACCESS_RELAXED_ORDERING`.  The memory registration cache only
+reuses a registration for requests with the same relaxed ordering setting.
+The flag is ignored if libibverbs does not define
+`IBV_ACCESS_RELAXED_ORDERING` or the platform does not support relaxed
+ordering.
+
 # RUNTIME PARAMETERS
 
 The verbs provider checks for the following environment variables.
