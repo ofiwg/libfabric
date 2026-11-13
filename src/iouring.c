@@ -124,7 +124,18 @@ ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
-	io_uring_prep_writev(sqe, sock, iov, cnt, flags);
+	/* Use IORING_OP_SENDMSG rather than IORING_OP_WRITEV.  A writev on a
+	 * socket goes through sock_write_iter(), which does not set
+	 * MSG_NOSIGNAL: writing to a connection closed by the peer raises
+	 * SIGPIPE, which terminates the application by default.  io_uring
+	 * send/sendmsg requests always behave as if MSG_NOSIGNAL was set.
+	 * sendmsg also honors the socket flags, which writev cannot pass.
+	 */
+	ctx->msg = (struct msghdr) {
+		.msg_iov = (struct iovec *) iov,
+		.msg_iovlen = cnt,
+	};
+	io_uring_prep_sendmsg(sqe, sock, &ctx->msg, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
 	uring->credits--;
@@ -168,7 +179,16 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
-	io_uring_prep_readv(sqe, sock, iov, cnt, flags);
+	/* IORING_OP_READV takes a file offset, not socket flags: passing
+	 * the flags there makes the request fail with ESPIPE on a socket.
+	 * Use IORING_OP_RECVMSG, which accepts the socket flags.  The
+	 * msghdr must stay valid until the request is submitted.
+	 */
+	ctx->msg = (struct msghdr) {
+		.msg_iov = iov,
+		.msg_iovlen = cnt,
+	};
+	io_uring_prep_recvmsg(sqe, sock, &ctx->msg, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
 	uring->credits--;
@@ -227,9 +247,10 @@ int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries)
 	int ret;
 
 	memset(&params, 0, sizeof(params));
+	/* liburing returns -errno and does not set errno */
 	ret = io_uring_queue_init_params(entries, io_uring, &params);
 	if (ret)
-		return -errno;
+		return ret;
 
 	/* FAST_POOL is required for pre-posting receive buffers */
 	if (!(params.features & IORING_FEAT_FAST_POLL)) {
