@@ -163,26 +163,10 @@ def parse_lspci_tree(server_id):
     return tree
 
 
-# Neuron device BDF to EFA BDF mapping for trn2 instance types.
-# Each neuron device index maps to a specific EFA NIC BDF.
-_TRN2_ND_TO_EFA_BDF = {
-    0: "0000:c9:00.0",
-    1: "0000:b4:00.0",
-    2: "0000:b3:00.0",
-    3: "0000:ca:00.0",
-    4: "0000:6c:00.0",
-    5: "0000:57:00.0",
-    6: "0000:56:00.0",
-    7: "0000:6d:00.0",
-    8: "0000:98:00.0",
-    9: "0000:83:00.0",
-    10: "0000:82:00.0",
-    11: "0000:99:00.0",
-    12: "0000:f5:00.0",
-    13: "0000:e0:00.0",
-    14: "0000:df:00.0",
-    15: "0000:f6:00.0",
-}
+# Name of the on-host helper that prints the sidelink EFA BDF for a neuron core.
+# It asks the Neuron runtime (nrt_get_attached_efa_bdf) which EFA NIC is wired to
+# the core's device, so a new instance type needs no hand-maintained table.
+NEURON_EFA_BDF_HELPER = "neuron_efa_bdf"
 
 
 @functools.lru_cache(10)
@@ -205,40 +189,63 @@ def get_neuron_ls_output(ip):
     return json.loads(proc.stdout)
 
 
-def get_efa_device_name_for_neuron_core(ip, neuron_core_id):
+@functools.lru_cache(maxsize=None)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_sidelink_efa_bdf_for_neuron_core(ip, neuron_core_id, binpath=None, environments=None):
     """
-    Return the EFA device name for a given neuron core ID on trn2 instances.
+    Return the PCI BDF of the EFA NIC wired to the neuron device that owns the
+    given core, by running the neuron_efa_bdf helper on the remote host.
 
-    Uses the neuron-ls output to find which neuron device the given core is in,
-    then looks up the corresponding EFA NIC BDF from the static mapping table
-    and resolves it to an rdma device name.
-
-    Falls back to round-robin assignment for non-trn2 instance types.
+    Returns None when the helper is absent or the runtime cannot answer, so the
+    caller can fail closed instead of guessing.
     """
-    neuron_devices = get_neuron_ls_output(ip)
-    if not neuron_devices:
-        return get_efa_device_name_for_hmem_device(ip, 0, 1)
+    core = int(neuron_core_id)
+    # Resolve to one executable: the helper shipped alongside the fabtests
+    # binaries (binpath) if present, else one on PATH. Picking the path first
+    # (rather than chaining the invocations with ||) keeps "helper not found"
+    # distinct from "helper ran and the runtime could not answer".
+    picks = []
+    if binpath:
+        built = os.path.join(binpath, NEURON_EFA_BDF_HELPER)
+        picks.append("test -x '{0}' && echo '{0}'".format(built))
+    picks.append("command -v {0}".format(NEURON_EFA_BDF_HELPER))
+    resolve = " || ".join(picks)
+    remote = 'h="$({resolve})"; [ -n "$h" ] && {env} NEURON_RT_VISIBLE_CORES={core} "$h" 0'.format(
+        resolve=resolve, env=environments or "", core=core)
+    proc = subprocess.run("ssh {} '{}'".format(ip, remote), shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+    if proc.returncode != 0:
+        return None
+    bdf = proc.stdout.strip()
+    return bdf or None
 
-    instance_type = neuron_devices[0].get("instance_type", "")
 
-    if instance_type.startswith("trn2"):
-        # For trn2, use the static BDF mapping
-        for device in neuron_devices:
-            if neuron_core_id in device.get("neuroncore_ids", []):
-                nd_index = device["neuron_device"]
-                efa_bdf = _TRN2_ND_TO_EFA_BDF.get(nd_index)
-                assert(efa_bdf is not None)
-                rdma_name = get_rdma_core_name_for_efa_nic(ip, efa_bdf)
-                assert(rdma_name)
-                return rdma_name
+def get_efa_device_name_for_neuron_core(ip, neuron_core_id, binpath=None, environments=None):
+    """
+    Return the rdma-core device name of the EFA NIC physically wired to the
+    neuron device that owns neuron_core_id.
 
-    # For non-trn2, fall back to round-robin based on device index
-    # TODO: Implement topology aware NIC selection similar to CUDA
-    for device in neuron_devices:
-        if neuron_core_id in device.get("neuroncore_ids", []):
-            return get_efa_device_name_for_hmem_device(
-                ip, device["neuron_device"], len(neuron_devices))
-    return get_efa_device_name_for_hmem_device(ip, 0, len(neuron_devices))
+    The pairing is sourced from the Neuron runtime at test time, not a static
+    per-instance table. Skips the test when the pairing cannot be determined,
+    because the only sound alternative to the true NIC is to not run: a wrong
+    NIC has no path to the chip's memory and the op hangs to the test timeout.
+    """
+    bdf = get_sidelink_efa_bdf_for_neuron_core(ip, neuron_core_id, binpath, environments)
+    if bdf is None:
+        pytest.skip(
+            "cannot determine sidelink EFA NIC for neuron core {} on {}: the "
+            "neuron_efa_bdf helper or the Neuron runtime is unavailable. "
+            "Refusing to guess a NIC."
+            .format(neuron_core_id, ip))
+    rdma_name = get_rdma_core_name_for_efa_nic(ip, bdf)
+    if not rdma_name:
+        pytest.skip(
+            "EFA BDF {} for neuron core {} on {} has no rdma-core device"
+            .format(bdf, neuron_core_id, ip))
+    return rdma_name
 
 
 class CudaMemorySupport(IntEnum):
