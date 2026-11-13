@@ -223,6 +223,10 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	md->mr_fid.fid.ops = &vrb_mr_fi_ops;
 
 	vrb_access = vrb_mr_ofi2ibv_access(access, md->domain);
+#if VERBS_HAVE_RELAXED_ORDERING
+	if (flags & FI_MR_RELAXED_ORDERING)
+		vrb_access |= IBV_ACCESS_RELAXED_ORDERING;
+#endif
 	if (flags & FI_MR_DMABUF)
 		ret = vrb_mr_reg_common(md, vrb_access, base_addr, (void *) (uintptr_t) offset,
 					len, context, iface, device, flags);
@@ -287,14 +291,18 @@ int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 			    struct ofi_mr_entry *entry)
 {
 	struct vrb_mem_desc *md = (struct vrb_mem_desc *) entry->data;
+	int vrb_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE |
+			 IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_READ;
 
 	md->domain = container_of(cache->domain, struct vrb_domain, util_domain);
 	md->mr_fid.fid.ops = &vrb_mr_cache_fi_ops;
 	md->entry = entry;
 
-	return vrb_mr_reg_common(md, IBV_ACCESS_LOCAL_WRITE |
-			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
-			IBV_ACCESS_REMOTE_READ, NULL, entry->info.iov.iov_base,
+#if VERBS_HAVE_RELAXED_ORDERING
+	if (entry->info.flags & FI_MR_RELAXED_ORDERING)
+		vrb_access |= IBV_ACCESS_RELAXED_ORDERING;
+#endif
+	return vrb_mr_reg_common(md, vrb_access, NULL, entry->info.iov.iov_base,
 			entry->info.iov.iov_len, NULL, entry->info.iface,
 			entry->info.device, 0);
 }
@@ -335,6 +343,9 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	info.iov = iov;
 	info.iface = iface;
 	info.device = device;
+#if VERBS_HAVE_RELAXED_ORDERING
+	info.flags = flags & FI_MR_RELAXED_ORDERING;
+#endif
 
 	ret = (flags & OFI_MR_NOCACHE) ?
 	      ofi_mr_cache_reg(&domain->cache, &attr, &entry, flags) :
