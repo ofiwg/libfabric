@@ -164,6 +164,7 @@ struct efa_rdm_ope {
 	struct dlist_entry peer_entry;
 
 	uint64_t bytes_runt;
+	uint64_t bytes_runt_in_flight;
 
 	/* the following variables are for RX operation only */
 	uint64_t bytes_received;
