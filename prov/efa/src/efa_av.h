@@ -133,6 +133,9 @@ struct efa_prv_reverse_av {
 struct efa_av {
 	struct efa_domain *domain;
 	enum fi_av_type type;
+	/* efa_env.strict_mode at open, so the FI_AV_MAP lookup does not read the
+	 * global on every operation */
+	bool strict_mode;
 	/* cur_reverse_av is a map from (ahn + qpn) to the current (latest)
 	 * efa_av_entry. */
 	struct efa_av_array *cur_reverse_av;
@@ -191,7 +194,7 @@ static inline struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_ad
 	/* Using a removed fi_addr in a data transfer is an application error
 	 * (fi_av(3)); checking it on every operation would cost the lookup that
 	 * FI_AV_MAP saves, so only strict mode does. */
-	if (OFI_UNLIKELY(efa_env.strict_mode) && !efa_av_map_entry_is_valid(av, entry))
+	if (OFI_UNLIKELY(av->strict_mode) && !efa_av_map_entry_is_valid(av, entry))
 		return NULL;
 	return entry;
 }

@@ -532,12 +532,13 @@ static void test_av_map_insert_remove_lookup_impl(void **state, char *fabric_nam
 	/* a removed FI_AV_MAP fi_addr is rejected, not dereferenced */
 	assert_int_equal(fi_av_lookup(map_av, fi_addr, &raw_addr_out, &raw_addr_len), -FI_EINVAL);
 	assert_int_equal(fi_av_remove(map_av, &fi_addr, 1, 0), -FI_EINVAL);
-	/* data transfers only check it in strict mode */
-	strict_mode_orig = efa_env.strict_mode;
-	efa_env.strict_mode = 1;
+	/* data transfers only check it in strict mode, which the AV samples
+	 * when it is opened */
+	strict_mode_orig = av->strict_mode;
+	av->strict_mode = true;
 	assert_null(efa_av_addr_to_entry(av, fi_addr));
 	assert_int_equal(efa_av_fi_addr_to_index(av, fi_addr), FI_ADDR_NOTAVAIL);
-	efa_env.strict_mode = strict_mode_orig;
+	av->strict_mode = strict_mode_orig;
 
 	err = fi_close(&map_av->fid);
 	assert_int_equal(err, 0);
