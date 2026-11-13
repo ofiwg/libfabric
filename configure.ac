@@ -1128,7 +1128,7 @@ AC_ARG_WITH([default-monitor],
 	 AS_CASE([$default_monitor],
 		[memhooks], [AS_IF([test "$enable_memhooks" != "1"], [bad_default=1])],
 		[uffd], [AS_IF([test "$enable_uffd" != "1"], [bad_default=1])],
-		[kdreg2], [AS_IF([test "$kdreg2_enabled" != "1"], [bad_default=1])],
+		[kdreg2], [AS_IF([test "$kdreg2_enabled" != "1" || test "$have_kdreg2" != "1"], [bad_default=1])],
 		[])
 	 AS_IF([test "$bad_default" != "0"],
 		[AC_MSG_ERROR(["Default memory monitor is not available: $default_monitor."])])
