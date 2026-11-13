@@ -122,7 +122,72 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 }
 
 /**
+ * @brief copy from iovs that are all in the memory described by one registration.
+ *
+ * @param[in]		mr		memory descriptor of the iovs, or NULL for host memory.
+ * @param[in]		pke		packet entry the data is copied for.
+ * @param[in]		ope		operation entry the iovs belong to.
+ * @param[out]		dest		destination in host memory.
+ * @param[in]		size		length of the data to copy.
+ * @param[in]		iov		source iovs.
+ * @param[in]		iov_count	number of source iovs.
+ * @param[in]		iov_offset	offset of the data in the source iovs.
+ * @return   		length of data copied.
+ */
+static inline size_t
+efa_rdm_pke_copy_from_mr_iov(struct efa_rdm_mr *mr, struct efa_rdm_pke *pke,
+			     struct efa_rdm_ope *ope, void *dest, size_t size,
+			     const struct iovec *iov, size_t iov_count,
+			     size_t iov_offset)
+{
+	/*
+	 * gdrcopy reads device memory through uncached PCIe reads: cheaper
+	 * than a cudaMemcpy call for small messages, much slower in bulk.
+	 * Decide on the size of the whole message.
+	 */
+	if (mr && (mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE) &&
+	    (!pke->ep->cuda_api_permitted ||
+	     ope->total_len <= efa_env.efa_max_gdrcopy_from_hmem_size)) {
+		assert(mr->hmem_data);
+		return ofi_dev_reg_copy_from_hmem_iov(dest, size, mr->efa_mr.iface,
+						      (uint64_t)mr->hmem_data,
+						      iov, iov_count, iov_offset);
+	}
+
+	return ofi_copy_from_hmem_iov(dest, size,
+				      mr ? mr->efa_mr.iface : FI_HMEM_SYSTEM,
+				      mr ? mr->device : 0,
+				      iov, iov_count, iov_offset);
+}
+
+/**
+ * @brief whether the iovs of an operation are in more than one kind of memory.
+ */
+static inline bool efa_rdm_ope_iovs_mix_iface(struct efa_rdm_ope *ope)
+{
+	enum fi_hmem_iface first, iface;
+	size_t i;
+
+	if (ope->iov_count < 2)
+		return false;
+
+	first = ope->desc[0] ? ((struct efa_rdm_mr *)ope->desc[0])->efa_mr.iface :
+			       FI_HMEM_SYSTEM;
+	for (i = 1; i < ope->iov_count; i++) {
+		iface = ope->desc[i] ? ((struct efa_rdm_mr *)ope->desc[i])->efa_mr.iface :
+				       FI_HMEM_SYSTEM;
+		if (iface != first)
+			return true;
+	}
+	return false;
+}
+
+/**
  * @brief copy data from the user's buffer to the packet's wiredata.
+ *
+ * When the iovs are in different kinds of memory, for example a header in
+ * host memory followed by a payload in device memory, each iov is copied
+ * with the interface and device of its own memory registration.
  *
  * @param[in]		iov_mr  memory descriptors of the user's data buffer.
  * @param[in,out]	pke	    packet entry. Header must have been set when the function is called.
@@ -137,28 +202,27 @@ efa_rdm_pke_copy_from_hmem_iov(struct efa_rdm_mr *iov_mr, struct efa_rdm_pke *pk
 			       struct efa_rdm_ope *ope, size_t payload_offset,
 			       size_t segment_offset, size_t data_size)
 {
-	size_t copied;
+	size_t i, len, copied = 0;
 
-	/*
-	 * gdrcopy reads device memory through uncached PCIe reads: cheaper
-	 * than a cudaMemcpy call for small messages, much slower in bulk.
-	 * Decide on the size of the whole message.
-	 */
-	if (iov_mr && (iov_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE) &&
-	    (!pke->ep->cuda_api_permitted ||
-	     ope->total_len <= efa_env.efa_max_gdrcopy_from_hmem_size)) {
-		assert(iov_mr->hmem_data);
-		copied = ofi_dev_reg_copy_from_hmem_iov(pke->wiredata + payload_offset,
-							data_size, iov_mr->efa_mr.iface,
-							(uint64_t)iov_mr->hmem_data,
-							ope->iov, ope->iov_count,
-							segment_offset);
-	} else {
-		copied = ofi_copy_from_hmem_iov(pke->wiredata + payload_offset,
-		                                data_size,
-		                                iov_mr ? iov_mr->efa_mr.iface : FI_HMEM_SYSTEM,
-		                                iov_mr ? iov_mr->device : 0,
-		                                ope->iov, ope->iov_count, segment_offset);
+	if (!efa_rdm_ope_iovs_mix_iface(ope))
+		return efa_rdm_pke_copy_from_mr_iov(iov_mr, pke, ope,
+						    pke->wiredata + payload_offset,
+						    data_size, ope->iov,
+						    ope->iov_count, segment_offset);
+
+	for (i = 0; i < ope->iov_count && copied < data_size; i++) {
+		if (segment_offset >= ope->iov[i].iov_len) {
+			segment_offset -= ope->iov[i].iov_len;
+			continue;
+		}
+		len = MIN(ope->iov[i].iov_len - segment_offset, data_size - copied);
+		if (efa_rdm_pke_copy_from_mr_iov(ope->desc[i], pke, ope,
+						 pke->wiredata + payload_offset + copied,
+						 len, &ope->iov[i], 1,
+						 segment_offset) != len)
+			break;
+		copied += len;
+		segment_offset = 0;
 	}
 
 	return copied;
