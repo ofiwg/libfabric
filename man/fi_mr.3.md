@@ -1004,6 +1004,30 @@ The follow flag may be specified to any memory registration call.
   fi_av_insert_auth_key) instead of an endpoint fi_addr_t (i.e. fi_addr_t
   return from fi_av_insert / fi_av_insertsvc / fi_av_remove).
 
+*FI_MR_RELAXED_ORDERING*
+: This flag enables the NIC to use the PCIe relaxed ordering (RO) attribute
+  when writing data into the memory region.  Memory writes refer to PCIe
+  writes from the NIC to the region, not to transport operations such as RMA
+  writes.  All memory writes targeting the region may have RO set.  This can
+  modify the data ordering guarantees provided by the transport, as viewed by
+  the application.
+
+  Memory writes may result from the following transport operations: received
+  RMA writes, received send and tagged send messages, and RMA read responses.
+  RO memory writes imply that write-after-write ordering to the region is no
+  longer maintained.  Back-to-back memory writes to overlapping bytes, or
+  belonging to different messages, may reach memory in any order.
+  Additionally, memory write ordering within a single message is not
+  guaranteed.
+
+  Data visibility, completion semantics, and read-after-write ordering to the
+  same memory remain unchanged relative to the transport and endpoint
+  configuration.
+
+  Support for this flag is optional.  A provider that does not support relaxed
+  ordering may ignore the flag, in which case the region keeps the provider's
+  default ordering.
+
 # MEMORY DOMAINS
 
 Memory domains identify the physical separation of memory which
