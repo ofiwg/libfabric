@@ -92,8 +92,6 @@ void efa_rdm_pke_set_rtm_tag(struct efa_rdm_pke *pkt_entry, uint64_t tag)
 void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *rxe);
 
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry);
-
 void efa_rdm_pke_handle_rtm_recv(struct efa_rdm_pke *pkt_entry,
 				 struct efa_rdm_proto *proto);
 
@@ -125,18 +123,6 @@ struct efa_rdm_dc_medium_rtm_base_hdr *efa_rdm_pke_get_dc_medium_rtm_base_hdr(st
 }
 
 static inline
-struct efa_rdm_dc_medium_msgrtm_hdr *efa_rdm_pke_get_dc_medium_msgrtm_hdr(struct efa_rdm_pke *pke)
-{
-	return (struct efa_rdm_dc_medium_msgrtm_hdr *)pke->wiredata;
-}
-
-static inline
-struct efa_rdm_dc_medium_tagrtm_hdr *efa_rdm_pke_get_dc_medium_tagrtm_hdr(struct efa_rdm_pke *pke)
-{
-	return (struct efa_rdm_dc_medium_tagrtm_hdr *)pke->wiredata;
-}
-
-static inline
 struct efa_rdm_longcts_rtm_base_hdr *efa_rdm_pke_get_longcts_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
 	return (struct efa_rdm_longcts_rtm_base_hdr *)pke->wiredata;
@@ -155,9 +141,5 @@ struct efa_rdm_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(stru
 }
 
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry);
-
-ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
-					  int pkt_type, struct efa_rdm_ope *txe,
-					  size_t segment_offset, int data_size);
 
 #endif

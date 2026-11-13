@@ -416,95 +416,6 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 }
 
 /**
- * @brief prepare ope to send the give pkt type
- *
- * For given packet type, calculate how many packets are going to be
- * sent. If there are more than 1 packet, calculate how many data
- * each packet will carry.
- *
- * @param[in]		ep		endpoint
- * @param[in,out]	ope		txe that has all information of
- * 					a send operation
- * @param[in]		pkt_type	type of REQ packet
- * @param[in]		pkt_entry_cnt	number of packets to be sent
- * @param[out]		pkt_entry_data_size_vec	data size of each packet; only
- * 					meaningful for medium packet types
- * @return
- * On success, return 0
- * If there is not enough available packet entry in TX packet pool, return -FI_EAGAIN
- */
-ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
-					 size_t *pkt_entry_cnt,
-					 size_t *pkt_entry_data_size_vec)
-{
-	struct efa_rdm_ep *ep;
-	size_t total_pkt_entry_data_size; /* total number of bytes send via packet entry's payload */
-	size_t single_pkt_entry_data_size;
-	size_t single_pkt_entry_max_data_size;
-	int i, memory_alignment, remainder, iface;
-	size_t available_tx_pkts;
-
-	ep = ope->ep;
-	assert(ep->efa_max_outstanding_tx_ops >=
-	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
-
-	available_tx_pkts = efa_rdm_ep_get_available_tx_pkts(ep);
-
-	if (available_tx_pkts == 0)
-		return -FI_EAGAIN;
-
-	if (efa_rdm_pkt_type_is_medium(pkt_type)) {
-		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
-		assert(total_pkt_entry_data_size);
-
-		single_pkt_entry_max_data_size = efa_rdm_proto_max_req_data_capacity(
-			ep, efa_rdm_pkt_type_get_req_hdr_size(
-				    pkt_type,
-				    efa_rdm_proto_req_header_flags(ope->peer, ope->fi_flags),
-				    ope->rma_iov_count));
-		assert(single_pkt_entry_max_data_size);
-
-		iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->iface : FI_HMEM_SYSTEM;
-		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
-
-		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_max_data_size + 1;
-		if (*pkt_entry_cnt > available_tx_pkts)
-			return -FI_EAGAIN;
-
-		/* when sending multiple packets, it is more performant that the data size of each packet are close
-		 * to achieve that, we calculate the single packet size
-		 */
-		single_pkt_entry_data_size = (total_pkt_entry_data_size - 1) / *pkt_entry_cnt + 1;
-
-		/* each packet must be aligned */
-		single_pkt_entry_data_size = single_pkt_entry_data_size & ~(memory_alignment - 1);
-		assert(single_pkt_entry_data_size);
-
-		*pkt_entry_cnt = total_pkt_entry_data_size / single_pkt_entry_data_size;
-		for (i = 0; i < *pkt_entry_cnt; ++i)
-			pkt_entry_data_size_vec[i] = single_pkt_entry_data_size;
-
-		remainder = total_pkt_entry_data_size - (*pkt_entry_cnt) * single_pkt_entry_data_size;
-		if (single_pkt_entry_data_size + remainder <= single_pkt_entry_max_data_size) {
-			pkt_entry_data_size_vec[*pkt_entry_cnt - 1] += remainder;
-		} else {
-			pkt_entry_data_size_vec[*pkt_entry_cnt] = remainder;
-			*pkt_entry_cnt += 1;
-		}
-
-		return (*pkt_entry_cnt <= available_tx_pkts) ? 0 : -FI_EAGAIN;
-	}
-
-	/*
-	 * pkt_entry_data_size_vec is only set when there are more than 1 packets
-	 * to be sent.
-	 */
-	*pkt_entry_cnt = 1;
-	pkt_entry_data_size_vec[0] = -1;
-	return 0;
-}
-
-/**
  * @brief handle the situation that an error has happened to an RX (receive) operation
  *
  * This function does the following to handle error:
@@ -2174,100 +2085,11 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 }
 
 /**
- * @brief post packet(s) according to packet type.
- *
- * Depend on packet type, this function may post one packet or multiple packets.
- *
- * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type        packet type.
- * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
- *             -FI_EAGAIN      temporarily  out of resource
- */
-ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
-{
-	struct efa_rdm_ep *ep;
-	ssize_t err;
-	int64_t segment_offset;
-	int pkt_entry_cnt_allocated = 0;
-	int i;
-	uint64_t flags = 0;
-
-	ep = ope->ep;
-	assert(ep);
-
-	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type,
-					       &ep->send_pkt_entry_vec_size,
-					       ep->send_pkt_entry_vec_data_sizes);
-	if (err)
-		return err;
-
-	assert(ep->send_pkt_entry_vec_size <=
-	       efa_base_ep_get_tx_pool_size(&ep->base_ep));
-
-	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
-	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
-		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-
-		if (OFI_UNLIKELY(!ep->send_pkt_entry_vec[i])) {
-			err = -FI_EAGAIN;
-			goto handle_err;
-		}
-
-		pkt_entry_cnt_allocated++;
-
-		/* coverity[negative_returns : FALSE] - data_offset is signed; -1 is a valid documented sentinel */
-		err = efa_rdm_pke_fill_data(ep->send_pkt_entry_vec[i], pkt_type,
-					    ope, segment_offset,
-					    ep->send_pkt_entry_vec_data_sizes[i]);
-		if (err)
-			goto handle_err;
-
-		if (segment_offset != -1 && ep->send_pkt_entry_vec_size > 1) {
-			assert(ep->send_pkt_entry_vec_data_sizes[i] > 0);
-			segment_offset += ep->send_pkt_entry_vec_data_sizes[i];
-		}
-	}
-
-	assert(ep->send_pkt_entry_vec_size == pkt_entry_cnt_allocated);
-
-	/**
-	 * We currently respect FI_MORE only for eager pkt type because
-	 * 1. For some non-REQ pkts like CTSDATA, its current implementation
-	 * relies on the logic that efa_rdm_ope_post_send always rings the doorbell,
-	 * because the ep progress call will keep calling this function until
-	 * ope->window is 0, but ope->window will only be decremented after
-	 * the CTSDATA pkts are actually posted to rdma-core.
-	 * 2. For non-eager REQ packets, we already send multiple pkts that contain
-	 * data and make the firmware saturated, there is no meaning to queue
-	 * pkts in this case.
-	 */
-	if (ope->fi_flags & FI_MORE && efa_rdm_pkt_type_is_eager(pkt_type))
-		flags |= FI_MORE;
-
-	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
-				ep->send_pkt_entry_vec_size, flags);
-	if (err)
-		goto handle_err;
-
-	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
-	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
-		efa_rdm_pke_handle_sent(ep->send_pkt_entry_vec[i], pkt_type, ope->peer);
-
-	return FI_SUCCESS;
-
-handle_err:
-	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
-		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
-
-	return err;
-}
-
-/**
  * @brief post a single non-REQ ctrl packet.
  *
- * Builds the packet by calling the init function for its type directly, rather
- * than going through efa_rdm_pke_fill_data(). CTSDATA is also non-REQ but is not
- * handled here: it is multiple packets and is posted by the progress engine.
+ * Builds the packet by calling the init function for its type. CTSDATA is also
+ * non-REQ but is not handled here: it is multiple packets and is posted by the
+ * progress engine.
  *
  * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        non-REQ packet type.
@@ -2304,8 +2126,7 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 		pke_handle_sent = &efa_rdm_pke_handle_cts_sent;
 		break;
 	case EFA_RDM_READRSP_PKT:
-		/* These two carry data, so the old path passed ope->bytes_sent
-		 * as the segment offset and asserted it was 0. */
+		/* READRSP and ATOMRSP carry data from the start of the buffer. */
 		assert(ope->bytes_sent == 0);
 		err = efa_rdm_pke_init_readrsp(pkt_entry, ope);
 		pke_handle_sent = &efa_rdm_pke_handle_readrsp_sent;
@@ -2327,6 +2148,9 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 		err = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
 		break;
 	default:
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Cannot post unknown non-REQ ctrl pkt type %d for ope type %d, ope id %u\n",
+			 pkt_type, ope->type, efa_rdm_ope_get_ope_id(ope));
 		assert(0 && "unknown non-REQ ctrl packet type to post");
 		err = -FI_EINVAL;
 		break;
@@ -2340,8 +2164,8 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 	if (OFI_UNLIKELY(err))
 		goto release;
 
-	/* TODO: a non-REQ packet setting REQ_SENT looks wrong, but it is what
-	 * efa_rdm_ope_post_send() did. Revisit separately. */
+	/* TODO: a non-REQ packet setting REQ_SENT looks wrong. Revisit
+	 * separately. */
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	/* Only CTS and READRSP have anything to do once the device takes the WR. */
 	if (pke_handle_sent)
@@ -2453,6 +2277,9 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	case ofi_op_tagged:
 		if (ope->proto)
 			return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "Cannot repost op %u msg_id %u queued before handshake: it has no protocol\n",
+			 ope->op, ope->msg_id);
 		return -FI_EINVAL;
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);

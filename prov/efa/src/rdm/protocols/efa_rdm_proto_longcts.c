@@ -73,10 +73,12 @@ void efa_rdm_proto_longcts_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 	 * Drop a CTS whose id no longer names the operation that created it.
 	 */
 	if (OFI_UNLIKELY(!ope)) {
+		EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
 		EFA_INFO(FI_LOG_CQ,
 			 "CTS names ope id %" PRIu32 ", which no longer holds "
-			 "the operation that requested it. Dropping the CTS.\n",
-			 cts_pkt->send_id);
+			 "the operation that requested it. recv_id %" PRIu32
+			 ", peer %s. Dropping the CTS.\n",
+			 cts_pkt->send_id, cts_pkt->recv_id, peer_addr_str);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}

@@ -11,74 +11,42 @@
 
 struct efa_rdm_pkt_type_req_info EFA_RDM_PKT_TYPE_REQ_INFO_VEC[] = {
 	/* rtm header */
-	[EFA_RDM_EAGER_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_eager_msgrtm_hdr), 0},
-	[EFA_RDM_EAGER_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_eager_tagrtm_hdr), 0},
-	[EFA_RDM_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_medium_msgrtm_hdr), 0},
-	[EFA_RDM_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_medium_tagrtm_hdr), 0},
-	[EFA_RDM_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_msgrtm_hdr), 0},
-	[EFA_RDM_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_tagrtm_hdr), 0},
-	[EFA_RDM_LONGREAD_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longread_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
-	[EFA_RDM_LONGREAD_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longread_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
-	[EFA_RDM_DC_EAGER_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_eager_msgrtm_hdr), 0},
-	[EFA_RDM_DC_EAGER_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_eager_tagrtm_hdr), 0},
-	[EFA_RDM_DC_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_medium_msgrtm_hdr), 0},
-	[EFA_RDM_DC_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_medium_tagrtm_hdr), 0},
-	[EFA_RDM_DC_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_msgrtm_hdr), 0},
-	[EFA_RDM_DC_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_tagrtm_hdr), 0},
-	[EFA_RDM_RUNTCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_runtcts_msgrtm_hdr), 0},
-	[EFA_RDM_RUNTCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_runtcts_tagrtm_hdr), 0},
-	[EFA_RDM_RUNTREAD_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_runtread_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
-	[EFA_RDM_RUNTREAD_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_runtread_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_EAGER_MSGRTM_PKT] = {sizeof(struct efa_rdm_eager_msgrtm_hdr)},
+	[EFA_RDM_EAGER_TAGRTM_PKT] = {sizeof(struct efa_rdm_eager_tagrtm_hdr)},
+	[EFA_RDM_MEDIUM_MSGRTM_PKT] = {sizeof(struct efa_rdm_medium_msgrtm_hdr)},
+	[EFA_RDM_MEDIUM_TAGRTM_PKT] = {sizeof(struct efa_rdm_medium_tagrtm_hdr)},
+	[EFA_RDM_LONGCTS_MSGRTM_PKT] = {sizeof(struct efa_rdm_longcts_msgrtm_hdr)},
+	[EFA_RDM_LONGCTS_TAGRTM_PKT] = {sizeof(struct efa_rdm_longcts_tagrtm_hdr)},
+	[EFA_RDM_LONGREAD_MSGRTM_PKT] = {sizeof(struct efa_rdm_longread_msgrtm_hdr)},
+	[EFA_RDM_LONGREAD_TAGRTM_PKT] = {sizeof(struct efa_rdm_longread_tagrtm_hdr)},
+	[EFA_RDM_DC_EAGER_MSGRTM_PKT] = {sizeof(struct efa_rdm_dc_eager_msgrtm_hdr)},
+	[EFA_RDM_DC_EAGER_TAGRTM_PKT] = {sizeof(struct efa_rdm_dc_eager_tagrtm_hdr)},
+	[EFA_RDM_DC_MEDIUM_MSGRTM_PKT] = {sizeof(struct efa_rdm_dc_medium_msgrtm_hdr)},
+	[EFA_RDM_DC_MEDIUM_TAGRTM_PKT] = {sizeof(struct efa_rdm_dc_medium_tagrtm_hdr)},
+	[EFA_RDM_DC_LONGCTS_MSGRTM_PKT] = {sizeof(struct efa_rdm_longcts_msgrtm_hdr)},
+	[EFA_RDM_DC_LONGCTS_TAGRTM_PKT] = {sizeof(struct efa_rdm_longcts_tagrtm_hdr)},
+	[EFA_RDM_RUNTCTS_MSGRTM_PKT] = {sizeof(struct efa_rdm_runtcts_msgrtm_hdr)},
+	[EFA_RDM_RUNTCTS_TAGRTM_PKT] = {sizeof(struct efa_rdm_runtcts_tagrtm_hdr)},
+	[EFA_RDM_RUNTREAD_MSGRTM_PKT] = {sizeof(struct efa_rdm_runtread_msgrtm_hdr)},
+	[EFA_RDM_RUNTREAD_TAGRTM_PKT] = {sizeof(struct efa_rdm_runtread_tagrtm_hdr)},
 	/* rtw header */
-	[EFA_RDM_EAGER_RTW_PKT] = {0, sizeof(struct efa_rdm_eager_rtw_hdr), 0},
-	[EFA_RDM_DC_EAGER_RTW_PKT] = {0, sizeof(struct efa_rdm_dc_eager_rtw_hdr), 0},
-	[EFA_RDM_LONGCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_longcts_rtw_hdr), 0},
-	[EFA_RDM_DC_LONGCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_longcts_rtw_hdr), 0},
-	[EFA_RDM_LONGREAD_RTW_PKT] = {0, sizeof(struct efa_rdm_longread_rtw_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
-	[EFA_RDM_RUNTCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_runtcts_rtw_hdr), 0},
-	[EFA_RDM_RUNTREAD_RTW_PKT] = {0, sizeof(struct efa_rdm_runtread_rtw_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_EAGER_RTW_PKT] = {sizeof(struct efa_rdm_eager_rtw_hdr)},
+	[EFA_RDM_DC_EAGER_RTW_PKT] = {sizeof(struct efa_rdm_dc_eager_rtw_hdr)},
+	[EFA_RDM_LONGCTS_RTW_PKT] = {sizeof(struct efa_rdm_longcts_rtw_hdr)},
+	[EFA_RDM_DC_LONGCTS_RTW_PKT] = {sizeof(struct efa_rdm_longcts_rtw_hdr)},
+	[EFA_RDM_LONGREAD_RTW_PKT] = {sizeof(struct efa_rdm_longread_rtw_hdr)},
+	[EFA_RDM_RUNTCTS_RTW_PKT] = {sizeof(struct efa_rdm_runtcts_rtw_hdr)},
+	[EFA_RDM_RUNTREAD_RTW_PKT] = {sizeof(struct efa_rdm_runtread_rtw_hdr)},
 	/* rtr header */
-	[EFA_RDM_SHORT_RTR_PKT] = {0, sizeof(struct efa_rdm_rtr_hdr), 0},
-	[EFA_RDM_LONGCTS_RTR_PKT] = {0, sizeof(struct efa_rdm_rtr_hdr), 0},
-	[EFA_RDM_READ_RTR_PKT] = {0, sizeof(struct efa_rdm_base_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_SHORT_RTR_PKT] = {sizeof(struct efa_rdm_rtr_hdr)},
+	[EFA_RDM_LONGCTS_RTR_PKT] = {sizeof(struct efa_rdm_rtr_hdr)},
+	[EFA_RDM_READ_RTR_PKT] = {sizeof(struct efa_rdm_base_hdr)},
 	/* rta header */
-	[EFA_RDM_WRITE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
-	[EFA_RDM_DC_WRITE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
-	[EFA_RDM_FETCH_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
-	[EFA_RDM_COMPARE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
+	[EFA_RDM_WRITE_RTA_PKT] = {sizeof(struct efa_rdm_rta_hdr)},
+	[EFA_RDM_DC_WRITE_RTA_PKT] = {sizeof(struct efa_rdm_rta_hdr)},
+	[EFA_RDM_FETCH_RTA_PKT] = {sizeof(struct efa_rdm_rta_hdr)},
+	[EFA_RDM_COMPARE_RTA_PKT] = {sizeof(struct efa_rdm_rta_hdr)},
 };
-
-/**
- * @brief determine whether a REQ packet type is supported by the peer
- *
- * Some REQ packet type rely on an extra feature, which may not be
- * supported by peer.
- *
- * It is caller's responsibility to ensure this function is
- * called after the handshake packet has been received from the peer.
- *
- * @param[in]		req_pkt_type	REQ packet type
- * @param[in]		peer		peer, from whose the handshake has been received.
- * @returns
- * a boolean
- */
-bool efa_rdm_pkt_type_is_supported_by_peer(int req_pkt_type, struct efa_rdm_peer *peer)
-{
-	uint64_t ex_feature_flag;
-
-	ex_feature_flag = EFA_RDM_PKT_TYPE_REQ_INFO_VEC[req_pkt_type].ex_feature_flag;
-
-	/* No extra feature required means always supported */
-	if (!ex_feature_flag)
-		return true;
-
-	/* If an extra feature is needed, handshake should have been enforced */
-	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
-
-	int extra_info_id = EFA_RDM_PKT_TYPE_REQ_INFO_VEC[req_pkt_type].extra_info_id;
-
-	return peer->extra_info[extra_info_id] & ex_feature_flag;
-}
 
 /**
  * @brief calculates the exact header size given a REQ packet type, flags, and IOV count.

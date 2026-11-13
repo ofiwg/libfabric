@@ -168,10 +168,6 @@ struct dlist_entry;
 	  (ibvctx, attr_ex, efa_attr, inlen))                                  \
 	X(ssize_t, efa_rdm_ep_post_queued_pkts,                                \
 	  (struct efa_rdm_ep * ep, struct dlist_entry * pkts), (ep, pkts))     \
-	X(int, efa_rdm_pke_fill_data,                                          \
-	  (struct efa_rdm_pke * pke, int pkt_type, struct efa_rdm_ope * ope,   \
-	   int64_t data_offset, int data_size),                                \
-	  (pke, pkt_type, ope, data_offset, data_size))                        \
 	X(int, efa_rdm_pke_read,                                               \
 	  (struct efa_rdm_pke * pkt_entry, void *local_buf, size_t len,        \
 	   void *desc, uint64_t remote_buf, size_t remote_key),                \

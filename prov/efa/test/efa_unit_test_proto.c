@@ -244,7 +244,7 @@ void test_proto_eager_send_completion_releases_txe(void **state)
 		&efa_mock_efa_qp_post_send_return_mock;
 	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
 
-	/* Send a message via fi_send which goes through the new code path */
+	/* Send a message via fi_send */
 	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
 		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
 	assert_int_equal(err, 0);
@@ -390,7 +390,7 @@ void test_proto_eager_queue_dequeue_handshake(void **state)
  * efa_rdm_ope_process_queued_ope() gates the repost on
  * efa_rdm_mr_gen_check_ope(), which asserts the dispatch-time snapshot in
  * ope->desc_gen[] was initialized and compares it against the live MR
- * generation. The refactored TXE setup must take that snapshot, exactly as
+ * generation. The TXE setup must take that snapshot, exactly as
  * efa_rdm_txe_construct() does; otherwise the check reads a stale value from
  * the recycled ope pool slot and cancels a healthy transfer with a spurious
  * FI_EFA_ERR_PEER_ABORTED.

@@ -215,6 +215,10 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 			  size_t runt_size, int with_desc, uint64_t flags,
 			  struct efa_test_proto_select_result *out);
 
+int efa_test_proto_select_before_handshake(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	int homogeneous_peers, struct efa_test_proto_select_result *out);
+
 struct efa_test_proto_longread_construct_result {
 	ssize_t ret;
 	int selected;

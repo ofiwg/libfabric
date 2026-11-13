@@ -87,23 +87,6 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	return ret;
 }
 
-/**
- * @brief handle the send completion event of an EAGER RTW packet
- *
- * This function apply to both EFA_RDM_EAGER_RTW_PKT and
- * EFA_RDM_DC_EAGER_RTW_PKT
- *
- * @param[in]		pkt_entry	packet entry
- */
-void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = pkt_entry->ope;
-	assert(txe->total_len == pkt_entry->payload_size);
-	efa_rdm_ope_handle_send_completed(txe);
-}
-
 /* RX path functions */
 
 /**
@@ -131,7 +114,13 @@ static void efa_rdm_proto_eager_write_proc_rtw(struct efa_rdm_pke *pkt_entry,
 					FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RMA address verify failed for pkt type %d from peer %s: %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str,
+				 fi_strerror(-err));
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -144,8 +133,9 @@ static void efa_rdm_proto_eager_write_proc_rtw(struct efa_rdm_pke *pkt_entry,
 
 	rxe->bytes_received += pkt_entry->payload_size;
 	if (pkt_entry->payload_size != rxe->total_len) {
-		EFA_WARN(FI_LOG_CQ, "Eager RTM size mismatch! payload_size: %ld total_len: %ld.\n",
-			 pkt_entry->payload_size, rxe->total_len);
+		EFA_WARN(FI_LOG_CQ, "Eager RTM size mismatch! payload_size: %ld total_len: %ld, pkt type %d.\n",
+			 pkt_entry->payload_size, rxe->total_len,
+			 efa_rdm_pkt_type_of(pkt_entry));
 		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld\n", rxe->iov[0].iov_base,
 			rxe->iov[0].iov_len);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
@@ -179,8 +169,12 @@ void efa_rdm_proto_eager_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
 
 	if (!rxe) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
@@ -210,8 +204,12 @@ void efa_rdm_proto_eager_write_handle_dc_rtw_recv(struct efa_rdm_pke *pkt_entry)
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
 	if (!rxe) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		efa_rdm_pke_release_rx(pkt_entry);

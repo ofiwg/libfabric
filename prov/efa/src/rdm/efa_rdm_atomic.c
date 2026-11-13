@@ -130,31 +130,6 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	return txe;
 }
 
-/**
- * @brief Post atomic operations from give ep and tx entry
- *
- * @param efa_rdm_ep efa rdm ep
- * @param txe tx entry
- * @return ssize_t 0 on success, negative integer on failure
- */
-ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *txe)
-{
-	static int req_pkt_type_list[] = {
-		[ofi_op_atomic_fetch] = EFA_RDM_FETCH_RTA_PKT,
-		[ofi_op_atomic_compare] = EFA_RDM_COMPARE_RTA_PKT
-	};
-
-	if (txe->atomic_proto)
-		return efa_rdm_proto_atomic_post(txe);
-
-		/*
-		 * Fetch atomic and compare atomic
-		 * support DELIVERY_COMPLETE
-		 * by nature
-		 */
-	return efa_rdm_ope_post_send(txe, req_pkt_type_list[txe->op]);
-}
-
 static
 ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			       const struct fi_msg_atomic *msg,
@@ -193,7 +168,13 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 
 	txe->msg_id = peer->next_msg_id++;
 
-	err = efa_rdm_atomic_post_atomic(efa_rdm_ep, txe);
+	if (OFI_UNLIKELY(!txe->atomic_proto)) {
+		EFA_WARN(FI_LOG_EP_DATA, "No atomic protocol for op %u\n", op);
+		assert(0 && "atomic txe has no atomic protocol");
+		err = -FI_EINVAL;
+	} else {
+		err = efa_rdm_proto_atomic_post(txe);
+	}
 
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);

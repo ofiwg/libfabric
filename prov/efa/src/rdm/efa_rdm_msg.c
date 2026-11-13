@@ -71,6 +71,12 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 				ep->send_pkt_entry_vec_size,
 				pke_send_flags);
 	if (err) {
+		if (err != -FI_EAGAIN)
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "%s protocol: posting %zu pkts of pkt type %u failed, msg_id %u, total_len %" PRIu64 ": %s\n",
+				 proto->name, ep->send_pkt_entry_vec_size,
+				 txe->req_pkt_type, txe->msg_id, txe->total_len,
+				 fi_strerror(-err));
 		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 		return err;
@@ -83,7 +89,7 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 }
 
 /**
- * @brief Post a send on the refactored protocol path.
+ * @brief Post a send on the protocol path.
  *
  * Called from efa_rdm_msg_generic_send() for a fresh send, and from
  * efa_rdm_ope_post_ctrl() for a REQ ctrl packet. The repost after a
@@ -204,8 +210,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	/* First try to use the refactored code path.
-	 *
+	/*
 	 * A peer with zero-copy receive enabled rejects any packet that carries
 	 * a protocol header, so the zero-copy protocol is its only option: go
 	 * straight to it. Keeping it out of efa_rdm_protocols[] spares every
@@ -251,6 +256,10 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	 * selected above assumed the peer accepts headers, so the repost after
 	 * the handshake revisits that choice; see
 	 * efa_rdm_proto_zero_copy_reselect_queued_before_handshake().
+	 *
+	 * Other protos check for peer capabilities during proto selection
+	 * via efa_rdm_interop_rdma_read(), so no need to wait for a
+	 * handshake
 	 */
 	if (ep->peer_may_have_zcpy_rx &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {

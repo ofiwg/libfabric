@@ -211,7 +211,7 @@ TEST_F(EfaRtmTxSentTest, medium_sent_and_completion_boundary)
 	struct efa_test_rtm_sent_result res;
 
 	/*
-	 * posted: the refactored medium protocol posts every packet of the
+	 * posted: the medium protocol posts every packet of the
 	 * message in one go, so bytes_sent goes straight to the message length.
 	 */
 	efa_test_rtm_sent_build(resource.ep, resource.av,
@@ -292,7 +292,7 @@ TEST_F(EfaRtmTxSentTest, longread_sent_bumps_in_flight_read)
 /**
  * @brief runtread "sent" publishes the whole runt and takes a read slot
  *
- * The refactored runt read protocol posts every packet of the runt in one go,
+ * The runt read protocol posts every packet of the runt in one go,
  * so its post-send hook accounts for bytes_runt rather than for one packet, and
  * it takes the domain's read slot once per message (the runt here is only the
  * head of the message, so the receiver still has to read the tail).

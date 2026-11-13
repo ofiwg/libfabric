@@ -69,57 +69,6 @@ size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief init a RTM packet entry that will carry payload (user data)
- *
- * @details
- * Applies to RTM packets that carry user data.
- *
- * @param[in,out]	pkt_entry	RTM packet entry
- * @param[in]		pkt_type	RTM packet type
- * @param[in]		txe		TX entry that has user buffer
- * information
- * @param[in]		segmment_offset data offset in respect of user buffer
- * @param[in]		data_size	user data size. If it is -1, the
- * function will select data size based on maximum data capacity of packet
- * entry.
- * @returns
- * 0 on success
- * negative libfabric error code for failure.
- */
-ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
-					  int pkt_type,
-					  struct efa_rdm_ope *txe,
-					  size_t segment_offset,
-					  int data_size)
-{
-	struct efa_rdm_rtm_base_hdr *rtm_hdr;
-
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
-
-	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
-	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
-	rtm_hdr->msg_id = txe->msg_id;
-
-	if (data_size == -1) {
-		data_size = MIN(txe->total_len - segment_offset,
-				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
-
-		if (data_size + segment_offset < txe->total_len) {
-			if (efa_mr_is_cuda(txe->desc[0])) {
-				if (txe->ep->sendrecv_in_order_aligned_128_bytes)
-					data_size &= ~(EFA_RDM_EP_IN_ORDER_ALIGNMENT - 1);
-				else
-					data_size &= ~(EFA_RDM_EP_CUDA_MEMORY_ALIGNMENT -1);
-			}
-		}
-	}
-
-	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
-						efa_rdm_pke_get_req_hdr_size(pkt_entry),
-						segment_offset, data_size);
-}
-
-/**
  * @brief Update RX entry with the information in RTM packet entry.
  *
  * @details
@@ -213,6 +162,10 @@ efa_rdm_pke_proc_msgrtm_with_callback(
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "READ_NACK msgrtm msg_id %u from peer %s names no rxe\n",
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_EINVAL,
 				FI_EFA_ERR_PKT_PROC_MSGRTM);
@@ -223,6 +176,11 @@ efa_rdm_pke_proc_msgrtm_with_callback(
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "Cannot allocate an rxe for pkt type %d, msg_id %u from peer %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry),
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
@@ -271,6 +229,10 @@ efa_rdm_pke_proc_tagrtm_with_callback(
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "READ_NACK tagrtm msg_id %u from peer %s names no rxe\n",
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_EINVAL,
 				FI_EFA_ERR_PKT_PROC_TAGRTM);
@@ -281,6 +243,11 @@ efa_rdm_pke_proc_tagrtm_with_callback(
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "Cannot allocate an rxe for pkt type %d, msg_id %u from peer %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry),
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
@@ -321,15 +288,6 @@ ssize_t efa_rdm_pke_proc_rtm_after_robuf(struct efa_rdm_pke *pkt_entry)
 		return efa_rdm_pke_proc_tagrtm_with_callback(
 			pkt_entry, proto->handle_unexp_pke_match);
 
-	return efa_rdm_pke_proc_msgrtm_with_callback(
-		pkt_entry, proto->handle_unexp_pke_match);
-}
-
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_proto *proto = pkt_entry->proto;
-
-	assert(proto);
 	return efa_rdm_pke_proc_msgrtm_with_callback(
 		pkt_entry, proto->handle_unexp_pke_match);
 }

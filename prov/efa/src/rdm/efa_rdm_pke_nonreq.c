@@ -390,7 +390,10 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 	if (!ope->window) {
 		err = efa_rdm_ope_post_send_or_queue(ope, EFA_RDM_CTS_PKT);
 		if (err) {
-			EFA_WARN(FI_LOG_CQ, "post CTS packet failed!\n");
+			EFA_WARN(FI_LOG_CQ,
+				 "post CTS packet failed! ope type %d, ope id %u, msg_id %u: %s\n",
+				 ope->type, efa_rdm_ope_get_ope_id(ope),
+				 ope->msg_id, fi_strerror(-err));
 			efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
@@ -469,8 +472,11 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
 	readrsp_hdr = &readrsp_pkt->hdr;
 	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, readrsp_hdr->recv_id);
 	if (!txe) {
+		EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
 		EFA_INFO(FI_LOG_CQ,
-			 "READRSP names a read that is no longer live, dropping it\n");
+			 "READRSP recv_id %u send_id %u seg_length %" PRIu64 " from peer %s names a read that is no longer live, dropping it\n",
+			 readrsp_hdr->recv_id, readrsp_hdr->send_id,
+			 readrsp_hdr->seg_length, peer_addr_str);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -615,7 +621,8 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 			err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_EOR_PKT);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ,
-					"Posting of EOR failed! err=%s(%d)\n",
+					"Posting of EOR failed! msg_id %u, tx_id %u, rx_id %u, err=%s(%d)\n",
+					rxe->msg_id, rxe->tx_id, rxe->rx_id,
 					fi_strerror(-err), -err);
 				efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 				efa_rdm_rxe_release(rxe);
@@ -771,8 +778,10 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 
 	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, nack_hdr->send_id);
 	if (!txe) {
+		EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
 		EFA_INFO(FI_LOG_CQ,
-			 "READ_NACK names a send that is no longer live, dropping it\n");
+			 "READ_NACK send_id %u recv_id %u from peer %s names a send that is no longer live, dropping it\n",
+			 nack_hdr->send_id, nack_hdr->recv_id, peer_addr_str);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -793,8 +802,12 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				EFA_RDM_LONGCTS_RTW_PKT;
 		txe->proto = &efa_rdm_proto_longcts_write;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "READ_NACK fallback: posting pkt type %u failed, msg_id %u: %s\n",
+				 txe->req_pkt_type, txe->msg_id, fi_strerror(-err));
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		}
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS %s "
@@ -809,8 +822,12 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_proto_get_tagged(txe);
 		txe->proto = &efa_rdm_proto_longcts;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "READ_NACK fallback: posting pkt type %u failed, msg_id %u: %s\n",
+				 txe->req_pkt_type, txe->msg_id, fi_strerror(-err));
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		}
 	}
 }
 
@@ -1202,6 +1219,9 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
 	if (pkt_entry->pkt_size < sizeof(*atomrsp_hdr)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "ATOMRSP pkt_size %zu is smaller than its header size %zu, dropping it\n",
+			 pkt_entry->pkt_size, sizeof(*atomrsp_hdr));
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ETRUNC,
 			EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH);
 		efa_rdm_pke_release_rx(pkt_entry);

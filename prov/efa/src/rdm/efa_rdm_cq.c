@@ -952,7 +952,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			break;
 		default:
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"Unhandled cq type\n");
+				"Unhandled cq type, opcode: %d\n", opcode);
 			assert(0 && "Unhandled cq type");
 		}
 	}

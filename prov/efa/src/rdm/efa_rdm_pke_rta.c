@@ -98,8 +98,12 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 
 	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->peer, op);
 	if (OFI_UNLIKELY(!rxe)) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		return NULL;
 	}
 
@@ -377,7 +381,8 @@ ssize_t efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 
 	ret = efa_rdm_pke_proc_write_rta(pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
-		EFA_WARN(FI_LOG_CQ, "Error while processing the write rta packet\n");
+		EFA_WARN(FI_LOG_CQ, "Error while processing the write rta packet, send_id %u: %s\n",
+			 rxe->tx_id, fi_strerror((int) -ret));
 		efa_rdm_rxe_release(rxe);
 		return ret;
 	}

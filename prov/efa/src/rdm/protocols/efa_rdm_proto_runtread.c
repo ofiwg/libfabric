@@ -55,6 +55,10 @@ efa_rdm_proto_runtread_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
 		ret = efa_rdm_pke_post_remote_read_or_nack(
 			pkt_entry->ep, pkt_entry, rxe);
 		if (ret) {
+			EFA_WARN(FI_LOG_CQ,
+				 "runt read: posting RDMA read failed, msg_id %u, total_len %" PRIu64 ", bytes_runt %" PRIu64 ": %s\n",
+				 rxe->msg_id, rxe->total_len, rxe->bytes_runt,
+				 fi_strerror((int) -ret));
 			efa_rdm_pke_release_rx_list(pkt_entry);
 			return ret;
 		}
@@ -70,10 +74,6 @@ efa_rdm_proto_runtread_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
  * packets and lets the receiver RDMA read the rest, so it needs a message large
  * enough to be worth a read, a source buffer the device can read from directly,
  * a peer that supports RDMA read, and a non-zero runt allowance for that peer.
- *
- * This is the conjunction of the two legacy predicates it replaces: the read
- * based arm of the old RTM selector and the runt arm of the old read based
- * selector, both of which this series deletes.
  */
 static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 						    int req_pkt_type,
@@ -105,9 +105,7 @@ static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 
 	/*
 	 * There is no delivery complete variant of the runt read REQ, so a DC
-	 * send has to use a read protocol that has one. The legacy read based
-	 * selector made the same call, falling back to long read when
-	 * FI_DELIVERY_COMPLETE is set.
+	 * send has to use a read protocol that has one.
 	 */
 	if (txe->fi_flags & FI_DELIVERY_COMPLETE)
 		return false;

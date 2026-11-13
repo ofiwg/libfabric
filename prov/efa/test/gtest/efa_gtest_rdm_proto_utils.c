@@ -809,6 +809,53 @@ int efa_test_proto_select(struct fid_ep *ep, struct fid_av *av,
 	return 0;
 }
 
+int efa_test_proto_select_before_handshake(
+	struct fid_ep *ep, struct fid_av *av, struct fid_domain *domain,
+	int homogeneous_peers, struct efa_test_proto_select_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_ope *txe;
+	bool saved_homogeneous_peers;
+	struct fi_msg msg;
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup(ep, av, domain, 1, EFA_TEST_PROTO_RUNT_SIZE,
+				   EFA_TEST_PROTO_LARGE_LEN, &ctx);
+	if (err)
+		return err;
+
+	ctx.peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	ctx.peer->extra_info[0] = 0;
+
+	efa_test_proto_build_msg(&ctx, 1, &msg, &iov, &desc);
+
+	txe = ofi_buf_alloc(ctx.ep->base_ep.txe_pool);
+	if (!txe) {
+		efa_test_proto_teardown_buf(&ctx);
+		return -FI_ENOMEM;
+	}
+
+	saved_homogeneous_peers = ctx.ep->homogeneous_peers;
+	ctx.ep->homogeneous_peers = homogeneous_peers;
+
+	out->ret = efa_rdm_proto_select_send_protocol(
+		ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, txe, &proto);
+
+	ctx.ep->homogeneous_peers = saved_homogeneous_peers;
+
+	efa_test_proto_copy_name(out->proto_name, sizeof(out->proto_name),
+				 proto);
+
+	ofi_buf_free(txe);
+	efa_test_proto_teardown_buf(&ctx);
+	return 0;
+}
+
 static int efa_test_proto_select_and_construct(struct efa_test_proto_ctx *ctx,
 					       struct efa_rdm_ope *txe,
 					       struct efa_rdm_proto *expected,

@@ -12,9 +12,7 @@
  * @brief information of a REQ packet type
  */
 struct efa_rdm_pkt_type_req_info {
-	uint64_t extra_info_id;
 	uint64_t base_hdr_size;
-	uint64_t ex_feature_flag;
 };
 
 extern struct efa_rdm_pkt_type_req_info EFA_RDM_PKT_TYPE_REQ_INFO_VEC[];
@@ -85,27 +83,6 @@ bool efa_rdm_pkt_type_is_eager(int pkt_type)
 }
 
 /**
- * @brief determine whether a req pkt type is an eager two-sided RTM
- *        (send/tagged), excluding the one-sided RTW variants.
- *
- * @param[in]		pkt_type		REQ packet type
- * @return		a boolean
- */
-static inline
-bool efa_rdm_pkt_type_is_eager_rtm(int pkt_type)
-{
-	switch(pkt_type) {
-	case EFA_RDM_EAGER_MSGRTM_PKT:
-	case EFA_RDM_EAGER_TAGRTM_PKT:
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-/**
  * @brief determine whether a req pkt type is part of a medium protocol
  *
  * medium protocol send user data eagerly without CTS based flow control.
@@ -118,27 +95,6 @@ bool efa_rdm_pkt_type_is_medium(int pkt_type)
 {
 	return pkt_type == EFA_RDM_MEDIUM_TAGRTM_PKT || pkt_type == EFA_RDM_MEDIUM_MSGRTM_PKT ||
 	       pkt_type == EFA_RDM_DC_MEDIUM_MSGRTM_PKT ||pkt_type == EFA_RDM_DC_MEDIUM_TAGRTM_PKT;
-}
-
-/**
- * @brief determine whether a req pkt type is a longcts two-sided RTM
- *        (send/tagged), excluding the one-sided RTW variants.
- *
- * @param[in]		pkt_type		REQ packet type
- * @return		a boolean
- */
-static inline
-bool efa_rdm_pkt_type_is_longcts_rtm(int pkt_type)
-{
-	switch(pkt_type) {
-	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		return 1;
-	default:
-		return 0;
-	}
 }
 
 /**
@@ -289,8 +245,6 @@ bool efa_rdm_pkt_type_contains_seg_offset(int pkt_type)
 {
 	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == EFA_RDM_CTSDATA_PKT;
 }
-
-bool efa_rdm_pkt_type_is_supported_by_peer(int pkt_type, struct efa_rdm_peer *peer);
 
 size_t efa_rdm_pkt_type_get_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
 

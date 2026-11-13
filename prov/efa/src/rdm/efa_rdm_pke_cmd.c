@@ -29,246 +29,6 @@
 #define EFA_RDM_HANDSHAKE_WAIT_TIMEOUT 1000000
 
 /**
- * @brief fill the a pkt_entry with data
- *
- * This function call the init functions of each packet type to
- * fill a packet with data.
- * Generally, those init functions will:
- * 1. fill "wiredata" with packet header
- * 2. set the "payload", "payload_size" and "payload_mr" field of
- *    a packet entry
- * 3. set the "pkt_size" field of the packet entry
- *
- * @param[out]		pkt_entry	packet entry whose "wiredata" is to be filled
- * @param[in]		pkt_type	packet type
- * @param[in]		ope		operation entry
- * @param[in]		data_offset	the data's offset in respect of user's buffer.
- *					will be -1 for packet type that does not contain data.
- * @param[in]		data_size	data size carried in this packet. This argument
- * 					is only available for DATA, MEDIUM_RTM and RUNTREAD_RTM.
- * 					For all other data types, this argument will be -1.
- *
- * @return 	0 on success
- * 		negative libfabric error code on error
- *
- * @related efa_rdm_pke
- */
-int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
-			  int pkt_type,
-			  struct efa_rdm_ope *ope,
-			  int64_t data_offset,
-			  int data_size)
-{
-	int ret = 0;
-
-	/* Only 3 categories of packets has data_size and data_offset:
-	 * data packet, medium req and runtread req.
-	 *
-	 * For other packet types:
-	 *
-	 * If the packet type does not contain data, the argument
-	 * "data_offset" and "data_size" should both be -1.
-	 *
-	 * If the packet type contain data, the argument data_offset
-	 * should 0, the argument "data_size" should be -1, and
-	 * the actual data size will be decided by the packet
-	 * type's init() function.
-	 */
-	switch (pkt_type) {
-	case EFA_RDM_READRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READRSP");
-		break;
-	case EFA_RDM_CTS_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTS");
-		break;
-	case EFA_RDM_EOR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("EOR");
-		break;
-	case EFA_RDM_ATOMRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
-		break;
-	case EFA_RDM_RECEIPT_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("RECEIPT");
-		break;
-	case EFA_RDM_EAGER_MSGRTM_PKT:
-	case EFA_RDM_EAGER_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Eager");
-		break;
-	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Medium");
-		break;
-	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS");
-		break;
-	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long read");
-		break;
-	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Runt read");
-		break;
-	case EFA_RDM_EAGER_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Eager write");
-		break;
-	case EFA_RDM_LONGCTS_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS write");
-		break;
-	case EFA_RDM_LONGREAD_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long read write");
-		break;
-	case EFA_RDM_SHORT_RTR_PKT:
-		EFA_RDM_PROTO_MOVED("Short read");
-		break;
-	case EFA_RDM_LONGCTS_RTR_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS read");
-		break;
-	case EFA_RDM_WRITE_RTA_PKT:
-		EFA_RDM_PROTO_MOVED("Atomic write");
-		break;
-	case EFA_RDM_FETCH_RTA_PKT:
-	case EFA_RDM_COMPARE_RTA_PKT:
-		EFA_RDM_PROTO_MOVED("Atomic fetch/compare");
-		break;
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Eager");
-		break;
-	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Medium");
-		break;
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS");
-		break;
-	case EFA_RDM_DC_EAGER_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Eager write");
-		break;
-	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS write");
-		break;
-	case EFA_RDM_DC_WRITE_RTA_PKT:
-		EFA_RDM_PROTO_MOVED("Atomic write");
-		break;
-	case EFA_RDM_CTSDATA_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
-		break;
-	case EFA_RDM_READ_NACK_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
-		break;
-	case EFA_RDM_PEER_ERROR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("PEER_ERROR");
-		break;
-	default:
-		assert(0 && "unknown pkt type to init");
-		ret = -FI_EINVAL;
-		break;
-	}
-
-	return ret;
-}
-
-/**
- * @brief handle the "sent" event of a packet
- *
- * "send" means that device has accepted the send request, but
- * has not returned a send completion.
- *
- * This function call the handle_sent() function of each
- * packet type to handle such event
- *
- * @param[in,out]	pkt_entry	packet entry
- */
-void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct efa_rdm_peer *peer)
-{
-	switch (pkt_type) {
-	case EFA_RDM_READRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READRSP");
-		break;
-	case EFA_RDM_CTS_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTS");
-		break;
-	case EFA_RDM_EOR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("EOR");
-		break;
-	case EFA_RDM_ATOMRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
-		break;
-	case EFA_RDM_RECEIPT_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("RECEIPT");
-		break;
-	case EFA_RDM_EAGER_MSGRTM_PKT:
-	case EFA_RDM_EAGER_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Eager");
-		break;
-	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Medium");
-		break;
-	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS");
-		break;
-	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long read");
-		break;
-	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Runt read");
-		break;
-	case EFA_RDM_EAGER_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Eager write");
-		break;
-	case EFA_RDM_LONGCTS_RTW_PKT:
-	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS write");
-		break;
-	case EFA_RDM_LONGREAD_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long read write");
-		break;
-	case EFA_RDM_SHORT_RTR_PKT:
-		EFA_RDM_PROTO_MOVED("Short read");
-		break;
-	case EFA_RDM_LONGCTS_RTR_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS read");
-		break;
-	case EFA_RDM_WRITE_RTA_PKT:
-	case EFA_RDM_DC_WRITE_RTA_PKT:
-	case EFA_RDM_FETCH_RTA_PKT:
-	case EFA_RDM_COMPARE_RTA_PKT:
-		/* nothing can be done when RTA packets are sent */
-		break;
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Eager");
-		break;
-	case EFA_RDM_DC_EAGER_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Eager write");
-		break;
-	case EFA_RDM_CTSDATA_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
-		break;
-	case EFA_RDM_READ_NACK_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
-		break;
-	case EFA_RDM_PEER_ERROR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("PEER_ERROR");
-		break;
-	default:
-		assert(0 && "Unknown packet type to handle sent");
-		break;
-	}
-}
-
-/**
  * @brief handle the event that data has been copied to the user buffer
  *
  * This function will increase the "bytes_copied" counter by "payload_size".
@@ -347,8 +107,20 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
-	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
-	        efa_strerror(prov_errno), prov_errno);
+	if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR)
+		EFA_DBG(FI_LOG_CQ,
+			"Packet send error: pkt type %d, ope type %d, ope id %u: %s (%d)\n",
+			efa_rdm_pkt_type_of(pkt_entry),
+			pkt_entry->ope ? pkt_entry->ope->type : -1,
+			pkt_entry->ope ? efa_rdm_ope_get_ope_id(pkt_entry->ope) : 0,
+			efa_strerror(prov_errno), prov_errno);
+	else
+		EFA_INFO(FI_LOG_CQ,
+			 "Packet send error: pkt type %d, ope type %d, ope id %u: %s (%d)\n",
+			 efa_rdm_pkt_type_of(pkt_entry),
+			 pkt_entry->ope ? pkt_entry->ope->type : -1,
+			 pkt_entry->ope ? efa_rdm_ope_get_ope_id(pkt_entry->ope) : 0,
+			 efa_strerror(prov_errno), prov_errno);
 
 	ep = pkt_entry->ep;
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
@@ -546,8 +318,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
  * send completion means that EFA device has acknowledge that data has been
  * sent, therefore buffer can be safely reused.
  *
- * This function will call each packet type's send completion handler,
- * then release the packet entry.
+ * This function calls the packet's send completion handler, which releases
+ * the packet entry.
  *
  * @param[in,out]	pkt_entry	packet entry
  */
@@ -579,110 +351,20 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
-	/*
-	 * Check if the pke is from a protocol that has migrated to the
-	 * refactored code path
-	 *
-	 * TODO: remove this check once every protocol is migrated.
-	 */
-	if (pkt_entry->handle_pke) {
-		pkt_entry->handle_pke(pkt_entry);
-		return;
-	}
-
-	/* Zero-copy path is moved to the refactored code path */
-	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP));
-
-	/* Start handling pkts with hdrs */
-	switch (efa_rdm_pkt_type_of(pkt_entry)) {
-	case EFA_RDM_HANDSHAKE_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("HANDSHAKE");
-		break;
-	case EFA_RDM_CTS_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTS");
-		break;
-	case EFA_RDM_CTSDATA_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("CTSDATA");
-		break;
-	case EFA_RDM_READRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READRSP");
-		break;
-	case EFA_RDM_EOR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("EOR");
-		break;
-	case EFA_RDM_RMA_CONTEXT_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("RMA_CONTEXT");
-		break;
-	case EFA_RDM_ATOMRSP_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
-		break;
-	case EFA_RDM_RECEIPT_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("RECEIPT");
-		break;
-	case EFA_RDM_EAGER_MSGRTM_PKT:
-	case EFA_RDM_EAGER_TAGRTM_PKT:
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Eager");
-		break;
-	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Medium");
-		break;
-	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS");
-		break;
-	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long read");
-		break;
-	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Runt read");
-		break;
-	case EFA_RDM_EAGER_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Eager write");
-		break;
-	case EFA_RDM_LONGCTS_RTW_PKT:
-	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS write");
-		break;
-	case EFA_RDM_LONGREAD_RTW_PKT:
-		EFA_RDM_PROTO_MOVED("Long read write");
-		break;
-	case EFA_RDM_LONGCTS_RTR_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS read");
-		break;
-	case EFA_RDM_WRITE_RTA_PKT:
-	case EFA_RDM_DC_WRITE_RTA_PKT:
-		EFA_RDM_PROTO_MOVED("Atomic write");
-		break;
-	case EFA_RDM_FETCH_RTA_PKT: /* fall through */
-	case EFA_RDM_COMPARE_RTA_PKT: /* fall through */
-		EFA_RDM_PROTO_MOVED("Atomic fetch/compare");
-		break;
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		EFA_RDM_PROTO_MOVED("Long CTS");
-		break;
-	case EFA_RDM_READ_NACK_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
-		break;
-	case EFA_RDM_PEER_ERROR_PKT:
-		EFA_RDM_PKT_TYPE_MOVED("PEER_ERROR");
-		break;
-	default:
+	if (OFI_UNLIKELY(!pkt_entry->handle_pke)) {
 		EFA_WARN(FI_LOG_CQ,
-			"invalid control pkt type %d\n",
-			efa_rdm_pke_get_base_hdr(pkt_entry)->type);
-		assert(0 && "invalid control pkt type");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+			 "send completion of pkt type %d has no handler, ope type %d, ope id %u\n",
+			 efa_rdm_pkt_type_of(pkt_entry),
+			 pkt_entry->ope ? pkt_entry->ope->type : -1,
+			 pkt_entry->ope ? efa_rdm_ope_get_ope_id(pkt_entry->ope) : 0);
+		assert(0 && "send completion of a pkt with no handler");
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO,
+					   FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
-	efa_rdm_pke_release_tx(pkt_entry);
+
+	pkt_entry->handle_pke(pkt_entry);
 }
 
 /**
@@ -741,28 +423,6 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
-	efa_rdm_pke_release_rx(pkt_entry);
-}
-
-void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_imm_data, uint32_t imm_data)
-{
-	struct efa_rdm_ope *rxe = pkt_entry->ope;
-
-	assert(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
-	assert(rxe);
-
-	if (has_imm_data) {
-		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rxe->cq_entry.data = imm_data;
-	}
-
-	rxe->peer = pkt_entry->peer;
-	dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
-	rxe->total_len = pkt_entry->pkt_size;
-	rxe->cq_entry.len = pkt_entry->pkt_size;
-
-	efa_rdm_rxe_report_completion(rxe);
-	efa_rdm_rxe_release(rxe);
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 

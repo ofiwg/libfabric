@@ -18,8 +18,6 @@ ssize_t efa_rdm_proto_eager_write_handle_rtw_send_completion(
 ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *txe);
 
-void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry);
-
 void efa_rdm_proto_eager_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_proto_eager_write_handle_dc_rtw_recv(struct efa_rdm_pke *pkt_entry);

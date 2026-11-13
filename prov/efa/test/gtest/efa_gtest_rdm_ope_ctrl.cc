@@ -69,7 +69,6 @@ TEST_P(EfaRdmOpeCtrlPostTest, builds_expected_wire_packet)
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
 		.WillOnce(DoAll(SaveArg<7>(&seen_flags), Return(0)));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av, which,
 				     EFA_TEST_CTRL_PERTURB_NONE, &res),
@@ -159,7 +158,7 @@ TEST_P(EfaRdmOpeCtrlPostTest, builds_expected_wire_packet)
 			  efa_test_ctrl_expected_hdr_size(which));
 		break;
 	case EFA_TEST_CTRL_PEER_ERROR_TXE_PROTO:
-		/* The migrated protocol on the txe must not have been used. */
+		/* The protocol on the txe must not have been used. */
 		EXPECT_EQ(wire.op_id, efa_test_ctrl_ope_id_invalid());
 		EXPECT_EQ(wire.msg_id, res.ids.msg_id);
 		EXPECT_EQ((int) wire.emitter_ope_type,
@@ -197,7 +196,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, tx_full_queues_without_allocating)
 	struct efa_test_ctrl_result res = {};
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -217,7 +215,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, device_queue_full_queues_and_releases_packet)
 
 	/* ENOMEM is the device's queue-full, which sendv maps to -FI_EAGAIN. */
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(ENOMEM));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -235,7 +232,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, post_error_is_reported_not_queued)
 	struct efa_test_ctrl_result res = {};
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(EINVAL));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -255,7 +251,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, fi_more_is_not_propagated_to_the_qp)
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
 		.WillOnce(DoAll(SaveArg<7>(&seen_flags), Return(0)));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -296,6 +291,23 @@ TEST_F(EfaRdmOpeContinuationTest, success_posts_continuation_and_advances)
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
 
 	ASSERT_EQ(efa_test_ctrl_setup_longcts_continuation(
+			  resource.ep, resource.av, &res),
+		  0);
+	bytes_sent_before = res.ope_bytes_sent;
+
+	efa_test_ctrl_drive_continuation(resource.ep, 0 /* tx_full */, &res);
+
+	EXPECT_GT(res.ope_bytes_sent, bytes_sent_before);
+}
+
+TEST_F(EfaRdmOpeContinuationTest, short_read_posts_continuation_and_advances)
+{
+	struct efa_test_cont_result res = {};
+	uint64_t bytes_sent_before;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(0));
+
+	ASSERT_EQ(efa_test_ctrl_setup_short_rtr_continuation(
 			  resource.ep, resource.av, &res),
 		  0);
 	bytes_sent_before = res.ope_bytes_sent;

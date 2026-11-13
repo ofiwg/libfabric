@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #include "efa_rdm_proto_short_rtr.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke.h"
@@ -15,8 +16,9 @@
  *
  * EFA_RDM_SHORT_RTR_PKT
  *
- * The response data arrives on the shared receive path (READRSP), which is
- * not owned by this protocol.
+ * The response data arrives on the shared receive paths (READRSP, then CTSDATA
+ * if the responder's READRSP cannot hold it all), which are not owned by this
+ * protocol.
  */
 
 /*
@@ -45,6 +47,7 @@ EFA_RDM_PROTO_DEF(short_rtr,
 	.req_pkt_type = EFA_RDM_SHORT_RTR_PKT,
 	.req_pkt_type_dc = EFA_RDM_SHORT_RTR_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
+	.post_continuation = &efa_rdm_proto_post_ctsdata,
 );
 
 /**

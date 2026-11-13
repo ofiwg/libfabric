@@ -269,7 +269,6 @@ TEST_F(EfaRdmOpeProcessQueuedTest, mr_abort_cancels_without_dispatch)
 
 	/* A canceled op must reach neither a dispatch arm nor the wire */
 	EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
 
@@ -349,7 +348,6 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 		expected_ret = 0;
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts)
 			.WillOnce(Return(0));
-		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
 		break;
@@ -367,7 +365,6 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 								id);
 					}),
 					Return(ENOMEM)));
-		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
 		break;
@@ -375,7 +372,6 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read)
 			.WillOnce(Return(-FI_EAGAIN));
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
-		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
 		break;
 	default:
