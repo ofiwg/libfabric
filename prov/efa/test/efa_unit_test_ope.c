@@ -1362,6 +1362,16 @@ void test_efa_rdm_ope_ack_packet_failed_posting_common(void **state, int pkt_typ
 
 	/* should NOT add to list due to failure */
 	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+	if (pkt_type == EFA_RDM_RECEIPT_PKT) {
+		rxe->internal_flags |= EFA_RDM_RXE_ACK_IN_FLIGHT;
+		rxe->efa_outstanding_tx_ops = 1;
+		efa_rdm_rxe_handle_error(rxe, FI_EINVAL, FI_EFA_ERR_PKT_POST);
+		efa_rdm_rxe_release_control_error_if_drained(rxe, pkt_type);
+		assert_false(rxe->internal_flags & EFA_RDM_RXE_ACK_IN_FLIGHT);
+		rxe->efa_outstanding_tx_ops = 0;
+		efa_rdm_rxe_release_control_error_if_drained(rxe, EFA_RDM_CTS_PKT);
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_RXE), 0);
+	}
 }
 
 /**

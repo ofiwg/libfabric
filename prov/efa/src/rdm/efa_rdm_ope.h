@@ -347,6 +347,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
+void efa_rdm_rxe_release_control_error_if_drained(struct efa_rdm_ope *rxe, int pkt_type);
+
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /* The follow flags are applied to the internal_flags field
