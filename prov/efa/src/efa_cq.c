@@ -11,6 +11,7 @@
 #include "efa_cntr.h"
 #include "efa_cq.h"
 #include "efa_data_path_ops.h"
+#include "efa_xpu.h"
 #include <infiniband/verbs.h>
 #include "efa_data_path_direct.h"
 
@@ -368,6 +369,72 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 	}
 }
 
+/* The request ID of the CQE a read is consuming. */
+static inline uint16_t efa_cq_xpu_cur_req_id(struct efa_ibv_cq *ibv_cq)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	return ibv_cq->data_path_direct.cur_cqe->req_id;
+#else
+	(void) ibv_cq;
+	return 0;	/* FI_XPU is only offered on the direct data path */
+#endif
+}
+
+/**
+ * @brief count a consumed CQE against the XPU endpoint queue it frees
+ *
+ * A send queue CQE frees a send queue slot whatever the operation and whether
+ * it succeeded. A receive queue CQE frees a receive buffer, except an
+ * unsolicited write with immediate data, which never took one.
+ *
+ * Called with the CQ's ep_list_lock held, which is what keeps the endpoint's
+ * XPU state from being released under it (see efa_xpu_ep_detach()).
+ */
+void efa_cq_xpu_note_cqe_slow(struct efa_cq *cq, struct efa_ibv_cq *ibv_cq)
+	/* No lock analysis: every caller holds the CQ's ep_list_lock. */
+	OFI_TSA_NO_ANALYSIS
+{
+	struct efa_domain *efa_domain;
+	struct efa_base_ep *base_ep;
+	uint16_t req_id;
+
+	efa_domain = container_of(cq->util_cq.domain, struct efa_domain,
+				  util_domain);
+	base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
+	if (!base_ep || !base_ep->xpu_state)
+		return;
+
+	req_id = efa_cq_xpu_cur_req_id(ibv_cq);
+
+	switch (efa_ibv_cq_wc_read_opcode(ibv_cq)) {
+	case IBV_WC_RECV:
+		efa_xpu_ep_note_done(base_ep->xpu_state, EFA_XPU_RQ_DONE,
+				     req_id);
+		break;
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		if (!efa_cq_wc_is_unsolicited(ibv_cq))
+			efa_xpu_ep_note_done(base_ep->xpu_state,
+					     EFA_XPU_RQ_DONE, req_id);
+		break;
+	default:
+		efa_xpu_ep_note_done(base_ep->xpu_state, EFA_XPU_SQ_DONE,
+				     req_id);
+		break;
+	}
+}
+
+void efa_cq_xpu_flush_slow(struct efa_cq *cq)
+	/* No lock analysis: every caller holds the CQ's ep_list_lock. */
+	OFI_TSA_NO_ANALYSIS
+{
+	int i;
+
+	for (i = 0; i < cq->xpu_dirty_cnt; i++)
+		efa_xpu_ep_publish_done(cq->xpu_dirty[i].state,
+					cq->xpu_dirty[i].queue);
+	cq->xpu_dirty_cnt = 0;
+}
+
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
@@ -413,6 +480,8 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 			continue;
 		}
 		assert(base_ep);
+		/* Consumed below, on success and on error alike. */
+		efa_cq_xpu_note_cqe(cq, ibv_cq);
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		if (ibv_cq->ibv_cq_ex->status) {
 			prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
@@ -456,6 +525,7 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		efa_cq_next_poll(ibv_cq);
 	}
 	err = ibv_cq->poll_err;
+	efa_cq_xpu_flush(cq);
 	efa_cq_end_poll(ibv_cq);
 	return err;
 }
@@ -830,6 +900,12 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			goto out;
 		}
 
+		/*
+		 * Every CQE past this point is consumed, whether or not it is
+		 * reported; an error CQE is consumed by efa_cq_readerr().
+		 */
+		efa_cq_xpu_note_cqe(efa_cq, ibv_cq);
+
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		/**
 		 * Only populate the cqes when:
@@ -856,6 +932,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		}
 		efa_cq_next_poll(ibv_cq);
 	}
+	efa_cq_xpu_flush(efa_cq);
 	efa_cq_end_poll(ibv_cq);
 
 out:
@@ -894,9 +971,11 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	 */
 	assert(ibv_cq->ibv_cq_ex->status);
 	efa_cq_fill_err_entry(ibv_cq, buf);
+	efa_cq_xpu_note_cqe(efa_cq, ibv_cq);
 
 	efa_cq_direct_ope_release(efa_cq, ibv_cq);
 
+	efa_cq_xpu_flush(efa_cq);
 	efa_cq_end_poll(ibv_cq);
 	ret = 1;
 
@@ -914,7 +993,8 @@ struct fi_ops_cq efa_cq_bypass_util_cq_ops = {
 	.sread = efa_cq_sread,
 	.sreadfrom = efa_cq_sreadfrom,
 	.signal = efa_cq_signal,
-	.strerror = efa_cq_strerror
+	.strerror = efa_cq_strerror,
+	.export_xpu = efa_cq_export_xpu,
 };
 
 /* CQ ops with util readfrom/readerr that stages cqes and increments counters during cq read */
@@ -926,7 +1006,8 @@ struct fi_ops_cq efa_cq_ops = {
 	.sread = efa_cq_sread,
 	.sreadfrom = efa_cq_sreadfrom,
 	.signal = efa_cq_signal,
-	.strerror = efa_cq_strerror
+	.strerror = efa_cq_strerror,
+	.export_xpu = efa_cq_export_xpu,
 };
 
 void efa_cq_progress(struct util_cq *cq)
@@ -974,6 +1055,9 @@ int efa_cq_close(fid_t fid)
 	ret = efa_cq_destroy_comp_channel(cq);
 	if (ret)
 		return ret;
+
+	if (cq->xpu_state)
+		efa_xpu_cq_state_destroy(cq->xpu_state);
 
 	if (cq->err_buf)
 		free(cq->err_buf);
@@ -1182,6 +1266,20 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 }
 #endif
 
+/*
+ * For XPU CQs the completion ring lives in device memory and is polled by the
+ * XPU kernel, so the host-side progress/poll routines are no-ops.
+ */
+static void efa_cq_xpu_progress_no_op(struct util_cq *cq)
+{
+}
+
+static int efa_cq_xpu_no_poll_ibv_cq(ssize_t cqe_to_process,
+				     struct efa_ibv_cq *ibv_cq)
+{
+	return ENOENT;
+}
+
 int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
@@ -1189,6 +1287,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	struct efa_domain *efa_domain;
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
 	struct fi_cq_attr tmp_attr;
+	/* dmabuf fd of an FI_XPU CQ ring, held until the ibv CQ is created */
+	int xpu_dmabuf_fd = -1;
 	int err, retv;
 
 	cq = calloc(1, sizeof(*cq));
@@ -1199,11 +1299,67 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	cq->poll_ibv_cq = efa_cq_poll_ibv_cq;
 
+	/*
+	 * XPU (FI_XPU) CQ: allocate the CQ ring buffer directly in device
+	 * memory and pass its dmabuf fd to the NIC via EXT_MEM_DMABUF, so the
+	 * hardware writes completions where the XPU kernel can poll them.
+	 * Mirrors the FI_ACC path on the fi_accelerator branch.
+	 */
+	if (attr->flags & FI_XPU) {
+		size_t cq_size = attr->size ? attr->size : EFA_DEF_CQ_SIZE;
+		/* EFA CQE format is 32 bytes */
+		size_t buf_size = cq_size * 32;
+		void *gpu_ptr = NULL;
+		uint64_t offset = 0;
+
+		if (!attr->xpu_ctx) {
+			free(cq);
+			return -FI_EINVAL;
+		}
+		err = efa_xpu_mem_alloc(attr->xpu_ctx, buf_size, 0,
+					FI_XPU_ALLOC_DMABUF, &gpu_ptr,
+					&xpu_dmabuf_fd, &offset);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ,
+				 "Failed to allocate device memory for XPU CQ "
+				 "buffer: %d\n", err);
+			if (gpu_ptr) {
+				efa_xpu_mem_put_fd(attr->xpu_ctx,
+						   xpu_dmabuf_fd);
+				efa_xpu_mem_free(attr->xpu_ctx, gpu_ptr);
+			}
+			free(cq);
+			return err;
+		}
+
+		efa_cq_init_attr.flags |= FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF;
+		efa_cq_init_attr.ext_mem_dmabuf.fd = xpu_dmabuf_fd;
+		efa_cq_init_attr.ext_mem_dmabuf.offset = offset;
+		efa_cq_init_attr.ext_mem_dmabuf.length = buf_size;
+		efa_cq_init_attr.ext_mem_dmabuf.buffer = gpu_ptr;
+
+		/* Store XPU state for later fi_cq_export_xpu(). */
+		cq->xpu_state = efa_xpu_cq_state_create(attr->xpu_ctx);
+		if (!cq->xpu_state) {
+			efa_xpu_mem_put_fd(attr->xpu_ctx, xpu_dmabuf_fd);
+			efa_xpu_mem_free(attr->xpu_ctx, gpu_ptr);
+			free(cq);
+			return -FI_ENOMEM;
+		}
+		cq->xpu_state->cq_buf_dev = gpu_ptr;
+
+		/* CQ ring lives in device memory - host must not poll it. */
+		cq->poll_ibv_cq = efa_cq_xpu_no_poll_ibv_cq;
+	}
+
 	/* efa uses its own implementation of wait objects for CQ */
 	tmp_attr = *attr;
 	tmp_attr.wait_obj = FI_WAIT_NONE;
+	tmp_attr.flags &= ~FI_XPU; /* FI_XPU handled above */
 	err = ofi_cq_init(&efa_prov, domain_fid, &tmp_attr, &cq->util_cq,
-					  &efa_cq_progress, context);
+			  cq->xpu_state ? &efa_cq_xpu_progress_no_op :
+					  &efa_cq_progress,
+			  context);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create UTIL_CQ\n");
 		goto err_free_cq;
@@ -1228,14 +1384,17 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
+		cq->format = FI_CQ_FORMAT_CONTEXT;
 		cq->entry_size = sizeof(struct fi_cq_entry);
 		cq->read_entry = efa_cq_read_context_entry;
 		break;
 	case FI_CQ_FORMAT_MSG:
+		cq->format = FI_CQ_FORMAT_MSG;
 		cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		cq->read_entry = efa_cq_read_msg_entry;
 		break;
 	case FI_CQ_FORMAT_DATA:
+		cq->format = FI_CQ_FORMAT_DATA;
 		cq->entry_size = sizeof(struct fi_cq_data_entry);
 		cq->read_entry = efa_cq_read_data_entry;
 		break;
@@ -1260,6 +1419,15 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(err));
 		goto err_destroy_channel;
+	}
+
+	/*
+	 * The ibv CQ was created over the dmabuf and holds its own reference to
+	 * it, so this copy of the fd has done its job.
+	 */
+	if (xpu_dmabuf_fd >= 0) {
+		efa_xpu_mem_put_fd(attr->xpu_ctx, xpu_dmabuf_fd);
+		xpu_dmabuf_fd = -1;
 	}
 
 	err = efa_cq_signal_init(cq);
@@ -1287,6 +1455,10 @@ err_free_util_cq:
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));
 err_free_cq:
+	if (xpu_dmabuf_fd >= 0)
+		efa_xpu_mem_put_fd(attr->xpu_ctx, xpu_dmabuf_fd);
+	if (cq->xpu_state)
+		efa_xpu_cq_state_destroy(cq->xpu_state);
 	free(cq);
 	return err;
 }

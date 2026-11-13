@@ -405,10 +405,21 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 	/* Handle send queue completions */
 	if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) ==
 	    EFA_IO_SEND_QUEUE) {
-		ibv_cq->data_path_direct.cur_wq =
-			&qp->data_path_direct_qp.sq.wq;
-		ibvcqx->wr_id = efa_get_sq_comp_wrid(
-			ibv_cq->data_path_direct.cur_wq, cqe);
+		struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
+
+		if (sq->xpu_ctx) {
+			/*
+			 * Posted by an XPU kernel, which put the slot in the
+			 * request ID and the context in the table; the host's
+			 * wrid pool never saw the work request.
+			 */
+			ibv_cq->data_path_direct.cur_wq = NULL;
+			ibvcqx->wr_id = sq->xpu_ctx[cqe->req_id & sq->xpu_ctx_mask];
+		} else {
+			ibv_cq->data_path_direct.cur_wq = &sq->wq;
+			ibvcqx->wr_id = efa_get_sq_comp_wrid(
+				ibv_cq->data_path_direct.cur_wq, cqe);
+		}
 		ibvcqx->status = to_ibv_status(cqe->status);
 	} else {
 		/* Handle receive queue completions */
@@ -416,6 +427,17 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 		if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED)) {
 			ibv_cq->data_path_direct.cur_wq = NULL;
 			ibvcqx->wr_id = 0;
+		} else if (qp->data_path_direct_qp.rq.xpu_ctx) {
+			const struct efa_data_path_direct_rq *rq =
+				&qp->data_path_direct_qp.rq;
+
+			/*
+			 * Posted by an XPU kernel, which put the slot in the
+			 * request ID and the context in the table; leave the
+			 * host's wrid pool, which never saw the receive, alone.
+			 */
+			ibv_cq->data_path_direct.cur_wq = NULL;
+			ibvcqx->wr_id = rq->xpu_ctx[cqe->req_id & rq->xpu_ctx_mask];
 		} else {
 			ibv_cq->data_path_direct.cur_wq =
 				&qp->data_path_direct_qp.rq.wq;

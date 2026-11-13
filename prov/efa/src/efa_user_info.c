@@ -467,6 +467,21 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		info->caps &= ~FI_HMEM;
 	}
 
+	/*
+	 * FI_XPU is never supported on efa-rdm: the XPU kernel drives the
+	 * hardware queues itself, which bypasses the rdm protocol layer.
+	 */
+	if (hints && (hints->caps & FI_XPU)) {
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU capability is not supported on the efa fabric, "
+			 "use the " EFA_DIRECT_FABRIC_NAME " fabric instead\n");
+		return -FI_ENODATA;
+	}
+	info->caps &= ~FI_XPU;
+	info->domain_attr->caps &= ~FI_XPU;
+	info->domain_attr->max_xpu_ctx_cnt = 0;
+	info->domain_attr->mr_mode &= ~FI_MR_XPU_DESC;
+
 	if (info->caps & FI_HMEM) {
 		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
 		 * because EFA provider's HMEM support rely on
@@ -589,6 +604,12 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
  * nonzero inject_size hint therefore cannot be satisfied and the info is
  * rejected.
  *
+ * FI_XPU takes that path whatever the hints say. A kernel writes the
+ * application's context into the 64-bit request ID of the descriptor it builds,
+ * so an XPU endpoint never touches a context buffer, and inject, which needs
+ * one, is unavailable. The API version that makes both expressible is enforced
+ * with the rest of the XPU negotiation in efa_user_info_alter_direct().
+ *
  * @param	version[in]	libfabric API version
  * @param	info[in,out]	info to be updated
  * @param	hints[in]	user provided hints
@@ -606,6 +627,9 @@ static int efa_user_info_set_context2(uint32_t version, struct fi_info *info,
 	bool use_context2 = !wr_requested &&
 			    (!hints || (hints->mode & FI_CONTEXT2));
 
+	if (hints && (hints->caps & FI_XPU))
+		use_context2 = false;
+
 	if (FI_VERSION_LT(version, FI_VERSION(2, 7)) && !use_context2)
 		return -FI_ENODATA;
 
@@ -618,6 +642,15 @@ static int efa_user_info_set_context2(uint32_t version, struct fi_info *info,
 		info->rx_attr->caps &= ~FI_WR;
 		return 0;
 	}
+
+	/*
+	 * Clear rather than leave alone: an application may have offered
+	 * FI_CONTEXT2 in hints, and an info that does not require it must not
+	 * report it back.
+	 */
+	info->mode &= ~FI_CONTEXT2;
+	info->tx_attr->mode &= ~FI_CONTEXT2;
+	info->rx_attr->mode &= ~FI_CONTEXT2;
 
 	if (hints->tx_attr && hints->tx_attr->inject_size)
 		return -FI_ENODATA;
@@ -664,6 +697,88 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->caps |= FI_HMEM;
 	} else {
 		info->caps &= ~FI_HMEM;
+	}
+
+	/*
+	 * FI_XPU is opt-in: prov_info only carries it where the provider can
+	 * support it (see efa_util_prov_initialize), and it is kept in
+	 * info->caps only when the application explicitly asks for it, so a
+	 * plain fi_getinfo() never returns an XPU-capable info and a device
+	 * data path is never handed to an application that cannot drive it.
+	 */
+	if (!hints || !(hints->caps & FI_XPU)) {
+		info->caps &= ~FI_XPU;
+		info->domain_attr->caps &= ~FI_XPU;
+		info->domain_attr->max_xpu_ctx_cnt = 0;
+		info->domain_attr->mr_mode &= ~FI_MR_XPU_DESC;
+	} else if (!efa_env.use_data_path_direct) {
+		/*
+		 * A kernel builds descriptors into the hardware rings itself,
+		 * which is the direct data path extended to the device. With the
+		 * runtime knob off the host half of the same endpoint posts
+		 * through rdma-core instead, so the two halves would drive the
+		 * send queue by different rules. Refuse rather than export rings
+		 * the host is not using.
+		 */
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU requires EFA's direct data path, which "
+			 "FI_EFA_USE_DATA_PATH_DIRECT has turned off\n");
+		return -FI_ENODATA;
+	} else if (FI_VERSION_LT(version, FI_VERSION(2, 7))) {
+		/*
+		 * An XPU info reports two things only the 2.7 API can express:
+		 * that the endpoint does not require FI_CONTEXT2, because a
+		 * kernel carries the context in the descriptor's 64-bit request
+		 * ID, and that inject is unavailable. Below 2.7 efa-direct still
+		 * requires FI_CONTEXT2, so an older application would be handed
+		 * an endpoint whose contract its API version cannot state.
+		 */
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU requires libfabric API version 2.7 or later, "
+			 "the application requested %d.%d\n",
+			 FI_MAJOR(version), FI_MINOR(version));
+		return -FI_ENODATA;
+	} else if (!(info->caps & FI_XPU)) {
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU capability requested but not supported. It "
+			 "requires the " EFA_DIRECT_FABRIC_NAME " fabric and an "
+			 "rdma-core with the queue geometry queries the export "
+			 "relies on\n");
+		return -FI_ENODATA;
+	} else {
+		/*
+		 * A transfer posted by an XPU takes the memory key from a
+		 * descriptor the application fetches with
+		 * fi_mr_get_xpu_desc(), the XPU analog of FI_MR_LOCAL, so the
+		 * requirement belongs in mr_mode. It cannot live in prov_info:
+		 * that would tell every application, including the ones that
+		 * never ask for FI_XPU, that it needs XPU descriptors.
+		 */
+		if (hints->domain_attr &&
+		    !(hints->domain_attr->mr_mode & FI_MR_XPU_DESC)) {
+			EFA_WARN(FI_LOG_CORE,
+				 "FI_XPU capability requires XPU memory "
+				 "descriptors (FI_MR_XPU_DESC)\n");
+			return -FI_ENODATA;
+		}
+
+		/*
+		 * FI_SOURCE is out of scope for the XPU data path. Reporting a
+		 * source address means turning the address handle index a
+		 * completion carries into an fi_addr_t, which the host does with
+		 * a reverse lookup in an AV hash table. A device poller would
+		 * need that table exported into device memory and walked in the
+		 * kernel, for a lookup a kernel that already knows its peers
+		 * does not need. So there is no device cq_readfrom(), and asking
+		 * for both is refused rather than silently ignored.
+		 */
+		if (hints->caps & FI_SOURCE) {
+			EFA_WARN(FI_LOG_CORE,
+				 "FI_SOURCE is not supported with FI_XPU\n");
+			return -FI_ENODATA;
+		}
+
+		info->domain_attr->mr_mode |= FI_MR_XPU_DESC;
 	}
 
 	if (info->caps & FI_HMEM) {

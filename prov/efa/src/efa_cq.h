@@ -7,6 +7,9 @@
 #include "efa.h"
 
 #include "efa_data_path_direct_structs.h"
+
+struct efa_xpu_cq_state;
+
 enum ibv_cq_ex_type {
 	IBV_CQ,
 	EFADV_CQ
@@ -31,11 +34,17 @@ struct efa_ibv_cq_poll_list_entry {
 	struct efa_ibv_cq	*cq;
 };
 
+struct efa_xpu_ep_state;
+
+/* Endpoint queues one read can collect before it publishes the rest at once. */
+#define EFA_CQ_XPU_DIRTY_MAX 8
+
 struct efa_cq {
 	struct util_cq			util_cq;
 	struct efa_ibv_cq		ibv_cq;
 	int	(*poll_ibv_cq)(ssize_t cqe_to_progress, struct efa_ibv_cq *ibv_cq);
 	struct fd_signal		signal;
+	enum fi_cq_format		format;
 	size_t					entry_size;
 	ofi_atomic32_t			nevents;
 	enum fi_wait_obj		wait_obj;
@@ -43,12 +52,59 @@ struct efa_cq {
 	/* Only used by efa-direct cq on util cq bypass path */
 	void (*read_entry)(struct efa_ibv_cq *ibv_cq, void *buf, int opcode);
 	char *err_buf;
+	/* XPU (FI_XPU) state: holds the device-resident CQ ring buffer
+	 * allocated at open time. NULL when not an XPU CQ. Mirrors the
+	 * acc_state model on the fi_accelerator branch. */
+	struct efa_xpu_cq_state *xpu_state;
+	/*
+	 * Queues of XPU endpoints whose done cursor a read of this CQ
+	 * publishes (see efa_cq_xpu_note_cqe()). Changed under ep_list_lock.
+	 */
+	int xpu_publishers;
+	/*
+	 * The XPU endpoint queues whose done cursor the read in progress has
+	 * advanced, published once when the read ends (efa_cq_xpu_flush()).
+	 * Used only under ep_list_lock, within one read, so the list is
+	 * always empty between reads.
+	 */
+	struct efa_cq_xpu_dirty {
+		struct efa_xpu_ep_state	*state;
+		int			queue;
+	} xpu_dirty[EFA_CQ_XPU_DIRTY_MAX];
+	int xpu_dirty_cnt;
 };
 
 extern struct fi_ops_cq efa_cq_ops;
 extern struct fi_ops_cq efa_cq_bypass_util_cq_ops;
 
 extern struct fi_ops efa_cq_fi_ops;
+
+void efa_cq_xpu_note_cqe_slow(struct efa_cq *cq, struct efa_ibv_cq *ibv_cq);
+void efa_cq_xpu_flush_slow(struct efa_cq *cq);
+
+/*
+ * Publish the done cursors the read now ending has advanced, once per endpoint
+ * queue rather than once per CQE. Called before the read lets go of the CQ, so
+ * a poster waiting on one sees it as soon as the read is over.
+ */
+static inline void efa_cq_xpu_flush(struct efa_cq *cq)
+{
+	if (OFI_UNLIKELY(cq->xpu_dirty_cnt))
+		efa_cq_xpu_flush_slow(cq);
+}
+
+/*
+ * Count the current CQE, which this read is consuming, against the XPU
+ * endpoint queue it frees a slot in. Every consumed CQE counts, reported or
+ * not, because each one returns a queue slot to the device. A CQ no XPU
+ * endpoint publishes through pays one predictable branch.
+ */
+static inline void efa_cq_xpu_note_cqe(struct efa_cq *cq,
+				       struct efa_ibv_cq *ibv_cq)
+{
+	if (OFI_UNLIKELY(cq->xpu_publishers))
+		efa_cq_xpu_note_cqe_slow(cq, ibv_cq);
+}
 
 static inline void efa_cq_lock_ep_list(struct efa_base_ep *base_ep)
 	OFI_TSA_ACQUIRE(efa_cq_ep_list_lock_sym) 

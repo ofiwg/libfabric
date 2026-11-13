@@ -388,9 +388,8 @@ generate an efficient jump table rather than a chain of comparisons.
 
 ## Scope
 
-The scope parameter specifies the concurrency of the operation. All threads
-in the scope are required to issue the same operation. This allows the
-implementation to optimize.
+The scope parameter specifies the set of threads that make the call together.
+This allows the implementation to optimize.
 
 | Scope | CUDA | SYCL |
 |-------|------|------|
@@ -398,6 +397,24 @@ implementation to optimize.
 | FI_XPU_SUBGROUP | Warp | Subgroup |
 | FI_XPU_WORK_GROUP | Thread block | Work group |
 | FI_XPU_DEVICE | Device | Device |
+
+A call at FI_XPU_WORK_ITEM is made by one thread and performs one operation
+for it. Threads that make work-item calls at the same time each perform their
+own operation, with arguments of their own, except for the object the call is
+made on: the threads of a subgroup that make a work-item call together must
+name the same endpoint, completion queue or counter, and an implementation may
+use the object any one of them names. Different subgroups, and threads that
+are not converged at the call, may name different objects. An implementation may combine
+concurrent work-item calls on the same object, for example by submitting their
+operations together, but each call completes as if it had been made alone.
+
+A call at any other scope is collective. Every thread in the scope must reach
+it with identical arguments, and the call performs one operation on behalf of
+the scope: a data transfer call submits one operation, and a completion queue
+read, a counter read or a counter wait is performed once. The call returns the same value in every thread of the scope.
+Memory written by threads of the scope before the call is visible to the
+operation, so that the threads of a scope can prepare a buffer together and
+transfer it with one call.
 
 ## Data Transfer Operations
 
