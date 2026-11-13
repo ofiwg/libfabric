@@ -1313,8 +1313,16 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 				ret = -FI_ECANCELED;
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
-				efa_rdm_txe_handle_error(ope, -ret,
-							 FI_EFA_ERR_PKT_POST);
+				if (ope->type == EFA_RDM_TXE) {
+					bool peer_abort_owns_txe =
+						efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+
+					if (!peer_abort_owns_txe)
+						efa_rdm_txe_release_error_if_drained(ope);
+				} else {
+					efa_rdm_rxe_handle_error(
+						ope, -ret, FI_EFA_ERR_PKT_POST);
+				}
 			}
 		}
 	}
