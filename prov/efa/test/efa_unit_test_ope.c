@@ -3613,7 +3613,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ope *rxe, *txe;
 	struct efa_rdm_peer *peer;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -3684,6 +3684,24 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 	 * -FI_EAVAIL, not -FI_EAGAIN), then confirm nothing else remains. */
 	assert_cq_peer_aborted_error(resource);
 	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_ERR;
+	txe->peer_error_prov_errno = FI_EFA_ERR_PKT_POST;
+	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
+			       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, txe), 0);
+	efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
+	efa_rdm_pke_handle_tx_error(pkt_entry, EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR);
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, EIO);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe), -FI_EIO);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+	assert_int_equal(ep->efa_rnr_queued_pkt_cnt, 0);
+	assert_cq_peer_aborted_error(resource);
 }
 
 /**

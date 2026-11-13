@@ -2384,7 +2384,8 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		case EFA_RDM_OPE_QUEUED_RNR:
 			assert(!dlist_empty(&ope->queued_pkts));
 			queued_response_pkt_type = efa_rdm_pkt_type_of(
-				container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
+				container_of(ope->queued_pkts.next,
+					     struct efa_rdm_pke, entry));
 			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
@@ -2412,7 +2413,37 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		if (ret == -FI_EAGAIN)
 			return ret;
 
+		/*
+		 * The dispatch switch captures the type unless the MR generation
+		 * check failed before dispatch.
+		 */
+		if (queued_response_pkt_type == -1) {
+			switch (flag) {
+			case EFA_RDM_OPE_QUEUED_RNR:
+				assert(!dlist_empty(&ope->queued_pkts));
+				queued_response_pkt_type = efa_rdm_pkt_type_of(
+					container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
+				break;
+			case EFA_RDM_OPE_QUEUED_CTRL:
+				queued_response_pkt_type = ope->queued_ctrl_type;
+				break;
+			default:
+				break;
+			}
+		}
+
 		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+		if (queued_response_pkt_type == EFA_RDM_PEER_ERROR_PKT &&
+		    (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)) {
+			dlist_remove(&ope->queued_entry);
+			ope->internal_flags &= ~flag;
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_progress_peer_abort_if_drained(ope);
+			else
+				efa_rdm_rxe_release_peer_abort_if_drained(ope);
+			return ret;
+		}
+
 		/* Release terminal atomic responses after queue bookkeeping. */
 		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
 		release_atomic_response =

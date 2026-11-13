@@ -404,14 +404,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_OPE_PEER_ABORT_PENDING BIT_ULL(20)
 
 /**
- * @brief flag to indicate a txe has already written an cq error entry for RNR
- *
- * This flag is used to prevent writing multiple cq error entries
- * for the same txe
- */
-#define EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
-
-/**
  * @brief flag to indicate an ope has queued ctrl packet,
  *
  * If this flag is on, the op_entyr is on the ope_queued_list

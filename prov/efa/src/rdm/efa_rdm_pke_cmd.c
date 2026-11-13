@@ -185,7 +185,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		}
 
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
-			if (ep->handle_resource_management == FI_RM_DISABLED) {
+			if (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_PEER_ERROR_PKT) {
+				/*
+				 * Always notify the receiver so it can mark the msg_id as complete,
+				 * regardless of the resource-management mode.
+				 */
+				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+			} else if (ep->handle_resource_management == FI_RM_DISABLED) {
+				bool peer_abort_owns_txe = efa_rdm_txe_handle_error(txe, err, prov_errno);;
+
 				/*
 				 * Write an error to the application for RNR when resource
 				 * management is disabled.
@@ -194,23 +202,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				 * might encounter RNR from device multiple times, but it
 				 * should only write cq err entry once
 				 */
-				if (!(txe->internal_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
-					txe->internal_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
-					efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
-				}
-
 				efa_rdm_pke_release_tx(pkt_entry);
-				if (!txe->efa_outstanding_tx_ops)
+				if (!peer_abort_owns_txe && !txe->efa_outstanding_tx_ops)
 					efa_rdm_txe_release(txe);
-			} else if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_PEER_ERROR_PKT &&
-				   (txe->state == EFA_RDM_OPE_ERR ||
-				    !efa_rdm_mr_gen_check_ope(txe))) {
+			} else if (txe->state == EFA_RDM_OPE_ERR ||
+				   !efa_rdm_mr_gen_check_ope(txe)) {
 				/*
 				 * The txe already errored or its source MR was
 				 * closed, so a repost can never succeed. Take the
-				 * MR abort path instead of requeueing. The
-				 * PEER_ERROR_PKT is still requeued: it does not use
-				 * the source MR and the receiver needs it.
+				 * MR abort path instead of requeueing.
 				 */
 				efa_rdm_pke_release_tx(pkt_entry);
 				if (!efa_rdm_txe_handle_error(txe, FI_ECANCELED,
