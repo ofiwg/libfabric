@@ -129,7 +129,7 @@ int ofi_xpmem_cache_search(struct ofi_mr_cache *cache, struct iovec *iov,
 	xpmem_addr.offset = (uintptr_t)iov->iov_base;
 	memcpy(&info.iov, iov, sizeof(*iov));
 	info.iface = FI_HMEM_SYSTEM;
-	info.peer_id = peer_id;
+	info.peer_id = (uint64_t) xpmem->apid;
 
 	memcpy(&info.handle, &xpmem_addr, sizeof(xpmem_addr));
 
