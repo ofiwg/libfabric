@@ -67,6 +67,8 @@ void *efa_test_mr_abort_forge_tx_pke(int pkt);
 
 void efa_test_mr_abort_handle_tx_error(void *pke, int err);
 
+int efa_test_mr_abort_process_queued(void);
+
 void efa_test_mr_abort_txe_handle_error(void);
 
 void efa_test_mr_abort_snapshot(struct efa_test_mr_abort_state *out);

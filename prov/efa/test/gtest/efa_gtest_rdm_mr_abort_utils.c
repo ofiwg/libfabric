@@ -234,6 +234,11 @@ void efa_test_mr_abort_handle_tx_error(void *pke, int err)
 	efa_rdm_pke_handle_tx_error((struct efa_rdm_pke *) pke, prov_errno);
 }
 
+int efa_test_mr_abort_process_queued(void)
+{
+	return efa_rdm_ope_process_queued_ope(g_mr_abort.txe);
+}
+
 void efa_test_mr_abort_txe_handle_error(void)
 {
 	efa_rdm_txe_handle_error(g_mr_abort.txe, FI_ECANCELED,
