@@ -270,6 +270,29 @@ void efa_test_selects_copy_method(struct fid_ep *ep, struct fid_av *av,
 				  bool cuda_api_permitted,
 				  struct efa_test_copy_from_hmem_result *out);
 
+/* a send of two iovs whose packet data spans both */
+#define EFA_TEST_COPY_HMEM_HANDLE2	0xdef0u
+#define EFA_TEST_COPY_IOV0_SIZE		24u
+#define EFA_TEST_COPY_IOV1_SIZE \
+	(EFA_TEST_COPY_HMEM_DATA_SIZE - EFA_TEST_COPY_IOV0_SIZE)
+
+enum efa_test_copy_iovs {
+	/* a host iov, then a CUDA iov */
+	EFA_TEST_COPY_IOVS_HOST_THEN_CUDA,
+	/* two CUDA iovs of registrations with different gdrcopy handles */
+	EFA_TEST_COPY_IOVS_TWO_GDRCOPY_MRS,
+	/* two CUDA iovs of one registration with a gdrcopy handle */
+	EFA_TEST_COPY_IOVS_ONE_GDRCOPY_MR,
+};
+
+/**
+ * @brief Set up the payload of a packet from a send of two iovs, as described
+ * by @p iovs, whose packet data spans both iovs.
+ */
+void efa_test_copy_two_iovs(struct fid_ep *ep, struct fid_av *av,
+			    enum efa_test_copy_iovs iovs,
+			    struct efa_test_copy_from_hmem_result *out);
+
 size_t efa_test_get_max_gdrcopy_from_hmem_size(void);
 void efa_test_set_max_gdrcopy_from_hmem_size(size_t size);
 

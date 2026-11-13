@@ -155,6 +155,113 @@ INSTANTIATE_TEST_SUITE_P(
 		return std::string(info.param.name);
 	});
 
+/*
+ * A packet whose data spans iovs that are not copied the same way copies each
+ * iov with its own registration; iovs of one registration are copied together.
+ */
+class EfaRdmPkeCopyTwoIovsTest : public EfaRdmPkeCopyFromHmemTest
+{
+};
+
+TEST_F(EfaRdmPkeCopyTwoIovsTest, host_then_cuda_copies_each_iov_with_its_iface)
+{
+	struct efa_test_copy_from_hmem_result res;
+	testing::InSequence seq;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV0_SIZE, FI_HMEM_SYSTEM, 0u, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV0_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV1_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_DEVICE, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV1_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov).Times(0);
+
+	efa_test_copy_two_iovs(resource.ep, resource.av,
+			       EFA_TEST_COPY_IOVS_HOST_THEN_CUDA, &res);
+
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.payload_size, EFA_TEST_COPY_HMEM_DATA_SIZE);
+	EXPECT_TRUE(res.payload_in_wiredata);
+}
+
+TEST_F(EfaRdmPkeCopyTwoIovsTest, two_gdrcopy_mrs_use_each_handle)
+{
+	struct efa_test_copy_from_hmem_result res;
+	testing::InSequence seq;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV0_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_HANDLE, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV0_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV1_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_HANDLE2, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV1_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov).Times(0);
+
+	efa_test_copy_two_iovs(resource.ep, resource.av,
+			       EFA_TEST_COPY_IOVS_TWO_GDRCOPY_MRS, &res);
+
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.payload_size, EFA_TEST_COPY_HMEM_DATA_SIZE);
+}
+
+TEST_F(EfaRdmPkeCopyTwoIovsTest, one_gdrcopy_mr_copies_iovs_together)
+{
+	struct efa_test_copy_from_hmem_result res;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_dev_reg_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_HMEM_DATA_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_HANDLE, _, 2u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_HMEM_DATA_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov).Times(0);
+
+	efa_test_copy_two_iovs(resource.ep, resource.av,
+			       EFA_TEST_COPY_IOVS_ONE_GDRCOPY_MR, &res);
+
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_EQ(res.payload_size, EFA_TEST_COPY_HMEM_DATA_SIZE);
+}
+
+TEST_F(EfaRdmPkeCopyTwoIovsTest, copy_error_is_returned)
+{
+	struct efa_test_copy_from_hmem_result res;
+	testing::InSequence seq;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV0_SIZE, FI_HMEM_SYSTEM, 0u, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV0_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV1_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_DEVICE, _, 1u, 0u)
+		.WillOnce(Return(-FI_EFAULT));
+
+	efa_test_copy_two_iovs(resource.ep, resource.av,
+			       EFA_TEST_COPY_IOVS_HOST_THEN_CUDA, &res);
+
+	EXPECT_EQ(res.ret, -FI_EFAULT);
+}
+
+TEST_F(EfaRdmPkeCopyTwoIovsTest, short_copy_is_an_error)
+{
+	struct efa_test_copy_from_hmem_result res;
+	testing::InSequence seq;
+
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV0_SIZE, FI_HMEM_SYSTEM, 0u, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV0_SIZE));
+	EFA_EXPECT_CALL(mock_efa, ofi_copy_from_hmem_iov, _,
+			EFA_TEST_COPY_IOV1_SIZE, FI_HMEM_CUDA,
+			EFA_TEST_COPY_HMEM_DEVICE, _, 1u, 0u)
+		.WillOnce(Return(EFA_TEST_COPY_IOV1_SIZE - 1));
+
+	efa_test_copy_two_iovs(resource.ep, resource.av,
+			       EFA_TEST_COPY_IOVS_HOST_THEN_CUDA, &res);
+
+	EXPECT_EQ(res.ret, -FI_EIO);
+}
+
 class EfaRdmPkeQueuedCopyTest : public TestWithParam<size_t>
 {
 	protected:
