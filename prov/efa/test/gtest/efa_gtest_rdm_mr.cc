@@ -96,17 +96,23 @@ TEST_F(EfaRdmMrTest, relaxed_ordering_bit_distinct_from_gdrcopy_handle_bit)
 		  0u)
 		<< "FI_EFA_MR_RELAXED_ORDERING aliases the gdrcopy handle bit "
 		   "OFI_HMEM_DATA_DEV_REG_HANDLE";
+	EXPECT_EQ(FI_MR_RELAXED_ORDERING &
+			  efa_test_ofi_hmem_data_dev_reg_handle(),
+		  0u)
+		<< "FI_MR_RELAXED_ORDERING aliases the gdrcopy handle bit "
+		   "OFI_HMEM_DATA_DEV_REG_HANDLE";
 }
 
 /**
  * @brief Deriving the shm MR flags for a CUDA region that has the gdrcopy
- * handle bit set must strip FI_EFA_MR_RELAXED_ORDERING while preserving the
+ * handle bit set must strip the relaxed ordering flags while preserving the
  * gdrcopy handle bit (and adding FI_HMEM_DEVICE_ONLY for device memory).
  */
 TEST_F(EfaRdmMrTest, shm_flags_preserve_gdrcopy_handle_when_relaxed_ordering_set)
 {
 	uint64_t gdrcopy_bit = efa_test_ofi_hmem_data_dev_reg_handle();
-	uint64_t mr_flags = gdrcopy_bit | FI_EFA_MR_RELAXED_ORDERING;
+	uint64_t mr_flags = gdrcopy_bit | FI_EFA_MR_RELAXED_ORDERING |
+			    FI_MR_RELAXED_ORDERING;
 
 	uint64_t shm_flags =
 		efa_test_rdm_mr_shm_flags(mr_flags, FI_HMEM_CUDA);
@@ -117,6 +123,8 @@ TEST_F(EfaRdmMrTest, shm_flags_preserve_gdrcopy_handle_when_relaxed_ordering_set
 	/* The EFA-specific relaxed-ordering hint is stripped. */
 	EXPECT_EQ(shm_flags & FI_EFA_MR_RELAXED_ORDERING, 0u)
 		<< "FI_EFA_MR_RELAXED_ORDERING leaked into shm flags";
+	EXPECT_EQ(shm_flags & FI_MR_RELAXED_ORDERING, 0u)
+		<< "FI_MR_RELAXED_ORDERING leaked into shm flags";
 	/* Device memory is marked device-only for shm. */
 	EXPECT_NE(shm_flags & FI_HMEM_DEVICE_ONLY, 0u);
 }

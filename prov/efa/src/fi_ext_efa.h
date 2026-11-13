@@ -204,6 +204,9 @@ struct fi_efa_feature_ops {
  * completion of an operation guarantees that subsequent operations to the same
  * endpoint appear at the target after it. When FI_EFA_MR_RELAXED_ORDERING is
  * set, that ordering guarantee is lost.
+ *
+ * This flag is equivalent to the generic FI_MR_RELAXED_ORDERING flag, which
+ * new applications should use. It is kept for compatibility.
  */
 #define FI_EFA_MR_RELAXED_ORDERING (1ULL << 61)
 

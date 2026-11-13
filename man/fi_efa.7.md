@@ -216,9 +216,10 @@ does not cover host-driven (CPU) accesses to HBM, which take a different path
 and are not ordered against the received data by this mechanism.
 
 This ordering also depends on the memory region being registered with strict
-ordering. Registering the region with *FI_EFA_MR_RELAXED_ORDERING* (see
-PROVIDER SPECIFIC MR FLAGS) removes this guarantee, so an application that
-relies on the above ordering must not set that flag on the target region.
+ordering. Registering the region with *FI_MR_RELAXED_ORDERING* (see
+[`fi_mr`(3)](fi_mr.3.html)) or *FI_EFA_MR_RELAXED_ORDERING* (see PROVIDER
+SPECIFIC MR FLAGS) removes this guarantee, so an application that relies on
+the above ordering must not set either flag on the target region.
 
 # MR ABORTING
 
@@ -724,7 +725,9 @@ The EFA provider defines provider-specific flags that can be passed in the
   receives) with strict ordering, so that the TX completion of an operation
   guarantees that subsequent operations to the same endpoint appear at the
   target after it. When FI_EFA_MR_RELAXED_ORDERING is specified, that ordering
-  guarantee is lost.
+  guarantee is lost. This flag is equivalent to the generic
+  *FI_MR_RELAXED_ORDERING* flag (see [`fi_mr`(3)](fi_mr.3.html)), which new
+  applications should use; it is kept for compatibility.
 
 # PROVIDER SPECIFIC OPERATION EXTENSIONS
 The efa provider exports extensions for operations that are not provided
