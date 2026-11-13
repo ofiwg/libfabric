@@ -556,7 +556,9 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 
