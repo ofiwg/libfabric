@@ -242,6 +242,11 @@ void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (txe->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	efa_rdm_txe_release_read_msg_slot(txe);
 
 	txe->bytes_acked += txe->total_len - txe->bytes_runt;

@@ -125,6 +125,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 
+	efa_rdm_txe_release_read_msg_slot(txe);
+
 	/* txe->peer would be NULL for local read operation */
 	if (txe->peer) {
 		dlist_remove(&txe->peer_entry);

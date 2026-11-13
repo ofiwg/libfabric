@@ -786,6 +786,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (txe->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	efa_rdm_txe_release_read_msg_slot(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -807,7 +812,8 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				 "READ_NACK fallback: posting pkt type %u failed, op %u, ope id %u: %s\n",
 				 txe->req_pkt_type, txe->op,
 				 efa_rdm_ope_get_ope_id(txe), fi_strerror(-err));
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+			if (!efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+				efa_rdm_txe_release_error_if_drained(txe);
 		}
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
@@ -827,7 +833,8 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "READ_NACK fallback: posting pkt type %u failed, msg_id %u: %s\n",
 				 txe->req_pkt_type, txe->msg_id, fi_strerror(-err));
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+			if (!efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+				efa_rdm_txe_release_error_if_drained(txe);
 		}
 	}
 }
