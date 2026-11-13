@@ -9,6 +9,7 @@
 #include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longread.h"
+#include "rdm/protocols/efa_rdm_proto_longcts_rtr.h"
 #include "rdm/protocols/efa_rdm_proto_medium.h"
 #include "ofi_util.h"
 
@@ -192,15 +193,18 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	pkt_entry->payload = pkt_entry->wiredata;
 	pkt_entry->payload_size = sizeof buf;
 
-	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
+	if (efa_rdm_pke_read_return == FI_SUCCESS) {
+		rxe = efa_unit_test_alloc_txe(resource, ofi_op_read_req);
+		rxe->proto = &efa_rdm_proto_longcts_rtr;
+	} else {
+		rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
+	}
 	cuda_mr.efa_mr.iface = FI_HMEM_CUDA;
 
 	rxe->desc[0] = &cuda_mr.efa_mr;
 	rxe->iov_count = 1;
 	rxe->iov[0] = iov;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
-
-	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	held_before = efa_rdm_ep->efa_rx_pkts_held;
 	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
@@ -219,13 +223,13 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 		assert_true(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS);
 
 		/* The internal txe must be live with local_read_pkt_entry set. */
-		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
-		txe = efa_unit_test_get_first_ope(efa_rdm_ep, EFA_RDM_TXE);
+		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		txe = context_pkt->ope;
 		assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
 		assert_non_null(txe->local_read_pkt_entry);
 
 		txe->local_read_pkt_entry->payload_size = 16;
-		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		rxe->state = EFA_RDM_OPE_ERR;
 		context_pkt->flags |= EFA_RDM_PKE_LOCAL_READ;
 		efa_rdm_pke_handle_rma_completion(context_pkt);
 

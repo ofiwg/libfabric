@@ -52,6 +52,11 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_tracepoint(rx_pke_proc_matched_msg_end, (size_t) pkt_entry, pkt_entry->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 	efa_rdm_pke_release_rx(pkt_entry);
 
+	if (ope->type == EFA_RDM_TXE && ope->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_txe_release_error_if_drained(ope);
+		return;
+	}
+
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
 			assert(ep->blocking_copy_rxe_num > 0);

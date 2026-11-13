@@ -41,6 +41,7 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	txe->internal_flags = internal_flags;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
+	txe->bytes_queued_blocking_copy = 0;
 	txe->bytes_acked = 0;
 	txe->bytes_sent = 0;
 	txe->window = 0;
@@ -63,6 +64,7 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	txe->fi_flags = efa_rdm_msg_get_tx_flags(ep, fi_flags);
 	txe->bytes_runt = 0;
 	txe->bytes_runt_in_flight = 0;
+	txe->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
 
@@ -128,6 +130,15 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 
 	efa_rdm_txe_release_read_msg_slot(txe);
 
+#if ENABLE_DEBUG
+	if (dlist_entry_in_list(&txe->ep->ope_recv_list,
+				&txe->pending_recv_entry)) {
+		dlist_remove(&txe->pending_recv_entry);
+		assert(txe->ep->pending_recv_counter > 0);
+		txe->ep->pending_recv_counter--;
+	}
+#endif
+
 	/* txe->peer would be NULL for local read operation */
 	if (txe->peer) {
 		assert(txe->peer->num_runt_bytes_in_flight >=
@@ -169,6 +180,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 				     pkt_entry, entry, tmp) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
+
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(txe);
 
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
@@ -239,7 +252,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	 * down early (e.g. peer-aborted) can leave held packets pointing at it;
 	 * purging here keeps a later flush from touching the freed rxe.
 	 */
-	efa_rdm_ep_purge_queued_blocking_copy_for_rxe(rxe);
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(rxe);
 
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {
@@ -1012,6 +1025,7 @@ static bool efa_rdm_txe_handle_error_impl(struct efa_rdm_ope *txe, int err, int 
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(txe);
 	err_entry.flags = txe->cq_entry.flags;
 	err_entry.op_context = txe->cq_entry.op_context;
 	err_entry.buf = txe->cq_entry.buf;

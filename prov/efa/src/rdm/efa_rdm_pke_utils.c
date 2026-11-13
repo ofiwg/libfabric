@@ -200,55 +200,54 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 }
 
 /*
- * @brief drop any queued blocking copies that reference a releasing rxe
+ * @brief drop any queued blocking copies that reference a releasing ope
  *
  * The per-endpoint blocking-copy batch outlives a single transfer, so an
- * rxe torn down early (e.g. peer-aborted) can leave held packets with
+ * ope torn down early (e.g. peer-aborted) can leave held packets with
  * dangling pke->ope pointers that a later flush would dereference. The
- * entries are dropped without performing the copies: an aborted rxe must
- * not copy into a buffer it is about to error out, and an unmatched rxe
- * has no user buffer at all.
+ * entries are dropped without performing the copies: an aborted ope must
+ * not copy into a buffer it is about to error out.
  *
- * @param[in,out] rxe rxe being released
+ * @param[in,out] ope ope being released
  */
-void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe)
+void efa_rdm_ep_purge_queued_blocking_copy_for_ope(struct efa_rdm_ope *ope)
 {
-	struct efa_rdm_ep *ep = rxe->ep;
+	struct efa_rdm_ep *ep = ope->ep;
 	struct efa_rdm_pke *pkt_entry;
 	size_t i, dst = 0;
 
 	/*
 	 * The bytes_queued_blocking_copy > 0 guard also makes this safe to
 	 * reach from inside a flush: the flush decrements the count for each
-	 * entry BEFORE the copy callback can complete and release the rxe,
+	 * entry BEFORE the copy callback can complete and release the ope,
 	 * so a nested release sees zero here and never mutates the vector
 	 * the flush is still iterating.
 	 */
-	if (rxe->bytes_queued_blocking_copy > 0) {
+	if (ope->bytes_queued_blocking_copy > 0) {
 		for (i = 0; i < ep->queued_copy_num; ++i) {
 			pkt_entry = ep->queued_copy_vec[i].pkt_entry;
-			if (pkt_entry->ope == rxe) {
-				rxe->bytes_queued_blocking_copy -= pkt_entry->payload_size;
+			if (pkt_entry->ope == ope) {
+				ope->bytes_queued_blocking_copy -= pkt_entry->payload_size;
 				efa_rdm_pke_release_rx(pkt_entry);
 			} else {
 				ep->queued_copy_vec[dst++] = ep->queued_copy_vec[i];
 			}
 		}
 		ep->queued_copy_num = dst;
-		assert(rxe->bytes_queued_blocking_copy == 0);
+		assert(ope->bytes_queued_blocking_copy == 0);
 	}
 
 	/*
-	 * Return the blocking-copy slot this rxe claimed, if any. An early
+	 * Return the blocking-copy slot this ope claimed, if any. An early
 	 * release can happen after a full-batch flush already drained
 	 * bytes_queued_blocking_copy to 0, so the slot return must not be
-	 * gated on the purge above. A normally-completed rxe already reset
+	 * gated on the purge above. A normally-completed ope already reset
 	 * cuda_copy_method, making this a no-op on that path.
 	 */
-	if (rxe->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
+	if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
 		assert(ep->blocking_copy_rxe_num > 0);
 		ep->blocking_copy_rxe_num -= 1;
-		rxe->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
+		ope->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 	}
 }
 

@@ -898,6 +898,16 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
+	/*
+	 * LONGCTS RTR TXEs can own queued copies of packets on rx_pkt_list
+	 * at close. Purge the copies before the debug sweep so TXE release
+	 * during the later ope_list sweep cannot dereference freed packets.
+	 */
+	while (efa_rdm_ep->queued_copy_num > 0) {
+		pkt_entry = efa_rdm_ep->queued_copy_vec[0].pkt_entry;
+		assert(pkt_entry->ope);
+		efa_rdm_ep_purge_queued_blocking_copy_for_ope(pkt_entry->ope);
+	}
 
 	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);

@@ -138,6 +138,7 @@ err:
 
 struct efa_rdm_proto efa_rdm_proto_longcts_rtr = {
 	.name = "longcts_rtr",
+	.release_txe_on_error = true,
 	.can_use_protocol = &efa_rdm_proto_longcts_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_rtr_construct_tx_pkes,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,
