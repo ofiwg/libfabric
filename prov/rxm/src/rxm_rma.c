@@ -83,6 +83,22 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 	return FI_SUCCESS;
 }
 
+/* An inline write does not need its local buffer registered. */
+static bool
+rxm_ep_rma_write_is_inline(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg)
+{
+	uint64_t device;
+	size_t len;
+
+	if (!rxm_ep->msg_mr_local || rxm_ep->rdm_mr_local)
+		return false;
+
+	len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+	return len <= rxm_ep->inject_limit &&
+	       rxm_iov_desc_to_hmem_iface_dev(msg->msg_iov, msg->desc,
+					      msg->iov_count, &device) == FI_HMEM_SYSTEM;
+}
+
 static ssize_t
 rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		  uint64_t flags, ssize_t (*rma_msg)(struct fid_ep *ep_fid,
@@ -93,6 +109,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	struct fi_msg_rma msg_rma = *msg;
 	struct rxm_conn *rxm_conn;
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
+	uint64_t msg_flags;
 	ssize_t ret;
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
@@ -113,17 +130,28 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	rma_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
+	rma_buf->rma.count = 0;
 
-	ret = rxm_ep_rma_reg_iov(rxm_ep, msg_rma.msg_iov, msg_rma.desc, mr_desc,
-				 msg_rma.iov_count,
-				 comp_flags & (FI_WRITE | FI_READ), rma_buf);
-	if (OFI_UNLIKELY(ret))
-		goto release;
+	if ((comp_flags & FI_WRITE) &&
+	    rxm_ep_rma_write_is_inline(rxm_ep, &msg_rma)) {
+		/* rma_buf->flags keeps the caller's flags, so the write still
+		 * completes as a normal write in rxm_finish_rma() */
+		msg_rma.desc = NULL;
+		msg_flags = flags | FI_INJECT;
+	} else {
+		ret = rxm_ep_rma_reg_iov(rxm_ep, msg_rma.msg_iov, msg_rma.desc,
+					 mr_desc, msg_rma.iov_count,
+					 comp_flags & (FI_WRITE | FI_READ),
+					 rma_buf);
+		if (OFI_UNLIKELY(ret))
+			goto release;
 
-	msg_rma.desc = mr_desc;
+		msg_rma.desc = mr_desc;
+		msg_flags = flags;
+	}
 	msg_rma.context = rma_buf;
 
-	ret = rma_msg(rxm_conn_msg_ep(rxm_conn, NULL), &msg_rma, flags);
+	ret = rma_msg(rxm_conn_msg_ep(rxm_conn, NULL), &msg_rma, msg_flags);
 	if (!ret)
 		goto unlock;
 
