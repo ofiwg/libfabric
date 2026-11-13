@@ -54,6 +54,28 @@
 #include "shared.h"
 #include "hmem.h"
 
+/* not a character of integ_alphabet, so unwritten bytes never look like data */
+#define FT_SCATTER_SENTINEL	0xa5
+#define FT_FNV_OFFSET	14695981039346656037ULL
+#define FT_FNV_PRIME	1099511628211ULL
+
+struct ft_scatter_layout_msg {
+	uint64_t nsegs;
+	uint64_t seg_len;
+	char names[FT_SCATTER_NAME_LEN];
+	char source[FT_SCATTER_NAME_LEN];
+};
+
+struct ft_scatter_params_msg {
+	uint64_t iterations;
+	uint64_t warmup;
+	uint64_t window;
+	uint64_t verify;
+	uint64_t prefix;
+	uint64_t sizes;
+	char source[FT_SCATTER_NAME_LEN];
+};
+
 struct fi_info *fi_pep, *fi, *hints;
 struct fid_fabric *fabric;
 struct fid_wait *waitset;
@@ -75,6 +97,7 @@ struct fid_mc *mc;
 struct fid_mr no_mr;
 struct fi_context2 tx_ctx, rx_ctx;
 struct ft_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
+struct ft_scatter ft_scatter;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -555,6 +578,9 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 {
 	*set_tx = opts.options & FT_OPT_SIZE ?
 		  opts.transfer_size : test_size[TEST_CNT - 1].size;
+	/* the data goes to the scatter buffers, only control messages here */
+	if (opts.scatter_layout)
+		*set_tx = 0;
 	*set_tx = MAX(*set_tx, FT_MAX_CTRL_MSG);
 	if (*set_tx > fi->ep_attr->max_msg_size)
 		*set_tx = fi->ep_attr->max_msg_size;
@@ -1073,6 +1099,32 @@ int ft_close_oob()
 	return 0;
 }
 
+int ft_check_hmem_support(void)
+{
+	struct fi_info *probe, *info;
+	int ret;
+
+	probe = fi_dupinfo(hints);
+	if (!probe)
+		return -FI_ENOMEM;
+
+	if (!probe->ep_attr->type)
+		probe->ep_attr->type = FI_EP_RDM;
+
+	probe->caps |= FI_HMEM;
+	probe->domain_attr->mr_mode |= FI_MR_HMEM;
+	ret = fi_getinfo(ft_fiversion, NULL, NULL, 0, probe, &info);
+	fi_freeinfo(probe);
+	if (ret) {
+		FT_ERR("no provider offers FI_HMEM with these options: %s",
+		       fi_strerror(-ret));
+		return ret;
+	}
+
+	fi_freeinfo(info);
+	return 0;
+}
+
 int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
 	char *node, *service;
@@ -1565,7 +1617,13 @@ int ft_enable_ep_recv(void)
 	if (ret)
 		return ret;
 
-	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) &&
+	if (opts.scatter_layout && !ft_check_opts(FT_OPT_SKIP_MSG_ALLOC)) {
+		ret = ft_scatter_setup();
+		if (ret)
+			return ret;
+	}
+
+	if (!ft_check_opts(FT_OPT_SKIP_MSG_ALLOC) && !opts.scatter_layout &&
 	    (fi->caps & (FI_MSG | FI_TAGGED))) {
 		/* Initial receive will get remote address for unconnected EPs */
 		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
@@ -2023,6 +2081,7 @@ int ft_free_res(void)
 	tx_ctx_arr = NULL;
 	rx_ctx_arr = NULL;
 
+	ft_scatter_free();
 	ret = ft_close_fids();
 	if (ret && !first_err)
 		first_err = ret;
@@ -3422,6 +3481,9 @@ void show_perf(char *name, size_t tsize, int iters, struct timespec *start,
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 	float usec_per_xfer;
 
+	if (header && ft_scatter.direction[0])
+		printf("%s\n", ft_scatter.direction);
+
 	if (name) {
 		if (header) {
 			printf("%-50s%-8s%-8s%-8s%8s %10s%13s%13s\n",
@@ -3476,6 +3538,8 @@ void show_perf_mr(size_t tsize, int iters, struct timespec *start,
 	usec_per_xfer = ((float)elapsed / iters / xfers_per_iter);
 
 	printf("- { ");
+	if (ft_scatter.direction[0])
+		printf("direction: \"%s\", ", ft_scatter.direction);
 	printf("xfer_size: %zu, ", tsize);
 	printf("iterations: %d, ", iters);
 	printf("total: %lld, ", total);
@@ -3551,6 +3615,12 @@ void ft_hmem_usage()
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
 	FT_PRINT_OPTS_USAGE("-R", "Register HMEM memory with fi_mr_dmabuf API");
+}
+
+void ft_hmem_scatter_usage(void)
+{
+	FT_PRINT_OPTS_USAGE("-y <layout>", "Receive buffers, server only, comma separated: h (host) or d<N> (device N of the -D interface), for example h,d0,h (default: h,h)");
+	FT_PRINT_OPTS_USAGE("-z <bytes>", "Size of each receive buffer, server only (default: the message size divided across the buffers)");
 }
 
 void ft_mcusage(char *name, char *desc)
@@ -3848,6 +3918,599 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		/* let getopt handle unknown opts*/
 		break;
 	}
+}
+
+void ft_parse_hmem_scatter_opts(int op, char *optarg)
+{
+	switch (op) {
+	case 'y':
+		opts.scatter_layout = optarg;
+		break;
+	case 'z':
+		opts.scatter_seg_len = strtoul(optarg, NULL, 0);
+		break;
+	case 'i':
+		opts.scatter_device = optarg;
+		break;
+	default:
+		break;
+	}
+}
+
+int ft_check_hmem_scatter_opts(bool default_layout)
+{
+	bool defaulted = false;
+	char *end;
+
+	if (opts.iterations < 1 || opts.window_size < 1 ||
+	    opts.warmup_iterations < 0) {
+		FT_ERR("-I and -W must be at least 1, and -w at least 0");
+		return -FI_EINVAL;
+	}
+
+	if (opts.dst_addr && (opts.scatter_layout || opts.scatter_seg_len)) {
+		FT_DEBUG("-y and -z are only for the server (receiver), "
+			 "ignoring them");
+		opts.scatter_layout = NULL;
+		opts.scatter_seg_len = 0;
+	}
+
+	if (!opts.dst_addr && default_layout && !opts.scatter_layout) {
+		FT_DEBUG("no -y given, receiving into the host buffers h,h");
+		opts.scatter_layout = "h,h";
+		defaulted = true;
+	}
+
+	if (opts.scatter_device) {
+		opts.device = strtoul(opts.scatter_device, &end, 0);
+		if (!*opts.scatter_device || *end) {
+			FT_ERR("invalid device number '%s'",
+			       opts.scatter_device);
+			return -FI_EINVAL;
+		}
+
+		if (opts.iface == FI_HMEM_SYSTEM) {
+			FT_ERR("-i needs -D <iface>");
+			return -FI_EINVAL;
+		}
+
+		if (!opts.dst_addr && opts.scatter_layout) {
+			if (defaulted)
+				FT_DEBUG("ignoring -i on the server, the "
+					 "default layout uses no device");
+			else
+				FT_DEBUG("ignoring -i on the server, the -y "
+					 "layout selects the devices");
+
+			opts.scatter_device = NULL;
+			opts.device = 0;
+		}
+	}
+
+	if (opts.use_wr_api) {
+		FT_ERR("--use-wr is not supported by this test");
+		return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
+static const char *ft_scatter_iface_name(enum fi_hmem_iface iface)
+{
+	switch (iface) {
+	case FI_HMEM_CUDA:
+		return "CUDA";
+	case FI_HMEM_ROCR:
+		return "ROCR";
+	case FI_HMEM_ZE:
+		return "ZE";
+	case FI_HMEM_NEURON:
+		return "NEURON";
+	case FI_HMEM_SYNAPSEAI:
+		return "SYNAPSEAI";
+	default:
+		return "?";
+	}
+}
+
+int ft_scatter_memory_name(char *name, size_t size,
+			   enum fi_hmem_iface iface, uint64_t device)
+{
+	int len;
+
+	if (iface == FI_HMEM_SYSTEM)
+		len = snprintf(name, size, "H");
+	else
+		len = snprintf(name, size, "%s:D%" PRIu64,
+			       ft_scatter_iface_name(iface), device);
+
+	return len < (int) size ? 0 : -FI_EINVAL;
+}
+
+static int ft_scatter_layout_name(char *name)
+{
+	size_t i, len = 0;
+	int ret;
+
+	for (i = 0; i < ft_scatter.nsegs; i++) {
+		if (i)
+			name[len++] = ',';
+
+		ret = ft_scatter_memory_name(name + len,
+					     FT_SCATTER_NAME_LEN - len,
+					     ft_scatter.segs[i].iface,
+					     ft_scatter.segs[i].device);
+		if (ret) {
+			FT_ERR("the layout is longer than %d characters",
+			       FT_SCATTER_NAME_LEN - 1);
+			return ret;
+		}
+		len += strlen(name + len);
+	}
+
+	return 0;
+}
+
+int ft_scatter_parse_entry(const char *entry, struct ft_scatter_seg *seg)
+{
+	char *end;
+
+	if (!strcmp(entry, "h")) {
+		seg->iface = FI_HMEM_SYSTEM;
+		seg->device = 0;
+		return 0;
+	}
+
+	if (entry[0] != 'd' || !entry[1]) {
+		FT_ERR("invalid layout entry '%s'", entry);
+		return -FI_EINVAL;
+	}
+
+	seg->device = strtoul(entry + 1, &end, 0);
+	if (*end) {
+		FT_ERR("invalid layout entry '%s'", entry);
+		return -FI_EINVAL;
+	}
+
+	if (opts.iface == FI_HMEM_SYSTEM) {
+		FT_ERR("layout entry '%s' needs -D <iface>", entry);
+		return -FI_EINVAL;
+	}
+
+	seg->iface = opts.iface;
+	return 0;
+}
+
+int ft_scatter_parse_layout(const char *layout)
+{
+	size_t max_segs = fi->rx_attr->iov_limit, count = 1;
+	struct ft_scatter_seg *seg;
+	char *copy, *entry, *next;
+	const char *c;
+	int ret = 0;
+
+	ft_scatter_free();
+
+	if (!max_segs) {
+		FT_ERR("provider does not receive into iovs");
+		return -FI_EINVAL;
+	}
+
+	for (c = layout; *c; c++)
+		count += *c == ',';
+
+	if (count > max_segs) {
+		FT_ERR("layout has %zu entries, more than the %zu iovs the "
+		       "provider receives", count, max_segs);
+		return -FI_EINVAL;
+	}
+
+	ft_scatter.segs = calloc(count, sizeof(*ft_scatter.segs));
+	ft_scatter.iov = calloc(count, sizeof(*ft_scatter.iov));
+	ft_scatter.desc = calloc(count, sizeof(*ft_scatter.desc));
+	copy = strdup(layout);
+	if (!ft_scatter.segs || !ft_scatter.iov || !ft_scatter.desc || !copy) {
+		free(copy);
+		return -FI_ENOMEM;
+	}
+
+	for (entry = copy; entry && !ret; entry = next) {
+		next = strchr(entry, ',');
+		if (next)
+			*next++ = '\0';
+
+		seg = &ft_scatter.segs[ft_scatter.nsegs++];
+		ret = ft_scatter_parse_entry(entry, seg);
+	}
+
+	ft_scatter.seg_len = opts.scatter_seg_len;
+	free(copy);
+	return ret;
+}
+
+size_t ft_scatter_posted_len(size_t size)
+{
+	if (ft_scatter.seg_len)
+		return ft_scatter.seg_len;
+
+	return (size + ft_scatter.nsegs - 1) / ft_scatter.nsegs;
+}
+
+size_t ft_scatter_max_size(void)
+{
+	size_t max = 0;
+	int i;
+
+	if (opts.options & FT_OPT_SIZE)
+		return opts.transfer_size;
+
+	for (i = 0; i < TEST_CNT; i++) {
+		if (ft_use_size(i, opts.sizes_enabled))
+			max = MAX(max, test_size[i].size);
+	}
+
+	return max;
+}
+
+int ft_scatter_alloc(void)
+{
+	size_t i, size, cap = ft_scatter_posted_len(ft_scatter_max_size());
+	struct ft_scatter_seg *seg;
+	int ret;
+
+	if (!cap) {
+		FT_ERR("no message sizes are enabled");
+		return -FI_EINVAL;
+	}
+
+	ft_scatter.stage = malloc(cap + ft_rx_prefix_size());
+	if (!ft_scatter.stage)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < ft_scatter.nsegs; i++) {
+		seg = &ft_scatter.segs[i];
+		size = i ? cap : cap + ft_rx_prefix_size();
+
+		ret = ft_hmem_alloc(seg->iface, seg->device, &seg->buf, size);
+		if (ret)
+			return ret;
+		seg->len = cap;
+
+		ret = ft_hmem_memset(seg->iface, seg->device, seg->buf, 0,
+				     size);
+		if (ret)
+			return ret;
+
+		ret = ft_reg_mr(fi, seg->buf, size, FI_RECV, FT_RX_MR_KEY + i,
+				seg->iface, seg->device, &seg->mr, &seg->desc);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+bool ft_scatter_fits(size_t size)
+{
+	return ft_scatter.nsegs * ft_scatter_posted_len(size) >= size;
+}
+
+void ft_scatter_set_size(size_t size)
+{
+	size_t i;
+
+	for (i = 0; i < ft_scatter.nsegs; i++)
+		ft_scatter.segs[i].len = ft_scatter_posted_len(size);
+}
+
+static void ft_scatter_fill_iov(void)
+{
+	size_t i;
+
+	for (i = 0; i < ft_scatter.nsegs; i++) {
+		ft_scatter.iov[i].iov_base = ft_scatter.segs[i].buf;
+		ft_scatter.iov[i].iov_len = ft_scatter.segs[i].len;
+		ft_scatter.desc[i] = ft_scatter.segs[i].desc;
+	}
+
+	ft_scatter.iov[0].iov_len += ft_rx_prefix_size();
+}
+
+int ft_post_rx_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx)
+{
+	ft_scatter_fill_iov();
+	FT_POST(fi_recvv, ft_progress, rxcq, rx_seq, &rx_cq_cntr, "receive",
+		ep, ft_scatter.iov, ft_scatter.desc, ft_scatter.nsegs, fi_addr,
+		ctx);
+	return 0;
+}
+
+int ft_recvmsg_scatter(struct fid_ep *ep, fi_addr_t fi_addr, void *ctx,
+		       uint64_t flags)
+{
+	struct fi_msg msg;
+
+	ft_scatter_fill_iov();
+	msg.msg_iov = ft_scatter.iov;
+	msg.desc = ft_scatter.desc;
+	msg.iov_count = ft_scatter.nsegs;
+	msg.addr = fi_addr;
+	msg.data = NO_CQ_DATA;
+	msg.context = ctx;
+
+	FT_POST(fi_recvmsg, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
+		"recvmsg", ep, &msg, flags);
+	return 0;
+}
+
+int ft_scatter_fill_sentinel(void)
+{
+	struct ft_scatter_seg *seg;
+	size_t i, size;
+	int ret;
+
+	for (i = 0; i < ft_scatter.nsegs; i++) {
+		seg = &ft_scatter.segs[i];
+		size = seg->len + (i ? 0 : ft_rx_prefix_size());
+
+		memset(ft_scatter.stage, FT_SCATTER_SENTINEL, size);
+		ret = ft_hmem_copy_to(seg->iface, seg->device, seg->buf,
+				      ft_scatter.stage, size);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+unsigned char ft_scatter_alphabet(size_t pos, void *ctx)
+{
+	return integ_alphabet[pos % integ_alphabet_length];
+}
+
+int ft_scatter_check(size_t msg_len, ft_scatter_pattern pattern, void *ctx)
+{
+	struct ft_scatter_seg *seg;
+	size_t i, j, skip, covered, pos = 0;
+	unsigned char got, want;
+	int ret;
+
+	for (i = 0; i < ft_scatter.nsegs; i++) {
+		seg = &ft_scatter.segs[i];
+		skip = i ? 0 : ft_rx_prefix_size();
+
+		ret = ft_hmem_copy_from(seg->iface, seg->device,
+					ft_scatter.stage, seg->buf,
+					skip + seg->len);
+		if (ret)
+			return ret;
+
+		covered = msg_len > pos ? MIN(seg->len, msg_len - pos) : 0;
+		for (j = 0; j < seg->len; j++) {
+			got = ft_scatter.stage[skip + j];
+			want = FT_SCATTER_SENTINEL;
+			if (j < covered)
+				want = pattern(pos + j, ctx);
+			if (got == want)
+				continue;
+
+			FT_ERR("buffer %zu byte %zu, %s: got 0x%02x, expected "
+			       "0x%02x", i, j, j < covered ? "in the message" :
+			       "past the end of the message", got, want);
+			return -FI_EIO;
+		}
+		pos += covered;
+	}
+
+	return 0;
+}
+
+int ft_scatter_setup(void)
+{
+	int ret;
+
+	ret = ft_scatter_parse_layout(opts.scatter_layout);
+	if (ret)
+		return ret;
+
+	return ft_scatter_alloc();
+}
+
+void ft_scatter_free(void)
+{
+	size_t i;
+
+	for (i = 0; ft_scatter.segs && i < ft_scatter.nsegs; i++) {
+		FT_CLOSE_FID(ft_scatter.segs[i].mr);
+		if (ft_scatter.segs[i].buf)
+			(void) ft_hmem_free(ft_scatter.segs[i].iface,
+					    ft_scatter.segs[i].buf);
+	}
+
+	free(ft_scatter.segs);
+	free(ft_scatter.iov);
+	free(ft_scatter.desc);
+	free(ft_scatter.stage);
+	memset(&ft_scatter, 0, sizeof(ft_scatter));
+}
+
+static uint64_t ft_scatter_sizes_digest(void)
+{
+	uint64_t digest = FT_FNV_OFFSET;
+	int i;
+
+	if (opts.options & FT_OPT_SIZE)
+		return (FT_FNV_OFFSET ^ opts.transfer_size) * FT_FNV_PRIME;
+
+	for (i = 0; i < TEST_CNT; i++) {
+		if (ft_use_size(i, opts.sizes_enabled))
+			digest = (digest ^ test_size[i].size) * FT_FNV_PRIME;
+	}
+
+	return digest;
+}
+
+static void ft_scatter_get_params(struct ft_scatter_params_msg *params)
+{
+	memset(params, 0, sizeof(*params));
+	params->iterations = opts.iterations;
+	params->warmup = opts.warmup_iterations;
+	params->window = opts.window_size;
+	params->verify = !!(opts.options & FT_OPT_VERIFY_DATA);
+	params->prefix = opts.force_prefix;
+	params->sizes = ft_scatter_sizes_digest();
+}
+
+static int ft_scatter_pick_source(const char *entry,
+				  struct ft_scatter_params_msg *params)
+{
+	struct ft_scatter_seg seg;
+	int ret;
+
+	ft_scatter.src_iface = opts.iface;
+	ft_scatter.src_device = opts.device;
+	if (!entry[0] && opts.iface == FI_HMEM_SYSTEM)
+		FT_DEBUG("no -D given, assuming -H and sending from host "
+			 "memory");
+
+	if (entry[0]) {
+		ret = ft_scatter_parse_entry(entry, &seg);
+		if (ret)
+			return ret;
+
+		ft_scatter.src_iface = seg.iface;
+		ft_scatter.src_device = seg.iface == FI_HMEM_SYSTEM ? 0 :
+					opts.device ? opts.device : seg.device;
+	}
+
+	return ft_scatter_memory_name(params->source, sizeof(params->source),
+				      ft_scatter.src_iface,
+				      ft_scatter.src_device);
+}
+
+static int ft_scatter_diff(const char *option, uint64_t server,
+			   uint64_t client)
+{
+	if (server == client)
+		return 0;
+
+	FT_ERR("%s differs: %" PRIu64 " on the server, %" PRIu64 " on the "
+	       "client", option, server, client);
+	return -FI_EINVAL;
+}
+
+static int ft_scatter_compare(const struct ft_scatter_params_msg *client)
+{
+	struct ft_scatter_params_msg server;
+	int ret = 0;
+
+	ft_scatter_get_params(&server);
+	ret |= ft_scatter_diff("-I", server.iterations, client->iterations);
+	ret |= ft_scatter_diff("-w", server.warmup, client->warmup);
+	ret |= ft_scatter_diff("-W", server.window, client->window);
+	ret |= ft_scatter_diff("-v", server.verify, client->verify);
+	ret |= ft_scatter_diff("-k", server.prefix, client->prefix);
+	if (server.sizes != client->sizes) {
+		FT_ERR("-S differs between the server and the client");
+		ret |= -FI_EINVAL;
+	}
+
+	return ret ? -FI_EINVAL : 0;
+}
+
+static void ft_scatter_set_direction(const char *source, const char *layout)
+{
+	snprintf(ft_scatter.direction, sizeof(ft_scatter.direction), "%s->%s",
+		 source, layout);
+}
+
+static int ft_scatter_exchange_server(const char *source)
+{
+	struct ft_scatter_layout_msg layout = {
+		.nsegs = ft_scatter.nsegs,
+		.seg_len = ft_scatter.seg_len,
+	};
+	struct ft_scatter_params_msg client;
+	int32_t status;
+	int ret;
+
+	ret = ft_scatter_layout_name(layout.names);
+	if (ret)
+		return ret;
+
+	if (source)
+		snprintf(layout.source, sizeof(layout.source), "%s", source);
+
+	ret = ft_sock_send(oob_sock, &layout, sizeof(layout));
+	if (ret)
+		return ret;
+
+	ret = ft_sock_recv(oob_sock, &client, sizeof(client));
+	if (ret)
+		return ret;
+
+	client.source[FT_SCATTER_NAME_LEN - 1] = '\0';
+	status = ft_scatter_compare(&client);
+	ret = ft_sock_send(oob_sock, &status, sizeof(status));
+	if (ret || status)
+		return ret ? ret : status;
+
+	snprintf(ft_scatter.source, sizeof(ft_scatter.source), "%s",
+		 client.source);
+	ft_scatter_set_direction(client.source, layout.names);
+	return 0;
+}
+
+static int ft_scatter_exchange_client(void)
+{
+	struct ft_scatter_layout_msg layout;
+	struct ft_scatter_params_msg params;
+	int32_t status;
+	int ret;
+
+	ret = ft_sock_recv(oob_sock, &layout, sizeof(layout));
+	if (ret) {
+		FT_PRINTERR("receiving the layout from the server", ret);
+		return ret;
+	}
+
+	if (!layout.nsegs) {
+		FT_ERR("the server sent an empty layout");
+		return -FI_EINVAL;
+	}
+
+	ft_scatter_get_params(&params);
+	layout.source[FT_SCATTER_NAME_LEN - 1] = '\0';
+	ret = ft_scatter_pick_source(layout.source, &params);
+	if (ret)
+		return ret;
+
+	ret = ft_sock_send(oob_sock, &params, sizeof(params));
+	if (ret)
+		return ret;
+
+	ret = ft_sock_recv(oob_sock, &status, sizeof(status));
+	if (ret)
+		return ret;
+
+	if (status) {
+		FT_ERR("the server rejected the options of this client");
+		return -FI_EINVAL;
+	}
+
+	layout.names[FT_SCATTER_NAME_LEN - 1] = '\0';
+	ft_scatter.nsegs = layout.nsegs;
+	ft_scatter.seg_len = layout.seg_len;
+	snprintf(ft_scatter.source, sizeof(ft_scatter.source), "%s",
+		 params.source);
+	ft_scatter_set_direction(params.source, layout.names);
+	return 0;
+}
+
+int ft_scatter_exchange(const char *source)
+{
+	return opts.dst_addr ? ft_scatter_exchange_client() :
+			       ft_scatter_exchange_server(source);
 }
 
 int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
@@ -4387,6 +5050,20 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	ssize_t ret, err = 0;
 
 	for (rcvd = 0; rcvd < len; ) {
+		if (timeout >= 0) {
+			ret = ft_poll_fd(fd, timeout * 1000);
+			if (ret == -FI_EAGAIN) {
+				FT_ERR("%ds timeout expired waiting for the "
+				       "peer", timeout);
+				err = -FI_ETIMEDOUT;
+				break;
+			}
+			if (ret) {
+				err = ret;
+				break;
+			}
+		}
+
 		ret = ofi_recv_socket(fd, ((char *) msg) + rcvd, len - rcvd, 0);
 		if (ret > 0) {
 			rcvd += ret;

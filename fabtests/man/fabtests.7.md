@@ -54,6 +54,17 @@ features of libfabric.
 *fi_dgram*
 : A basic datagram endpoint example.
 
+*fi_hmem_scatter_recvv*
+: Receives messages into a list of buffers that can mix host and device
+  memory with fi_recvv, and checks that every byte lands in the right buffer
+  at the right offset.  The client sends and the server receives.  By default
+  it runs a set of tests, each a source memory sending to a list of receive
+  buffers, such as host memory sending to a host, device, host list.  A side
+  without -D skips the tests that use device memory on it, so with no options
+  only the tests that use host memory run.  Use -y to run a single test and
+  -z to set the size of each receive buffer.  The test needs a provider that
+  supports FI_HMEM.
+
 *fi_inj_complete*
 : Sends messages using the FI_INJECT_COMPLETE operation flag.
 
@@ -181,6 +192,15 @@ given provider or system may achieve.
 *fi_rdm_cntr_pingpong*
 : Message transfer latency test for reliable-datagram (RDM) endpoints
   that uses counters as the completion mechanism.
+
+*fi_rdm_hmem_scatter_bw*
+: Message transfer bandwidth test for reliable-datagram (RDM) endpoints that
+  receives each message into a list of buffers that can mix host and device
+  memory with fi_recvv.  The client sends from host memory, or from device
+  memory when given -D.  The server's receive buffers are given with -y, and
+  default to two host buffers.  The direction of the transfer, such as
+  ZE:D0->H,ZE:D0, is printed above the results.  The test needs a provider
+  that supports FI_HMEM.
 
 *fi_rdm_pingpong*
 : Message transfer latency test for reliable-datagram (RDM) endpoints.
@@ -450,6 +470,12 @@ the list available for that test.
 : Allocate data buffers on the specified device, rather than in host
   memory.  Valid options are ze, cuda and synapseai.
 
+*-i <device_num>*
+: Use the specified device of the -D interface, instead of device 0.
+  fi_rdm_hmem_scatter_bw uses it on the client, as the device it sends from,
+  and ignores it on the server.  fi_hmem_scatter_recvv uses it on the side it
+  is given to, and a server given -y ignores it.
+
 *-a <address vector name>*
 : The name of a shared address vector.  This option only applies to tests
   that support shared address vectors.
@@ -547,6 +573,18 @@ the list available for that test.
   an IP address.  If given, the src_addr and dst_addr address parameters will
   be passed through to the libfabric provider for interpretation.
 
+*-y <layout>*
+: For fi_hmem_scatter_recvv and fi_rdm_hmem_scatter_bw, the server's receive
+  buffers as a comma separated list.  Each entry is h for host memory or d<N>
+  for device N of the -D interface, for example h,d0,h.  A device entry needs
+  -D.  fi_hmem_scatter_recvv runs only this test instead of its default tests.
+  fi_rdm_hmem_scatter_bw uses h,h when it is not given.  The client ignores it.
+
+*-z <bytes>*
+: For fi_hmem_scatter_recvv and fi_rdm_hmem_scatter_bw, the size of each of
+  the server's receive buffers.  By default the message size is divided
+  across the buffers.  The client ignores it.
+
 # USAGE EXAMPLES
 
 ## A simple example
@@ -567,6 +605,19 @@ This will run "fi_rdm_atomic" for all atomic operations with
 	- 1000 iterations
 	- 1024 bytes message size
 	- server node as 123.168.0.123
+
+## Run the scatter receive tests
+
+	run server: fi_hmem_scatter_recvv -D ze
+	run client: fi_hmem_scatter_recvv -D ze <server_addr>
+
+This runs every default test, with device 0 of the ze interface on both
+sides.  Without -D on both sides only the tests that use host memory run.
+
+	run server: fi_rdm_hmem_scatter_bw -D ze -y h,d0,h
+	run client: fi_rdm_hmem_scatter_bw -D ze <server_addr>
+
+This measures a device sender into a host, device, host receive list.
 
 ## Run multinode tests
 

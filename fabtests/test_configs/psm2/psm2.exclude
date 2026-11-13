@@ -16,3 +16,6 @@ shared_av
 rdm_cntr_pingpong
 multi_recv
 rdm_multi_client
+
+# FI_HMEM not supported
+hmem_scatter

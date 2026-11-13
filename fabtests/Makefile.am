@@ -41,6 +41,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_atomic \
 	functional/fi_rdm_stress \
 	functional/fi_multi_recv \
+	functional/fi_hmem_scatter_recvv \
 	functional/fi_flood \
 	functional/fi_rdm_multi_client \
 	functional/fi_loopback \
@@ -54,6 +55,7 @@ bin_PROGRAMS = \
 	benchmarks/fi_rdm_tagged_pingpong \
 	benchmarks/fi_rdm_bw \
 	benchmarks/fi_rdm_bw_mt \
+	benchmarks/fi_rdm_hmem_scatter_bw \
 	benchmarks/fi_rdm_tagged_bw \
 	benchmarks/fi_rma_tx_completion \
 	unit/fi_eq_test \
@@ -382,6 +384,10 @@ functional_fi_multi_recv_SOURCES = \
 	functional/multi_recv.c
 functional_fi_multi_recv_LDADD = libfabtests.la
 
+functional_fi_hmem_scatter_recvv_SOURCES = \
+	functional/hmem_scatter_recvv.c
+functional_fi_hmem_scatter_recvv_LDADD = libfabtests.la
+
 functional_fi_flood_SOURCES = \
 	 functional/flood.c
 functional_fi_flood_LDADD = libfabtests.la
@@ -448,6 +454,11 @@ benchmarks_fi_rdm_bw_mt_SOURCES = \
 	benchmarks/rdm_bw_mt.c \
 	$(benchmarks_srcs)
 benchmarks_fi_rdm_bw_mt_LDADD = libfabtests.la
+
+benchmarks_fi_rdm_hmem_scatter_bw_SOURCES = \
+	benchmarks/rdm_hmem_scatter.c \
+	$(benchmarks_srcs)
+benchmarks_fi_rdm_hmem_scatter_bw_LDADD = libfabtests.la
 
 benchmarks_fi_rma_tx_completion_SOURCES = \
 	benchmarks/rma_tx_completion.c \
@@ -669,6 +680,7 @@ dummy_man_pages = \
 	man/man1/fi_cq_data.1 \
 	man/man1/fi_dgram.1 \
 	man/man1/fi_directed_recv.1 \
+	man/man1/fi_hmem_scatter_recvv.1 \
 	man/man1/fi_inj_complete.1 \
 	man/man1/fi_mcast.1 \
 	man/man1/fi_msg.1 \
@@ -696,6 +708,7 @@ dummy_man_pages = \
 	man/man1/fi_msg_bw.1 \
 	man/man1/fi_msg_pingpong.1 \
 	man/man1/fi_rdm_cntr_pingpong.1 \
+	man/man1/fi_rdm_hmem_scatter_bw.1 \
 	man/man1/fi_rdm_pingpong.1 \
 	man/man1/fi_rdm_tagged_bw.1 \
 	man/man1/fi_rdm_tagged_pingpong.1 \

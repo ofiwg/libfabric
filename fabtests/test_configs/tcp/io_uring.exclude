@@ -38,6 +38,9 @@ multi_recv -e msg
 # collective offload not supported
 fi_multinode_coll
 
+# FI_HMEM not supported
+hmem_scatter
+
 # IO URING related tests
 
 # fi_eq_test failes fi_eq_read of empty EQ with -4
