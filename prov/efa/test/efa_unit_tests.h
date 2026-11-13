@@ -899,6 +899,7 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 void test_proto_select_eager_for_small_msg(void **state);
 void test_proto_select_eager_for_zero_len_msg(void **state);
 void test_proto_eager_construct_pkes_single_pke(void **state);
+void test_proto_eager_construct_pkes_host_then_device_iov(void **state);
 void test_proto_zero_copy_construct_pkes(void **state);
 void test_proto_zero_copy_reselected_after_handshake(void **state);
 void test_proto_eager_queue_dequeue_handshake(void **state);

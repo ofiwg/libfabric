@@ -206,6 +206,118 @@ void test_proto_eager_construct_pkes_single_pke(void **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
+#define EFA_UNIT_TEST_MAX_HMEM_COPIES 4
+static int g_hmem_copy_count;
+static enum fi_hmem_iface g_hmem_copy_iface[EFA_UNIT_TEST_MAX_HMEM_COPIES];
+static size_t g_hmem_copy_size[EFA_UNIT_TEST_MAX_HMEM_COPIES];
+
+/* Record the interface of each copy; the "device" buffer is host memory. */
+static ssize_t efa_mock_ofi_copy_from_hmem_iov_record_iface(
+	void *dest, size_t size, enum fi_hmem_iface hmem_iface, uint64_t device,
+	const struct iovec *hmem_iov, size_t hmem_iov_count,
+	uint64_t hmem_iov_offset)
+{
+	if (g_hmem_copy_count < EFA_UNIT_TEST_MAX_HMEM_COPIES) {
+		g_hmem_copy_iface[g_hmem_copy_count] = hmem_iface;
+		g_hmem_copy_size[g_hmem_copy_count] = size;
+	}
+	g_hmem_copy_count++;
+	return __real_ofi_copy_from_hmem_iov(dest, size, FI_HMEM_SYSTEM, 0,
+					     hmem_iov, hmem_iov_count,
+					     hmem_iov_offset);
+}
+
+/**
+ * @brief A send of a host buffer followed by a device buffer, whose packet
+ * data spans both, copies each buffer into the packet with the interface of
+ * its own memory registration instead of the first buffer's.
+ */
+void test_proto_eager_construct_pkes_host_then_device_iov(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_mr dev_mr;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov[2];
+	void *desc[2];
+	char head[24], payload[256];
+	size_t hdr_size;
+	int err;
+	uint64_t pke_send_flags;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	memset(head, 0x5a, sizeof(head));
+	memset(payload, 0xa5, sizeof(payload));
+	/* a registration of device memory, as far as the copy can tell */
+	memset(&dev_mr, 0, sizeof(dev_mr));
+	dev_mr.efa_mr.iface = FI_HMEM_CUDA;
+
+	g_hmem_copy_count = 0;
+	g_efa_unit_test_mocks.ofi_copy_from_hmem_iov =
+		efa_mock_ofi_copy_from_hmem_iov_record_iface;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	iov[0].iov_base = head;
+	iov[0].iov_len = sizeof(head);
+	iov[1].iov_base = payload;
+	iov[1].iov_len = sizeof(payload);
+	desc[0] = NULL;
+	desc[1] = &dev_mr;
+	efa_unit_test_construct_msg(&msg, iov, 2, peer_addr, NULL, 0, desc);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+	efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0, txe,
+					   &proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_eager);
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = efa_rdm_proto_eager.construct_tx_pkes(ep, txe, &pke_send_flags);
+	assert_int_equal(err, 0);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	pke = ep->send_pkt_entry_vec[0];
+	assert_non_null(pke);
+
+	/* one copy per buffer, each with its own interface */
+	assert_int_equal(g_hmem_copy_count, 2);
+	assert_int_equal(g_hmem_copy_iface[0], FI_HMEM_SYSTEM);
+	assert_int_equal(g_hmem_copy_size[0], sizeof(head));
+	assert_int_equal(g_hmem_copy_iface[1], FI_HMEM_CUDA);
+	assert_int_equal(g_hmem_copy_size[1], sizeof(payload));
+
+	/* both buffers are in wiredata, after the request header */
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pke);
+	assert_ptr_equal(pke->payload, pke->wiredata + hdr_size);
+	assert_int_equal(pke->payload_size, sizeof(head) + sizeof(payload));
+	assert_memory_equal(pke->wiredata + hdr_size, head, sizeof(head));
+	assert_memory_equal(pke->wiredata + hdr_size + sizeof(head), payload,
+			    sizeof(payload));
+
+	efa_rdm_pke_release_tx(pke);
+	efa_rdm_txe_release(txe);
+}
+
 /**
  * @brief Test that eager send completion callback releases TXE and PKE
  * for non-DC messages.
