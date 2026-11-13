@@ -17992,7 +17992,7 @@ FI_OPT_SHARED_MEMORY_PERMITTED setopt call will fail with -FI_EINVAL.
 
 *FI_EFA_SHM_AV_SIZE*
 :   Defines the maximum number of entries in SHM provider's address
-    vector.
+    vector. (Default: number of online CPUs, minimum 256)
 
 *FI_EFA_SHM_MAX_MEDIUM_SIZE*
 :   Defines the switch point between small/medium message and large
