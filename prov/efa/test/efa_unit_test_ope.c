@@ -9,6 +9,7 @@
 #include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longread.h"
+#include "rdm/protocols/efa_rdm_proto_medium.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -5821,8 +5822,8 @@ void test_efa_rdm_pke_handle_tx_error_dc_medium_emits_skip_on_zero_delivery(void
 }
 
 /**
- * @brief Medium sender-side: peer does not advertise the feature ->
- *        no PEER_ERROR_PKT. The user still sees a TX CQ error.
+ * @brief An ordinary medium TX error releases its final in-flight sibling.
+ *        The eager test below covers unsupported-peer gating.
  */
 void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void **state)
 {
@@ -5830,6 +5831,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
 	struct fi_cq_err_entry err_entry;
 	size_t outstanding_before;
 	int ret;
@@ -5844,6 +5846,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->msg_id = 0x99;
+	txe->proto = &efa_rdm_proto_medium;
 
 	peer = txe->peer;
 	/* Handshake received but feature bit NOT advertised -- old peer. */
@@ -5852,6 +5855,10 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
+	txe->req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT;
+	pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, peer);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_MEDIUM_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
@@ -5861,7 +5868,8 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	assert_int_equal(err_entry.prov_errno,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* No PEER_ERROR_PKT posted. */
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
 }
 

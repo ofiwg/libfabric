@@ -348,6 +348,19 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
+	if (pkt_entry->ope->type == EFA_RDM_TXE &&
+	    pkt_entry->ope->state == EFA_RDM_OPE_ERR &&
+	    pkt_entry->ope->proto &&
+	    pkt_entry->ope->proto->release_txe_on_error &&
+	    !(pkt_entry->ope->internal_flags &
+	      EFA_RDM_OPE_PEER_ABORT_PENDING)) {
+		struct efa_rdm_ope *txe = pkt_entry->ope;
+
+		efa_rdm_pke_release_tx(pkt_entry);
+		efa_rdm_txe_release_error_if_drained(txe);
+		return;
+	}
+
 	assert(pkt_entry->handle_pke);
 	pkt_entry->handle_pke(pkt_entry);
 }
