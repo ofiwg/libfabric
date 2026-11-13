@@ -38,6 +38,19 @@
 /* Compiler optimization hints for performance-critical functions */
 #define EFA_ALWAYS_INLINE __attribute__((always_inline)) static inline
 
+/*
+ * The address of a CQ entry, and whether the device has written it on this
+ * pass of the ring. Macros rather than functions so that a caller marked
+ * EFA_TSAN_IGNORE_RACY_READS can use them: GCC refuses to inline an
+ * instrumented always-inline function into an uninstrumented one.
+ */
+#define EFA_DEVICE_CQ_GET_CQE(cqd, entry)                                      \
+	((struct efa_io_cdesc_common *) ((cqd)->buffer +                       \
+					 (entry) * (cqd)->entry_size))
+
+#define EFA_CQE_IS_PENDING(cqe_common, phase)                                  \
+	(EFA_GET(&(cqe_common)->flags, EFA_IO_CDESC_COMMON_PHASE) == (phase))
+
 /**
  * @brief Ring the receive queue doorbell to notify hardware of new entries
  *
@@ -312,7 +325,7 @@ EFA_ALWAYS_INLINE enum ibv_wc_status to_ibv_status(enum efa_errno status)
 EFA_ALWAYS_INLINE int efa_cqe_is_pending(struct efa_io_cdesc_common *cqe_common,
 				     int phase)
 {
-	return EFA_GET(&cqe_common->flags, EFA_IO_CDESC_COMMON_PHASE) == phase;
+	return EFA_CQE_IS_PENDING(cqe_common, phase);
 }
 
 /**
@@ -328,8 +341,7 @@ EFA_ALWAYS_INLINE int efa_cqe_is_pending(struct efa_io_cdesc_common *cqe_common,
 EFA_ALWAYS_INLINE struct efa_io_cdesc_common *
 efa_device_cq_get_cqe(struct efa_data_path_direct_cq *cqd, int entry)
 {
-	return (struct efa_io_cdesc_common *)(cqd->buffer +
-					      (entry * cqd->entry_size));
+	return EFA_DEVICE_CQ_GET_CQE(cqd, entry);
 }
 
 /**

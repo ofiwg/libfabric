@@ -151,16 +151,10 @@ efa_data_path_direct_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq)
 	struct efa_data_path_direct_cq *dpd = &ibv_cq->data_path_direct;
 	uint16_t consumed_cnt = __atomic_load_n(&dpd->consumed_cnt, __ATOMIC_RELAXED);
 	int phase = __atomic_load_n(&dpd->phase, __ATOMIC_RELAXED);
-	struct efa_io_cdesc_common *cqe;
+	struct efa_io_cdesc_common *cqe =
+		EFA_DEVICE_CQ_GET_CQE(dpd, consumed_cnt & dpd->qmask);
 
-	/*
-	 * Open-coded efa_device_cq_get_cqe()/efa_cqe_is_pending(): they are
-	 * always-inline, and GCC refuses to inline an instrumented function
-	 * into one marked EFA_TSAN_IGNORE_RACY_READS.
-	 */
-	cqe = (struct efa_io_cdesc_common *)
-		(dpd->buffer + (consumed_cnt & dpd->qmask) * dpd->entry_size);
-	return EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_PHASE) != phase;
+	return !EFA_CQE_IS_PENDING(cqe, phase);
 }
 
 /**
