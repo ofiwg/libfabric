@@ -2946,10 +2946,13 @@ void test_proto_runtread_construct_pkes_carries_read_iov(void **state)
 
 	/* The REQ packets carry exactly the runt, no more and no less. */
 	assert_int_equal(expected_offset, txe->bytes_runt);
+	proto->handle_tx_pkes_posted(ep, txe);
+	assert_int_equal(peer->num_runt_bytes_in_flight, txe->bytes_runt);
 
 	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 	efa_rdm_txe_release(txe);
+	assert_int_equal(peer->num_runt_bytes_in_flight, 0);
 	efa_unit_test_buff_destruct(&send_buff);
 }
 

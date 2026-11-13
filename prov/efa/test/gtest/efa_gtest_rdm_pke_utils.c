@@ -1073,8 +1073,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		peer->num_runt_bytes_in_flight; /* refreshed below if alive */
 
 	/* The runtread completion handler will assert that this is >= payload_size */
-	if (family == EFA_TEST_RTM_FAM_RUNTREAD)
+	if (family == EFA_TEST_RTM_FAM_RUNTREAD) {
 		peer->num_runt_bytes_in_flight = payload_size;
+		txe->bytes_runt_in_flight = payload_size;
+	}
 
 	switch (family) {
 	case EFA_TEST_RTM_FAM_EAGER:

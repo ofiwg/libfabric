@@ -62,6 +62,7 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	/* set flags */
 	txe->fi_flags = efa_rdm_msg_get_tx_flags(ep, fi_flags);
 	txe->bytes_runt = 0;
+	txe->bytes_runt_in_flight = 0;
 	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
 
@@ -129,6 +130,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 
 	/* txe->peer would be NULL for local read operation */
 	if (txe->peer) {
+		assert(txe->peer->num_runt_bytes_in_flight >=
+		       txe->bytes_runt_in_flight);
+		txe->peer->num_runt_bytes_in_flight -=
+			txe->bytes_runt_in_flight;
 		dlist_remove(&txe->peer_entry);
 	}
 
