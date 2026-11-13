@@ -284,6 +284,18 @@ def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_seman
                                completion_type="queue", fabric="efa",
                                additional_env=additional_env)
 
+# fi_unmap_mem does not request FI_MR_LOCAL, remaps its send buffer between
+# sends and checks the data, so it fails if the MR cache reuses the
+# registration of an unmapped buffer. It does not take the -U and -v options
+# that efa_run_client_server_test adds.
+@pytest.mark.pr_ci
+@pytest.mark.functional
+def test_rdm_unmap_mem(cmdline_args):
+    from common import ClientServerTest
+    test = ClientServerTest(cmdline_args, "fi_unmap_mem -e rdm",
+                            iteration_type="short", fabric="efa")
+    test.run()
+
 
 @pytest.mark.pr_ci
 @pytest.mark.functional
