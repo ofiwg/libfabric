@@ -99,6 +99,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	direct_qp->sq.wq.phase = 0;                   /* Initialize phase bit */
 	direct_qp->sq.wq.db = sq_attr.doorbell;       /* Hardware doorbell */
 	direct_qp->sq.num_wqe_pending = 0;            /* No pending WQEs initially */
+	direct_qp->sq.num_uncommitted_wqes = 0;        /* No uncommitted WQEs initially */
 
 	direct_qp->sq.wq.wqe_size = sq_attr.entry_size; /* Entry size */
 	direct_qp->sq.wq.max_batch = sq_attr.max_batch;
