@@ -777,6 +777,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (txe->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	efa_rdm_txe_release_read_msg_slot(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -793,8 +798,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				EFA_RDM_LONGCTS_RTW_PKT;
 		txe->proto = &efa_rdm_proto_longcts_write;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		if (OFI_UNLIKELY(err) &&
+		    !efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+			efa_rdm_txe_release_error_if_drained(txe);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS %s "
@@ -809,8 +815,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_proto_get_tagged(txe);
 		txe->proto = &efa_rdm_proto_longcts;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		if (OFI_UNLIKELY(err) &&
+		    !efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+			efa_rdm_txe_release_error_if_drained(txe);
 	}
 }
 
