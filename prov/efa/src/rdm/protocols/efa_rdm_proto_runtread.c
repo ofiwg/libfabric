@@ -55,6 +55,10 @@ efa_rdm_proto_runtread_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
 		ret = efa_rdm_pke_post_remote_read_or_nack(
 			pkt_entry->ep, pkt_entry, rxe);
 		if (ret) {
+			EFA_WARN(FI_LOG_CQ,
+				 "runt read: posting RDMA read failed, msg_id %u, total_len %" PRIu64 ", bytes_runt %" PRIu64 ": %s\n",
+				 rxe->msg_id, rxe->total_len, rxe->bytes_runt,
+				 fi_strerror((int) -ret));
 			efa_rdm_pke_release_rx_list(pkt_entry);
 			return ret;
 		}

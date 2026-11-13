@@ -265,8 +265,12 @@ void efa_rdm_proto_longcts_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	ep = pkt_entry->ep;
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
 	if (!rxe) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
@@ -283,7 +287,13 @@ void efa_rdm_proto_longcts_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	err = efa_rdm_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RMA address verify failed for pkt type %d from peer %s: %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str,
+				 fi_strerror(-err));
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -296,8 +306,9 @@ void efa_rdm_proto_longcts_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 
 	rxe->bytes_received += pkt_entry->payload_size;
 	if (pkt_entry->payload_size >= rxe->total_len) {
-		EFA_WARN(FI_LOG_CQ, "Long RTM size mismatch! payload_size: %ld total_len: %ld\n",
-			 pkt_entry->payload_size, rxe->total_len);
+		EFA_WARN(FI_LOG_CQ, "Long RTM size mismatch! payload_size: %ld total_len: %ld, pkt type %d, send_id %u\n",
+			 pkt_entry->payload_size, rxe->total_len,
+			 efa_rdm_pkt_type_of(pkt_entry), tx_id);
 		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld\n", rxe->iov[0].iov_base,
 			rxe->iov[0].iov_len);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
@@ -323,7 +334,8 @@ void efa_rdm_proto_longcts_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	rxe->tx_id = tx_id;
 	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_CTS_PKT);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "Cannot post CTS packet\n");
+		EFA_WARN(FI_LOG_CQ, "Cannot post CTS packet, tx_id %u: %s\n",
+			 tx_id, fi_strerror(-err));
 		efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 		efa_rdm_rxe_release(rxe);
 	}

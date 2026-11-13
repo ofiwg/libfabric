@@ -192,18 +192,30 @@ static ssize_t efa_rdm_proto_atomic_construct_tx_pke(struct efa_rdm_ope *txe){
 	assert(txe->atomic_proto->handle_send_completion);
 
 	err = txe->atomic_proto->get_req_data_size(txe, &req_data_size);
-	if (OFI_UNLIKELY(err))
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "atomic op %u: cannot get the request data size: %s\n",
+			 txe->op, fi_strerror((int) -err));
 		return err;
+	}
 	max_payload = efa_rdm_proto_max_req_data_capacity(
 		ep, efa_rdm_pkt_type_get_req_hdr_size(
 			    txe->req_pkt_type,
 			    efa_rdm_proto_req_header_flags(txe->peer, txe->fi_flags),
 			    txe->rma_iov_count));
-	if (OFI_UNLIKELY(req_data_size > max_payload))
+	if (OFI_UNLIKELY(req_data_size > max_payload)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "atomic op %u: request data size %zu exceeds the %zu bytes one pkt type %u can carry\n",
+			 txe->op, req_data_size, max_payload, txe->req_pkt_type);
 		return -FI_EMSGSIZE;
+	}
 	if (txe->op != ofi_op_atomic &&
-	    OFI_UNLIKELY(txe->total_len > ep->mtu_size - sizeof(struct efa_rdm_atomrsp_hdr)))
+	    OFI_UNLIKELY(txe->total_len > ep->mtu_size - sizeof(struct efa_rdm_atomrsp_hdr))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "atomic op %u: response size %" PRIu64 " exceeds what one ATOMRSP can carry\n",
+			 txe->op, txe->total_len);
 		return -FI_EMSGSIZE;
+	}
 
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
 		return -FI_EAGAIN;
@@ -245,6 +257,11 @@ ssize_t efa_rdm_proto_atomic_post(struct efa_rdm_ope *txe)
 	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
 				ep->send_pkt_entry_vec_size, 0);
 	if (OFI_UNLIKELY(err)) {
+		if (err != -FI_EAGAIN)
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "atomic op %u: posting pkt type %u failed, msg_id %u: %s\n",
+				 txe->op, txe->req_pkt_type, txe->msg_id,
+				 fi_strerror((int) -err));
 		/* No completion follows a failed post, so release the unposted
 		 * PKE here. */
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[0]);

@@ -188,8 +188,12 @@ void efa_rdm_proto_longread_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	ep = pkt_entry->ep;
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
 	if (!rxe) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
@@ -204,7 +208,13 @@ void efa_rdm_proto_longread_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 					    rtw_hdr->rma_iov_count,
 					    FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RMA address verify failed for pkt type %d from peer %s: %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str,
+				 fi_strerror(-err));
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -229,7 +239,9 @@ void efa_rdm_proto_longread_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
-			"RDMA post read or queue failed.\n");
+			"RDMA post read or queue failed, tx_id %u, rma_iov_count %zu, total_len %" PRIu64 ": %s\n",
+			rxe->tx_id, rxe->rma_iov_count, rxe->total_len,
+			fi_strerror(-err));
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RDMA_READ_POST);
 		efa_rdm_rxe_release(rxe);
 	}

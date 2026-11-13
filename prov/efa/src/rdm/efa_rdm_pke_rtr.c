@@ -95,8 +95,12 @@ void efa_rdm_pke_handle_rtr_recv(struct efa_rdm_pke *pkt_entry)
 
 	rxe = efa_rdm_pke_alloc_rtr_rxe(pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RX entries exhausted while handling pkt type %d from peer %s.\n",
+				 efa_rdm_pkt_type_of(pkt_entry), peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
@@ -106,7 +110,14 @@ void efa_rdm_pke_handle_rtr_recv(struct efa_rdm_pke *pkt_entry)
 	err = efa_rdm_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
 					FI_REMOTE_READ, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "RMA address verification failed!\n");
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "RMA address verification failed for pkt type %d, recv_id %u, msg_length %" PRIu64 ", rma_iov_count %u from peer %s: %s\n",
+				 rtr_hdr->type, rtr_hdr->recv_id, rtr_hdr->msg_length,
+				 rtr_hdr->rma_iov_count, peer_addr_str,
+				 fi_strerror(-err));
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);
@@ -120,7 +131,13 @@ void efa_rdm_pke_handle_rtr_recv(struct efa_rdm_pke *pkt_entry)
 
 	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READRSP_PKT);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
+		{
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "Posting of readrsp packet failed! err=%ld, pkt type %d, recv_id %u, msg_length %" PRIu64 ", peer %s\n",
+				 err, rtr_hdr->type, rtr_hdr->recv_id,
+				 rtr_hdr->msg_length, peer_addr_str);
+		}
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PKT_POST);
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(pkt_entry);

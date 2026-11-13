@@ -85,8 +85,10 @@ void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_ep_live_txe_from_id(pkt_entry->ep, receipt_hdr->tx_id);
 
 	if (!txe) {
+		EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
 		EFA_INFO(FI_LOG_CQ,
-			 "RECEIPT names a send that is no longer live, dropping it\n");
+			 "RECEIPT tx_id %u msg_id %u from peer %s names a send that is no longer live, dropping it\n",
+			 receipt_hdr->tx_id, receipt_hdr->msg_id, peer_addr_str);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -116,8 +118,10 @@ void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_ep_live_txe_from_id(pkt_entry->ep, eor_hdr->send_id);
 
 	if (!txe) {
+		EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
 		EFA_INFO(FI_LOG_CQ,
-			 "EOR names a send that is no longer live, dropping it\n");
+			 "EOR send_id %u recv_id %u from peer %s names a send that is no longer live, dropping it\n",
+			 eor_hdr->send_id, eor_hdr->recv_id, peer_addr_str);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}

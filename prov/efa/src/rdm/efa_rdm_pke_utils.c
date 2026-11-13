@@ -166,8 +166,11 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 
 		if (bytes_copied[i] != MIN(pkt_entry->payload_size,
 					   rxe->cq_entry.len - segment_offset)) {
-			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-				bytes_copied[i]);
+			EFA_WARN(FI_LOG_CQ,
+				 "wrong size! bytes_copied: %ld, pkt type %d, msg_id %u, seg_offset %zu, payload_size %zu, cq len %zu\n",
+				 bytes_copied[i], efa_rdm_pkt_type_of(pkt_entry),
+				 rxe->msg_id, segment_offset,
+				 pkt_entry->payload_size, rxe->cq_entry.len);
 
 			/* Release ALL pkt entries to avoid leak */
 			for (j = 0; j < ep->queued_copy_num; ++j) {
@@ -560,8 +563,10 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	efa_rdm_tracepoint(rx_pke_blocking_copy_payload_end, (size_t) pke, pke->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 
 	if (bytes_copied != MIN(pke->payload_size, ope->cq_entry.len - segment_offset)) {
-		EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-			bytes_copied);
+		EFA_WARN(FI_LOG_CQ,
+			 "wrong size! bytes_copied: %ld, pkt type %d, msg_id %u, seg_offset %zu, payload_size %zu, cq len %zu\n",
+			 bytes_copied, efa_rdm_pkt_type_of(pke), ope->msg_id,
+			 segment_offset, pke->payload_size, ope->cq_entry.len);
 		/* This copy layer owns pke on error; release it here (caller must not). */
 		efa_rdm_pke_release_rx(pke);
 		return -FI_EIO;

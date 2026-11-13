@@ -374,4 +374,10 @@ static inline void efa_rdm_peer_move_to_explicit(struct efa_rdm_peer *peer,
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
 	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, efa_rdm_peer_fi_addr(peer), peer_addr_str, &(size_t){sizeof peer_addr_str});
 
+/* Address string of a packet entry's peer; empty if the packet has no peer. */
+#define EFA_RDM_GET_PKE_PEER_ADDR_STR(pke, peer_addr_str) \
+	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
+	if ((pke)->peer) \
+		efa_base_ep_get_peer_raw_addr_str(&(pke)->ep->base_ep, efa_rdm_peer_fi_addr((pke)->peer), peer_addr_str, &(size_t){sizeof peer_addr_str});
+
 #endif /* EFA_RDM_PEER_H */
