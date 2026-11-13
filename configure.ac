@@ -1122,9 +1122,9 @@ AC_ARG_WITH([default-monitor],
 	[AS_CASE([$with_default_monitor],
 		[memhooks],[default_monitor=memhooks],
 		[uffd],[default_monitor=uffd],
-		[kdreg2],[default_monitor=kdreg2]
+		[kdreg2],[default_monitor=kdreg2],
 		[disabled], [default_monitor=disabled],
-		[AC_MSG_ERROR([Unknown monitor specified: $with_default_monitor.  Choices are memhooks, uffd, or disabled.])])
+		[AC_MSG_ERROR([Unknown monitor specified: $with_default_monitor.  Choices are memhooks, uffd, kdreg2, or disabled.])])
 	 AS_CASE([$default_monitor],
 		[memhooks], [AS_IF([test "$enable_memhooks" != "1"], [bad_default=1])],
 		[uffd], [AS_IF([test "$enable_uffd" != "1"], [bad_default=1])],
