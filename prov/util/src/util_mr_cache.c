@@ -89,6 +89,15 @@ static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 	return 0;
 }
 
+/* A registration made with relaxed ordering cannot serve a request without
+ * it, or the reverse.
+ */
+static bool util_mr_flags_match(const struct ofi_mr_info *info,
+				const struct ofi_mr_entry *entry)
+{
+	return !((info->flags ^ entry->info.flags) & FI_MR_RELAXED_ORDERING);
+}
+
 static struct ofi_mr_entry *util_mr_entry_alloc(struct ofi_mr_cache *cache)
 {
 	struct ofi_mr_entry *entry;
@@ -425,6 +434,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 
 		if (*entry &&
 		    ofi_iov_within(&info->iov, &(*entry)->info.iov) &&
+		    util_mr_flags_match(info, *entry) &&
 		    monitor->valid(monitor, info, *entry))
 			goto hit;
 
@@ -518,7 +528,12 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	cache->uncached_size += attr->mr_iov->iov_len;
 	pthread_mutex_unlock(&mm_lock);
 
+	/* Entries are reused from a pool, so do not leave stale fields. */
+	memset(&(*entry)->info, 0, sizeof((*entry)->info));
 	ofi_mr_info_get_iov_from_mr_attr(&(*entry)->info, attr, flags);
+	(*entry)->info.iface = attr->iface;
+	(*entry)->info.device = attr->device.reserved;
+	(*entry)->info.flags = flags & FI_MR_RELAXED_ORDERING;
 	(*entry)->use_cnt = 1;
 	(*entry)->node = NULL;
 
