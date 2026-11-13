@@ -1228,6 +1228,78 @@ void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state)
 	efa_rdm_txe_release(reused);
 }
 
+static void efa_unit_test_recv_late_longcts_pkt(struct efa_rdm_ep *ep,
+					      uint32_t tx_id, bool ctsdata)
+{
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ctsdata_hdr *hdr;
+
+	if (!ctsdata) {
+		efa_rdm_proto_longcts_handle_cts_recv(
+			efa_unit_test_alloc_cts_pke(ep, tx_id, 4096));
+		return;
+	}
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	hdr = efa_rdm_pke_get_ctsdata_hdr(pke);
+	*hdr = (struct efa_rdm_ctsdata_hdr) {
+		.type = EFA_RDM_CTSDATA_PKT,
+		.version = EFA_RDM_PROTOCOL_VERSION,
+		.recv_id = tx_id,
+	};
+	efa_rdm_proto_longcts_handle_ctsdata_recv(pke);
+}
+
+void test_efa_rdm_pke_handle_late_longcts_drains_txe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_proto proto = { .release_txe_on_error = true };
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *rxe;
+	uint32_t tx_id, rx_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	for (int i = 0; i < 2; i++) {
+		bool ctsdata = i == 1;
+
+		txe = efa_unit_test_alloc_txe(resource,
+					      ctsdata ? ofi_op_read_req : ofi_op_msg);
+		assert_non_null(txe);
+		tx_id = txe->tx_id;
+		txe->proto = &proto;
+		txe->state = EFA_RDM_OPE_ERR;
+		txe->efa_outstanding_tx_ops = 1;
+
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, tx_id), txe);
+
+		txe->efa_outstanding_tx_ops = 0;
+		txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, tx_id), txe);
+
+		txe->internal_flags &= ~EFA_RDM_OPE_PEER_ABORT_PENDING;
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_null(efa_rdm_ep_live_txe_from_id(ep, tx_id));
+
+		rxe = efa_unit_test_alloc_rxe(resource,
+					      ctsdata ? ofi_op_msg : ofi_op_read_rsp);
+		assert_non_null(rxe);
+		rx_id = rxe->rx_id;
+		rxe->proto = &proto;
+		rxe->state = EFA_RDM_OPE_ERR;
+
+		efa_unit_test_recv_late_longcts_pkt(ep, rx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_ope_from_id(ep, rx_id), rxe);
+		efa_rdm_rxe_release(rxe);
+	}
+}
+
 /**
  * @brief Verify efa_rdm_pke_init_peer_error_for_ope() emits msg_id ONLY
  *        (no op_id hint) for a medium txe.

@@ -595,6 +595,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_unlearned_op_id(void **state);
 void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state);
 void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state);
+void test_efa_rdm_pke_handle_late_longcts_drains_txe(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state);

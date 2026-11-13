@@ -84,6 +84,13 @@ void efa_rdm_proto_longcts_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (ope->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		if (ope->type == EFA_RDM_TXE)
+			efa_rdm_txe_release_error_if_drained(ope);
+		return;
+	}
+
 	ope->rx_id = cts_pkt->recv_id;
 	ope->window = cts_pkt->recv_length;
 	assert(ope->window > 0);
@@ -102,8 +109,15 @@ void efa_rdm_proto_longcts_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ctsdata_hdr *data_hdr =
 		efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
 	struct efa_rdm_ope *ope =
-		efa_rdm_ep_get_ope_from_ope_id(pkt_entry->ep, data_hdr->recv_id);
+		efa_rdm_ep_live_ope_from_id(pkt_entry->ep, data_hdr->recv_id);
 	size_t hdr_size = sizeof (struct efa_rdm_ctsdata_hdr);
+
+	if (!ope || ope->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		if (ope && ope->type == EFA_RDM_TXE)
+			efa_rdm_txe_release_error_if_drained(ope);
+		return;
+	}
 
 	if (data_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
 		hdr_size += sizeof (struct efa_rdm_ctsdata_opt_connid_hdr);
@@ -153,6 +167,7 @@ static bool efa_rdm_proto_longcts_set_bounds(struct efa_rdm_proto *proto,
 EFA_RDM_PROTO_DEF(longcts,
 	.wants_mr = true,
 	.set_bounds = &efa_rdm_proto_longcts_set_bounds,
+	.release_txe_on_error = true,
 	.can_use_protocol = &efa_rdm_proto_longcts_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_construct_req_pke,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

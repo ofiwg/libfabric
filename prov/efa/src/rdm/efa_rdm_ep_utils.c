@@ -1290,9 +1290,18 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 					 ope->type, ope->op, efa_rdm_ope_get_ope_id(ope),
 					 ope->bytes_sent,
 					 ope->total_len, fi_strerror(-ret));
-				efa_rdm_txe_handle_error(ope, -ret, ret == -FI_ECANCELED ?
-							 FI_EFA_ERR_PEER_ABORTED :
-							 FI_EFA_ERR_PKT_POST);
+				if (ope->type == EFA_RDM_TXE) {
+					int prov_errno = ret == -FI_ECANCELED ?
+						FI_EFA_ERR_PEER_ABORTED : FI_EFA_ERR_PKT_POST;
+					bool peer_abort_owns_txe =
+						efa_rdm_txe_handle_error(ope, -ret, prov_errno);
+
+					if (!peer_abort_owns_txe)
+						efa_rdm_txe_release_error_if_drained(ope);
+				} else {
+					efa_rdm_rxe_handle_error(
+						ope, -ret, FI_EFA_ERR_PKT_POST);
+				}
 			}
 		}
 	}
