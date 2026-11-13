@@ -107,6 +107,24 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 #  define EFA_TSAN_IGNORE_RACY_READS
 #endif
 
+/*
+ * Tell ThreadSanitizer about ordering that goes through the device. A posting
+ * thread writes state the completion path later reads (the operation context
+ * and the work queue's wrid slot); the device orders those reads after the
+ * writes via the CQE, which TSan cannot see. EFA_TSAN_RELEASE after the post
+ * writes and EFA_TSAN_ACQUIRE before the completion reads give TSan that
+ * happens-before edge. Expand to nothing unless built with --enable-tsan.
+ */
+#if defined(ENABLE_TSAN) && ENABLE_TSAN
+void __tsan_acquire(void *addr);
+void __tsan_release(void *addr);
+#  define EFA_TSAN_ACQUIRE(addr)	__tsan_acquire((void *) (addr))
+#  define EFA_TSAN_RELEASE(addr)	__tsan_release((void *) (addr))
+#else
+#  define EFA_TSAN_ACQUIRE(addr)	do { } while (0)
+#  define EFA_TSAN_RELEASE(addr)	do { } while (0)
+#endif
+
 /* EFA lock symbols (one per lock role), declared outermost lock first. */
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_domain_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_av_lock_sym,

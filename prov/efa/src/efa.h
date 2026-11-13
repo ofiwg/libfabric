@@ -485,6 +485,8 @@ static inline struct efa_context *efa_fill_context(const void *context,
 	struct efa_context *efa_context = (struct efa_context *) context;
 	efa_context->completion_flags = completion_flags;
 	efa_context->addr = addr;
+	/* The completion path reads these after the device returns the CQE */
+	EFA_TSAN_RELEASE(efa_context);
 
 	return efa_context;
 }

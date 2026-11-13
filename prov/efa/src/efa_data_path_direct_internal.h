@@ -38,6 +38,19 @@
 /* Compiler optimization hints for performance-critical functions */
 #define EFA_ALWAYS_INLINE __attribute__((always_inline)) static inline
 
+/*
+ * The address of a CQ entry, and whether the device has written it on this
+ * pass of the ring. Macros rather than functions so that a caller marked
+ * EFA_TSAN_IGNORE_RACY_READS can use them: GCC refuses to inline an
+ * instrumented always-inline function into an uninstrumented one.
+ */
+#define EFA_DEVICE_CQ_GET_CQE(cqd, entry)                                      \
+	((struct efa_io_cdesc_common *) ((cqd)->buffer +                       \
+					 (entry) * (cqd)->entry_size))
+
+#define EFA_CQE_IS_PENDING(cqe_common, phase)                                  \
+	(EFA_GET(&(cqe_common)->flags, EFA_IO_CDESC_COMMON_PHASE) == (phase))
+
 /**
  * @brief Ring the receive queue doorbell to notify hardware of new entries
  *
@@ -132,6 +145,8 @@ efa_wq_get_next_wrid_idx(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 	/* Get the next wrid index to be used from the free index pool */
 	wrid_idx = wq->wrid_idx_pool[wq->wrid_idx_pool_next];
 	wq->wrid[wrid_idx] = wr_id;
+	/* Read by the completion path once the device returns the CQE */
+	EFA_TSAN_RELEASE(&wq->wrid[wrid_idx]);
 
 	/* Advance to next pool entry - will never overflow as validate
 	 * succeeded */
@@ -238,6 +253,7 @@ efa_get_sq_comp_wrid(struct efa_data_path_direct_wq *wq,
 		return efa_get_req_id_64(tcqe);
 	}
 
+	EFA_TSAN_ACQUIRE(&wq->wrid[cqe->req_id & ~wq->gen_mask]);
 	return wq->wrid[cqe->req_id & ~wq->gen_mask];
 }
 
@@ -309,7 +325,7 @@ EFA_ALWAYS_INLINE enum ibv_wc_status to_ibv_status(enum efa_errno status)
 EFA_ALWAYS_INLINE int efa_cqe_is_pending(struct efa_io_cdesc_common *cqe_common,
 				     int phase)
 {
-	return EFA_GET(&cqe_common->flags, EFA_IO_CDESC_COMMON_PHASE) == phase;
+	return EFA_CQE_IS_PENDING(cqe_common, phase);
 }
 
 /**
@@ -325,8 +341,7 @@ EFA_ALWAYS_INLINE int efa_cqe_is_pending(struct efa_io_cdesc_common *cqe_common,
 EFA_ALWAYS_INLINE struct efa_io_cdesc_common *
 efa_device_cq_get_cqe(struct efa_data_path_direct_cq *cqd, int entry)
 {
-	return (struct efa_io_cdesc_common *)(cqd->buffer +
-					      (entry * cqd->entry_size));
+	return EFA_DEVICE_CQ_GET_CQE(cqd, entry);
 }
 
 /**
@@ -420,6 +435,7 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 			ibv_cq->data_path_direct.cur_wq =
 				&qp->data_path_direct_qp.rq.wq;
 			wrid_idx = cqe->req_id & ~ibv_cq->data_path_direct.cur_wq->gen_mask;
+			EFA_TSAN_ACQUIRE(&ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx]);
 			ibvcqx->wr_id = ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
 		}
 		ibvcqx->status = to_ibv_status(cqe->status);

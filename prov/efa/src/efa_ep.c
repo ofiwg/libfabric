@@ -275,6 +275,16 @@ static int efa_ep_close(fid_t fid)
 
 	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
 
+	/*
+	 * Destroy the QP before closing the util_ep. The QP's work queues use
+	 * util_ep.lock as their wqlock, and while the QP is still in the QP
+	 * table another thread reading a shared CQ can process one of its
+	 * completions and take that lock. efa_base_ep_destruct_qp() removes
+	 * the QP from the table and drains the CQ under the CQ locks, so no
+	 * reader can reach the work queues once it returns.
+	 */
+	efa_base_ep_destruct_qp(ep);
+
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cntr. */
 	efa_base_ep_close_util_ep(ep);
@@ -309,6 +319,7 @@ static int efa_ep_close(fid_t fid)
  */
 static int efa_ep_commit_cq_context_mode(struct efa_base_ep *ep,
 					 struct efa_ibv_cq *ibv_cq)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 	if (ibv_cq->context_mode != UNASSIGNED &&
 	    ibv_cq->context_mode != ep->context_mode) {
@@ -361,7 +372,14 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EOPNOTSUPP;
 		}
 
+		/*
+		 * Endpoints may be bound to a shared CQ from several threads at
+		 * once, and CQ reads use the mode, so check and commit it under
+		 * the CQ's ep_list_lock.
+		 */
+		EFA_GENLOCK_LOCK(&cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		ret = efa_ep_commit_cq_context_mode(ep, &cq->ibv_cq);
+		EFA_GENLOCK_UNLOCK(&cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		if (ret)
 			return ret;
 

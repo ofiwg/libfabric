@@ -83,6 +83,7 @@ void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *ent
 			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode) : direct_ope->context->completion_flags;
 		} else {
 			entry->op_context = (void *)(uintptr_t)ibv_cqx->wr_id;
+			EFA_TSAN_ACQUIRE(entry->op_context);
 			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *)(uintptr_t)ibv_cqx->wr_id)->completion_flags;
 		}
 	} else {
@@ -110,7 +111,16 @@ static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
 	}
 }
 
-static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_base_ep *base_ep, fi_addr_t addr, int prov_errno, struct fi_cq_err_entry *buf)
+/**
+ * @brief Fill in @buf's err_data with the provider's error message
+ *
+ * @param app_err_entry true when @buf is the application's entry from
+ *                      fi_cq_readerr(). Its err_data_size member only exists
+ *                      from API 1.5, so for an older API the provider must
+ *                      return a pointer to its own buffer instead. False when
+ *                      the caller supplied err_data itself.
+ */
+static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_base_ep *base_ep, fi_addr_t addr, int prov_errno, struct fi_cq_err_entry *buf, bool app_err_entry)
 {
 	char *err_msg;
 	int err = to_fi_errno(prov_errno);
@@ -119,7 +129,9 @@ static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_bas
 			fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
 	efa_show_help(prov_errno);
 
-	if (buf->err_data_size > 0 && FI_VERSION_GE(efa_cq->util_cq.domain->fabric->fabric_fid.api_version, FI_VERSION(1, 5))) {
+	if (buf->err_data_size > 0 &&
+	    (!app_err_entry ||
+	     FI_VERSION_GE(efa_cq->util_cq.domain->fabric->fabric_fid.api_version, FI_VERSION(1, 5)))) {
 		err_msg = (char *)buf->err_data;
 	} else {
 		err_msg = efa_cq->err_buf;
@@ -133,7 +145,7 @@ static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_bas
 	}
 }
 
-static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq_err_entry *buf)
+static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq_err_entry *buf, bool app_err_entry)
 {
 	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
@@ -160,6 +172,7 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 		} else if (efa_env.track_mr) {
 			addr = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context->addr;
 		} else {
+			EFA_TSAN_ACQUIRE(ibv_cq->ibv_cq_ex->wr_id);
 			addr = ((struct efa_context *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->addr;
 		}
 		break;
@@ -172,7 +185,7 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 		break;
 	}
 
-	efa_cq_write_error_data(efa_cq, base_ep, addr, prov_errno, buf);
+	efa_cq_write_error_data(efa_cq, base_ep, addr, prov_errno, buf, app_err_entry);
 }
 
 /**
@@ -199,15 +212,20 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 				int prov_errno)
 {
 	struct fi_cq_err_entry err_entry;
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH];
 	int write_cq_err;
 	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, ibv_cq);
 
 	memset(&err_entry, 0, sizeof(err_entry));
-	/* This will use efa_cq->err_buf (because we set
-	 * err_entry->err_data_size as 0) to store the err_data which will be
-	 * copied to util_cq in the subsequent ofi_cq_write_error
+	/*
+	 * Build the error data in a local buffer, not efa_cq->err_buf: that
+	 * buffer may still be in use as the err_data an earlier fi_cq_readerr
+	 * returned, and this path can run on another thread (e.g. the CQ drain
+	 * in fi_close). ofi_cq_write_error copies err_data into the queued entry.
 	 */
-	efa_cq_fill_err_entry(cq, &err_entry);
+	err_entry.err_data = err_msg;
+	err_entry.err_data_size = sizeof(err_msg);
+	efa_cq_fill_err_entry(cq, &err_entry, false);
 
 	if (efa_env.track_mr && cq->ibv_cq_ex->wr_id)
 		efa_direct_ope_release(base_ep,
@@ -939,7 +957,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	 * when hitting a wc error (status != 0).
 	 */
 	assert(ibv_cq->ibv_cq_ex->status);
-	efa_cq_fill_err_entry(ibv_cq, buf);
+	efa_cq_fill_err_entry(ibv_cq, buf, true);
 
 	efa_cq_direct_ope_release(efa_cq, ibv_cq);
 
