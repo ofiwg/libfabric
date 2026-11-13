@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+format:
+  line_width: 80
+  tab_size: 2
+  use_tabchars: false
+  line_ending: unix
+  dangle_parens: true
+  dangle_align: prefix
+  max_prefix_chars: 8
+  max_subgroups_hwrap: 2
+  max_pargs_hwrap: 4
+  max_rows_cmdline: 2
+  command_case: unchanged
+  keyword_case: upper
+  autosort: false
+markup:
+  # Reflow explanatory prose, but preserve license blocks and SPDX lines.
+  enable_markup: true
+  first_comment_is_literal: true
+  literal_comment_pattern: '^\s*SPDX-License-Identifier:'
+encode:
+  input_encoding: utf-8
+  output_encoding: utf-8
+  emit_byteorder_mark: false
+parse:
+  additional_commands:
+    # Keep this registry in sync with the declarations: cmake/format.py checks
+    # positional arguments and every cmake_parse_arguments keyword and flag.
+    libfabric_add_provider:
+      pargs: '*'
+      flags: [LINUX_ONLY, X86_64_ONLY, HOOK]
+      kwargs:
+        NAME: 1
+        SOURCES: '*'
+        HEADERS: '*'
+        INCLUDE_DIRS: '*'
+        COMPILE_DEFINITIONS: '*'
+        COMPILE_OPTIONS: '*'
+        LINK_LIBRARIES: '*'
+        DEPENDS: '*'
+    libfabric_package_dependency:
+      pargs: 2
+      kwargs:
+        FIND_ARGS: '*'
+        PC: '*'
+        LIBRARIES: '*'
+    fabtests_add_test:
+      pargs: '*'
+      kwargs:
+        NAME: 1
+        CATEGORY: 1
+        SOURCES: '*'
+        EXTRA_LIBS: '*'
+    libfabric_configure_target:
+      pargs: 1
+    libfabric_configure_instrumentation:
+      pargs: 1
+    _libfabric_find_dependencies:
+      pargs: 0
+    configure:
+      pargs: '+'
+    run:
+      pargs: '*'
+    # CMake commands missing from cmake-format 0.6.13's parser database.
+    target_link_options:
+      pargs: 1
+      flags: [BEFORE]
+      kwargs:
+        PRIVATE: '*'
+        PUBLIC: '*'
+        INTERFACE: '*'
+    endforeach:
+      pargs: '?'
+    # Supplied by configure_package_config_file's @PACKAGE_INIT@ expansion.
+    check_required_components:
+      pargs: 1
