@@ -1264,8 +1264,19 @@ These OFI runtime parameters apply only to the RDM endpoint.
   larger than this switch point will be transferred with large message protocol.
   NOTE: This parameter is now deprecated.
 
+*FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE*
+: The inclusive maximum message size eligible for the inter EFA eager protocol.
+  `FI_INJECT` operations ignore this selection bound but remain limited by the
+  endpoint's advertised inject size. Non-`FI_INJECT` sends above this bound can
+  fail with `FI_EOPNOTSUPP` when no later protocol is eligible. (Default:
+  unlimited).
+
 *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*
-: The maximum size for inter EFA messages to be sent by using medium message protocol. Messages which can fit in one packet will be sent as eager message. Messages whose sizes are smaller than this value will be sent using medium message protocol. Other messages will be sent using CTS based long message protocol.
+: The inclusive maximum message size eligible for the inter EFA medium message
+  protocol. One-packet messages within `FI_EFA_INTER_MAX_EAGER_MESSAGE_SIZE`
+  use eager; other messages up to this size may use medium. (Default: 65536 for
+  system memory and HMEM without peer-to-peer support; medium is disabled and
+  this parameter is ignored for HMEM with peer-to-peer support.)
 
 *FI_EFA_FORK_SAFE*
 : Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
@@ -1279,20 +1290,31 @@ CUDA memory with gdrcopy when the data is staged through internal bounce
 buffers. Larger message sizes use cudaMemcpy. (Default 32768).
 
 *FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
-: The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
+: The minimum message size eligible for the inter EFA read protocol when RDMA
+  read is supported. (Default: 1048576 for system memory; interface-specific
+  for HMEM with peer-to-peer support.)
+
+*FI_EFA_INTER_MAX_EAGER_WRITE_SIZE*
+: The inclusive maximum emulated write size eligible for the inter EFA eager
+  write protocol. `FI_INJECT` ignores this bound but remains limited by the
+  endpoint's advertised inject size. Non-`FI_INJECT` emulated writes above this
+  bound can fail with `FI_EOPNOTSUPP` when no later protocol is eligible.
+  (Default: unlimited).
 
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
-: The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
+: The minimum emulated inter EFA write size eligible for the read-write protocol
+  when RDMA read is enabled and supported by both endpoints. Device RDMA write
+  takes precedence when available. (Default: 65536 for system memory;
+  interface-specific for HMEM with peer-to-peer support.)
 
 *FI_EFA_RDM_FORCE_SEND_PROTO*
-: Pin RDM send protocol selection to the protocol of this name (`eager`,
-`medium`, ...) instead of the regular protocol selection logic. The named
-protocol is used irrespective of the regular protocol selection logic. This
-environment variable is meant to be used for testing and debugging. If the
-value of the environment variable does not match any of the implemented
-protocols, the send operation will fail. This environment variable does not
-affect protocol selection for emulated RMA operations.
-(Default: unset, i.e. use default protocol selection logic.)
+: Force the registered RDM send protocol of this name (`eager`, `medium`, ...),
+  short-circuiting the normal protocol selection rules. The protocol's size
+  bounds are ignored, but its other eligibility requirements still apply. If
+  the protocol cannot support an operation, the normal selector returns
+  `-FI_EOPNOTSUPP` instead of falling back. An unknown name leaves the selector
+  with no candidate. This debug option does not affect emulated RMA operations.
+  (Default: unset.)
 
 *FI_EFA_USE_DEVICE_RDMA*
 : Specify whether to require or ignore RDMA features of the EFA device.
