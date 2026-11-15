@@ -843,6 +843,11 @@ static int vrb_nic_affinity_init(void)
 			 vrb_gl_data.nic_affinity_policy);
 	}
 
+	if (vrb_gl_data.nic_affinity_handler && !vrb_gl_data.affinity_device)
+		VRB_WARN(FI_LOG_CORE, "NIC affinity policy '%s' requested but no "
+			 "GPU device provided (FI_VERBS_AFFINITY_DEVICE not set); "
+			 "skipping reordering\n", vrb_gl_data.nic_affinity_policy);
+
 	return FI_SUCCESS;
 }
 
