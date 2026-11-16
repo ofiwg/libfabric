@@ -41,6 +41,7 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_av.c \
 	prov/efa/src/rdm/efa_rdm_domain.c \
 	prov/efa/src/efa_domain.c \
+	prov/efa/src/efa_xpu.c \
 	prov/efa/src/efa_domain_util.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_fabric_util.c \
@@ -118,6 +119,7 @@ _efa_headers = \
 	prov/efa/src/efa_device.h \
 	prov/efa/src/efa_thread_annotations.h \
 	prov/efa/src/efa_domain.h \
+	prov/efa/src/efa_xpu.h \
 	prov/efa/src/efa_domain_util.h \
 	prov/efa/src/efa_fabric_util.h \
 	prov/efa/src/efa_errno.h \
@@ -369,7 +371,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_tclass.cc \
 	prov/efa/test/gtest/efa_gtest_domain_utils.c \
 	prov/efa/test/gtest/efa_gtest_domain.cc \
-	prov/efa/test/gtest/efa_gtest_comp_action.cc
+	prov/efa/test/gtest/efa_gtest_comp_action.cc \
+	prov/efa/test/gtest/efa_gtest_xpu_ctx.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \

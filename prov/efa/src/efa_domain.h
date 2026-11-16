@@ -37,6 +37,8 @@ struct efa_domain {
 	/* info_type is used to distinguish between the rdm, dgram and
 	 * efa-direct paths */
 	enum efa_domain_info_type info_type;
+	/* XPU contexts open on the domain (efa-direct only) */
+	ofi_atomic32_t xpu_ctx_cnt;
 	/* list of enabled efa_base_ep in this domain */
 	struct dlist_entry base_ep_list;
 	/* Bounce buffer for 0-byte inject operations (efa-direct only) */

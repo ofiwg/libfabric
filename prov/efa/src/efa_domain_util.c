@@ -84,6 +84,7 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 		return err;
 
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_ct, 0);
+	ofi_atomic_initialize32(&efa_domain->xpu_ctx_cnt, 0);
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
 
 	efa_domain->ah_map = NULL;
