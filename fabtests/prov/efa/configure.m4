@@ -65,6 +65,13 @@ AC_CHECK_DECL([FI_EFA_WR_HIGH_PPS],
 AM_CONDITIONAL([HAVE_FI_EFA_WR_HIGH_PPS], [test $have_fi_efa_wr_high_pps -eq 1])
 
 dnl EFA GDA support
+
+dnl Oldest efa-dp-direct the GDA tests build against. CI reads this line to
+dnl pick the efa-dp-direct version to build, so keep it a plain assignment.
+efa_dp_direct_min_version=1.1
+efa_dp_direct_min_major=${efa_dp_direct_min_version%%.*}
+efa_dp_direct_min_minor=${efa_dp_direct_min_version#*.}
+
 AC_ARG_ENABLE([efagda],
 	[AS_HELP_STRING([--enable-efagda],
 		[Enable EFA GDA testing])],
@@ -84,12 +91,27 @@ AS_IF([test "x$enable_efagda" = xyes], [
 	AS_IF([test -n "$with_cuda" && test "$with_cuda" != "yes" && test "$with_cuda" != "no"], [
 		CPPFLAGS="-I$with_cuda/include $CPPFLAGS"
 	])
-	CPPFLAGS="-I${srcdir}/prov/efa/src/efagda -I${efa_dp_direct_path}/CUDA/src $CPPFLAGS"
+	dnl The tests use the efa-dp-direct 1.x API from 1.1: the host, common
+	dnl and device directories, the version-dispatched host API and the
+	dnl sq_caps attribute. Older trees and other major versions are not
+	dnl supported.
+	AS_IF([test -f "${efa_dp_direct_path}/CUDA/src/efa_cuda_dp.h"], [
+		AC_MSG_ERROR([efa-dp-direct at ${efa_dp_direct_path} predates 1.0 (it has CUDA/src). EFA GDA tests need efa-dp-direct ${efa_dp_direct_min_major}.x, ${efa_dp_direct_min_version} or later.])
+	])
+	CPPFLAGS="-I${srcdir}/prov/efa/src/efagda -I${efa_dp_direct_path}/CUDA/host -I${efa_dp_direct_path}/CUDA/common $CPPFLAGS"
 	LDFLAGS="-L${efa_dp_direct_path}/CUDA/build -Wl,-rpath=${efa_dp_direct_path}/CUDA/build $LDFLAGS"
 	AC_CHECK_HEADERS([efa_cuda_dp.h], [],
 		[AC_MSG_ERROR([Cannot find efa_cuda_dp.h. Check --with-efa-dp-direct path.])])
-	AC_CHECK_LIB([efacudadp], [efa_cuda_create_cq], [],
-		[AC_MSG_ERROR([Cannot find libefacudadp. Check --with-efa-dp-direct path.])])
+	AC_MSG_CHECKING([for efa-dp-direct ${efa_dp_direct_min_major}.x, ${efa_dp_direct_min_version} or later])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <efa_cuda_dp_version.h>]],
+		[[#if EFA_CUDA_DP_VERSION_MAJOR != $efa_dp_direct_min_major || EFA_CUDA_DP_VERSION_MINOR < $efa_dp_direct_min_minor
+		  #error unsupported efa-dp-direct version
+		  #endif]])],
+		[AC_MSG_RESULT([yes])],
+		[AC_MSG_RESULT([no])
+		 AC_MSG_ERROR([EFA GDA tests need efa-dp-direct ${efa_dp_direct_min_major}.x, ${efa_dp_direct_min_version} or later. Check --with-efa-dp-direct path.])])
+	AC_CHECK_LIB([efacudadp], [efa_cuda_host_context_create], [],
+		[AC_MSG_ERROR([Cannot find libefacudadp. Build it with "make -C <efa-dp-direct>/CUDA" and check --with-efa-dp-direct path.])])
 	AC_DEFINE([HAVE_EFAGDA], [1], [Enable EFA GDA testing])
 	AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_CQ_WITH_EXT_MEM_DMABUF, [], [],
 		[[#include <infiniband/efadv.h>]])
