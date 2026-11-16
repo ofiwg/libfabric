@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "efa.h"
+#include "efa_xpu.h"
 #include "efa_av.h"
 #include "efa_rdm_av.h"
 #include "efa_domain_util.h"
@@ -42,6 +43,7 @@ static struct fi_ops_domain efa_domain_ops_rdm = {
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = efa_rdm_atomic_query,
 	.query_collective = fi_no_query_collective,
+	.xpu_ctx = efa_xpu_ctx_open,
 };
 
 static int efa_rdm_domain_init(struct efa_rdm_domain *rdm_domain, struct fi_info *info)
