@@ -2364,11 +2364,12 @@ static int open_extra_domain(int d)
 	/*
 	 * Mirror ft_alloc_ep_res()'s domain-0 CQ sizing: cq_attr.format was set
 	 * by run() and is shared, but its size is left at domain 0's rx CQ, so
-	 * set it per CQ from this domain's own tx/rx attrs. The test never uses
-	 * shared or counter completions with n_domains > 1 (rejected in main()),
-	 * so a plain tx/rx CQ pair per domain is enough.
+	 * set it per CQ from this domain's own tx/rx attrs. The TX CQ is shared
+	 * by the domain's endpoints, so it holds each of their TX queues. The
+	 * test never uses shared or counter completions with n_domains > 1
+	 * (rejected in main()), so a plain tx/rx CQ pair per domain is enough.
 	 */
-	cq_attr.size = dom->info->tx_attr->size;
+	cq_attr.size = eps_per_domain * dom->info->tx_attr->size;
 	ret = fi_cq_open(dom->domain, &cq_attr, &dom->txcq, &dom->txcq);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
@@ -2523,7 +2524,7 @@ static int size_tx_cq(void)
 	ret = ft_getinfo(hints, &info);
 	if (ret)
 		return ret;
-	opts.tx_cq_size = n_eps * info->tx_attr->size;
+	opts.tx_cq_size = eps_per_domain * info->tx_attr->size;
 	fi_freeinfo(info);
 	return 0;
 }
