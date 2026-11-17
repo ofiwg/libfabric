@@ -197,7 +197,8 @@ vrb_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 		}
 	}
 
-	if (!strcmp(hints->domain_attr->name, VERBS_ANY_FABRIC)) {
+	if (hints->fabric_attr->name &&
+	    !strcmp(hints->fabric_attr->name, VERBS_ANY_FABRIC)) {
 		free(hints->fabric_attr->name);
 		hints->fabric_attr->name = NULL;
 	}
