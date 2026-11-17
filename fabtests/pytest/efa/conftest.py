@@ -499,6 +499,13 @@ def pytest_collection_modifyitems(session, config, items):
                 and item.module.__name__.split(".")[-1] == "test_mr_abort"
                 and callspec.params.get("fabric") == "efa")
 
+    def is_efa_direct_multi_ep_stress(item):
+        # fi_efa_multi_ep_stress always requests FI_RMA, which efa-direct
+        # offers only where the device does the RMA itself.
+        return (bool(server_id and client_id)
+                and item.module.__name__.split(".")[-1] == "test_multi_ep_stress"
+                and item.originalname.startswith("test_multi_ep_stress_efa_direct_"))
+
     def has_device_rma():
         return all(_has_rdma_cached(server_id, client_id,
                                     config.getoption("--binpath"),
@@ -537,6 +544,8 @@ def pytest_collection_modifyitems(session, config, items):
         elif is_efa_mr_abort(item) and not has_device_rma():
             deselected.append(item)
         elif is_efa_mr_abort(item) and uses_cuda_without_p2p(item):
+            deselected.append(item)
+        elif is_efa_direct_multi_ep_stress(item) and not has_device_rma():
             deselected.append(item)
         elif "comp_action" in markers and not have_comp_action:
             deselected.append(item)
