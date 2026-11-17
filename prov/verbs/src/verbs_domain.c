@@ -534,7 +534,7 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	ofi_mutex_lock(&vrb_info_mutex);
 	info = vrb_util_prov.info;
-	for (cur = info; cur; cur = info->next) {
+	for (cur = info; cur; cur = cur->next) {
 		ret = ofi_fabric_init(&vrb_prov, cur->fabric_attr, attr,
 				      &fab->util_fabric, context);
 		if (ret != -FI_ENODATA)
