@@ -13913,6 +13913,41 @@ The follow flag may be specified to any memory registration call.
     instead of an endpoint fi_addr_t (i.e. fi_addr_t return from
     fi_av_insert / fi_av_insertsvc / fi_av_remove).
 
+*FI_MR_RELAXED_ORDERING*
+:   This flag enables the NIC to use the PCIe relaxed ordering (RO)
+    attribute when writing data into the memory region. Memory writes
+    refer to PCIe writes from the NIC to the region, not to transport
+    operations such as RMA writes. All memory writes targeting the
+    region may have RO set. This can modify the data ordering guarantees
+    provided by the transport, as viewed by the application.
+
+Memory writes may result from the following transport operations:
+received RMA writes, received send and tagged send messages, and RMA
+read responses.
+
+When RO is set, the NIC does not keep the order of memory writes to the
+region. This includes write-after-write ordering, if the endpoint
+configuration supports it. It also includes ordering that comes from a
+completion. A data transfer that starts after an earlier operation
+completes can write its data to the region before the data of the
+earlier operation. This can occur when the completion semantic of the
+earlier operation is FI_INJECT_COMPLETE or FI_TRANSMIT_COMPLETE. After
+both operations complete, overlapping bytes in the region can contain
+the data of the earlier operation. Back-to-back memory writes to
+overlapping bytes, or belonging to different messages, may reach memory
+in any order. Additionally, memory write ordering within a single
+message is not guaranteed.
+
+Data visibility, completion semantics, and read-after-write ordering to
+the same memory remain unchanged relative to the transport and endpoint
+configuration.
+
+Without this flag, the ordering of memory writes to the region is
+provider specific. If the endpoint configuration does not require
+write-after-write ordering, a provider can use RO for all memory writes.
+Support for this flag is optional. A provider that does not support RO
+can ignore the flag.
+
 # MEMORY DOMAINS
 
 Memory domains identify the physical separation of memory which may or
@@ -16866,10 +16901,11 @@ host-driven (CPU) accesses to HBM, which take a different path and are
 not ordered against the received data by this mechanism.
 
 This ordering also depends on the memory region being registered with
-strict ordering. Registering the region with
-*FI_EFA_MR_RELAXED_ORDERING* (see PROVIDER SPECIFIC MR FLAGS) removes
-this guarantee, so an application that relies on the above ordering must
-not set that flag on the target region.
+strict ordering. Registering the region with *FI_MR_RELAXED_ORDERING*
+(see [`fi_mr`(3)](fi_mr.3.html)) or *FI_EFA_MR_RELAXED_ORDERING* (see
+PROVIDER SPECIFIC MR FLAGS) removes this guarantee, so an application
+that relies on the above ordering must not set either flag on the target
+region.
 
 # MR ABORTING
 
@@ -17404,7 +17440,9 @@ the `flags` argument of `fi_mr_reg*()`.
     completion of an operation guarantees that subsequent operations to
     the same endpoint appear at the target after it. When
     FI_EFA_MR_RELAXED_ORDERING is specified, that ordering guarantee is
-    lost.
+    lost. This flag is equivalent to the generic
+    *FI_MR_RELAXED_ORDERING* flag (see [`fi_mr`(3)](fi_mr.3.html)),
+    which new applications should use; it is kept for compatibility.
 
 # PROVIDER SPECIFIC OPERATION EXTENSIONS
 
@@ -20990,6 +21028,16 @@ little-endian for use. This limitation is exposed in OFI as well which
 uses the verbs atomic support directly. Use of atomics on Mellanox cards
 on little-endian machines is allowed but users should make note of this
 verbs limitation and do any conversion necessary.
+
+# MEMORY REGISTRATION
+
+The verbs provider supports the *FI_MR_RELAXED_ORDERING* flag of
+`fi_mr_reg*()` (see [`fi_mr`(3)](fi_mr.3.html)) by registering the
+region with `IBV_ACCESS_RELAXED_ORDERING`. The memory registration cache
+only reuses a registration for requests with the same relaxed ordering
+setting. The flag is ignored if libibverbs does not define
+`IBV_ACCESS_RELAXED_ORDERING` or the platform does not support relaxed
+ordering.
 
 # RUNTIME PARAMETERS
 
