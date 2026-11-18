@@ -582,6 +582,8 @@ void test_info_check_hmem_cuda_support_on_api_lt_1_18(void **state)
 	assert_int_equal(err, -FI_ENODATA);
 
 	unsetenv("FI_EFA_USE_DEVICE_RDMA");
+
+	fi_freeinfo(hints);
 }
 
 /**
@@ -612,6 +614,7 @@ void test_info_check_hmem_cuda_support_on_api_ge_1_18(void **state)
 	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
 	fi_freeinfo(info);
+	fi_freeinfo(hints);
 }
 
 void check_no_hmem_support_when_not_requested(char *fabric_name)
