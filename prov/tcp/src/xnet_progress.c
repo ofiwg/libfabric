@@ -1383,6 +1383,17 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		if (sockctx == &pep->pollin_sockctx) {
 			if (cqe->res >= 0)
 				xnet_accept_sock(pep);
+
+			/* The multishot request ended.  It is canceled when
+			 * the PEP is closed, but it can also end while the
+			 * PEP is listening (e.g. on CQ overflow).
+			 */
+			if (!(cqe->flags & IORING_CQE_F_MORE) &&
+			    pep->state == XNET_LISTENING &&
+			    xnet_uring_pollin_add(progress, pep->sock, true,
+						  sockctx))
+				FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+					"cannot re-arm listen poll\n");
 		}
 		/* Must be a cancelation otherwise */
 		break;
