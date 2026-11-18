@@ -1315,3 +1315,247 @@ void test_efa_rdm_rma_writemsg_to_removed_addr(void **state)
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
+
+/*
+ * Tests for the experimental RMA read fast path (FI_EFA_RMA_FAST_PATH,
+ * efa_rdm_rma_try_fast_read() and efa_rdm_cq_process_fast_rma_wc()).
+ */
+
+struct efa_rdm_rma_fast_read_ctx {
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_unit_test_buff buff;
+	fi_addr_t addr;
+	int rma_fast_path_orig;
+	uint32_t vendor_part_id_orig;
+};
+
+/*
+ * Set up an endpoint and a handshaked peer for which a single-segment
+ * host-memory read is eligible for device read, and turn the fast path on.
+ * Mocks efa_qp_post_read() to save the wr_id and return 0.
+ */
+static void efa_rdm_rma_fast_read_setup(struct efa_resource *resource,
+					struct efa_rdm_rma_fast_read_ctx *ctx)
+{
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	ctx->ep = container_of(resource->ep, struct efa_rdm_ep,
+			       base_ep.util_ep.ep_fid);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &ctx->addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	ctx->peer = efa_rdm_ep_get_peer_explicit(ctx->ep, ctx->addr);
+	assert_non_null(ctx->peer);
+	ctx->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	ctx->peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	ctx->peer->p2p_supported = true;
+	/* Match device versions so efa_rdm_interop_rdma_read() returns true */
+	ctx->vendor_part_id_orig = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = 0xEFA1;
+	ctx->peer->device_version = 0xEFA1;
+	ctx->ep->use_device_rdma = true;
+
+	ctx->rma_fast_path_orig = efa_env.rma_fast_path;
+	efa_env.rma_fast_path = 1;
+
+	efa_unit_test_buff_construct(&ctx->buff, resource, 4096);
+
+	g_efa_unit_test_mocks.efa_qp_post_read = &efa_mock_efa_qp_post_read_return_mock;
+}
+
+static void efa_rdm_rma_fast_read_restore(struct efa_rdm_rma_fast_read_ctx *ctx)
+{
+	efa_env.rma_fast_path = ctx->rma_fast_path_orig;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = ctx->vendor_part_id_orig;
+}
+
+static ssize_t efa_rdm_rma_fast_read_post(struct efa_resource *resource,
+					  struct efa_rdm_rma_fast_read_ctx *ctx,
+					  void *context)
+{
+	struct iovec iov = { .iov_base = ctx->buff.buff, .iov_len = ctx->buff.size };
+	struct fi_rma_iov rma_iov = { .addr = 0x87654321, .len = ctx->buff.size, .key = 123456 };
+	struct fi_msg_rma msg = {0};
+	void *desc = fi_mr_desc(ctx->buff.mr);
+
+	efa_unit_test_construct_msg_rma(&msg, &iov, &desc, 1, ctx->addr,
+					&rma_iov, 1, context, 0);
+	return fi_readmsg(resource->ep, &msg, FI_COMPLETION);
+}
+
+/*
+ * Mock the CQ to return the saved fast-path wr_id with the given status.
+ * The opcode is IBV_WC_SEND because that is what the data-path-direct CQ
+ * reports for an RDMA read completion.
+ */
+static void efa_rdm_rma_fast_read_mock_cq(struct efa_rdm_ep *ep, int status)
+{
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status;
+	g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_opcode = &efa_mock_efa_ibv_cq_wc_read_opcode_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_qp_num = &efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock;
+
+	will_return_int(efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status, status);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, ep->base_ep.qp->qp_num);
+	will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_SEND);
+	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
+}
+
+/**
+ * @brief An eligible read is posted with the tagged context as wr_id and no
+ * txe, and its completion reports the application context with
+ * FI_RMA | FI_READ even though the CQE opcode is IBV_WC_SEND.
+ */
+void test_efa_rdm_rma_fast_read_success(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_rma_fast_read_ctx ctx;
+	struct fi_cq_data_entry cq_entry;
+	void *context = (void *) 0x1234560;
+	size_t outstanding;
+	ssize_t ret;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+		return;
+	}
+
+	efa_rdm_rma_fast_read_setup(resource, &ctx);
+	outstanding = ctx.ep->efa_outstanding_tx_ops;
+
+	will_return_int(efa_mock_efa_qp_post_read_return_mock, 0);
+	ret = efa_rdm_rma_fast_read_post(resource, &ctx, context);
+	efa_rdm_rma_fast_read_restore(&ctx);
+	assert_int_equal(ret, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+	assert_true(efa_rdm_cq_wr_id_is_fast_rma((uint64_t) g_ibv_submitted_wr_id_vec[0]));
+	assert_int_equal((uint64_t) g_ibv_submitted_wr_id_vec[0] & ~EFA_RDM_FAST_RMA_WR_ID_BIT,
+			 (uint64_t) context);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_TXE), 0);
+	assert_int_equal(ctx.ep->efa_outstanding_tx_ops, outstanding + 1);
+
+	efa_rdm_rma_fast_read_mock_cq(ctx.ep, IBV_WC_SUCCESS);
+	will_return_int(efa_mock_efa_ibv_cq_next_poll_return_mock, ENOENT);
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, 1);
+	assert_ptr_equal(cq_entry.op_context, context);
+	assert_int_equal(cq_entry.flags, FI_RMA | FI_READ);
+	assert_int_equal(ctx.ep->efa_outstanding_tx_ops, outstanding);
+
+	efa_unit_test_buff_destruct(&ctx.buff);
+}
+
+/**
+ * @brief A failed fast-path read produces an error CQ entry with the
+ * application context and decrements the outstanding TX count.
+ */
+void test_efa_rdm_rma_fast_read_error_completion(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_rma_fast_read_ctx ctx;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	void *context = (void *) 0x1234560;
+	size_t outstanding;
+	ssize_t ret;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+		return;
+	}
+
+	efa_rdm_rma_fast_read_setup(resource, &ctx);
+	outstanding = ctx.ep->efa_outstanding_tx_ops;
+
+	will_return_int(efa_mock_efa_qp_post_read_return_mock, 0);
+	ret = efa_rdm_rma_fast_read_post(resource, &ctx, context);
+	efa_rdm_rma_fast_read_restore(&ctx);
+	assert_int_equal(ret, 0);
+
+	efa_rdm_rma_fast_read_mock_cq(ctx.ep, IBV_WC_GENERAL_ERR);
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock,
+			 EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+	assert_int_equal(ctx.ep->efa_outstanding_tx_ops, outstanding);
+
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_ptr_equal(cq_err_entry.op_context, context);
+	assert_int_equal(cq_err_entry.flags, FI_RMA | FI_READ);
+	assert_int_not_equal(cq_err_entry.err, FI_SUCCESS);
+	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+
+	efa_unit_test_buff_destruct(&ctx.buff);
+}
+
+/**
+ * @brief With FI_EFA_RMA_FAST_PATH off, the same read takes the txe path.
+ */
+void test_efa_rdm_rma_fast_read_disabled_uses_txe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_rma_fast_read_ctx ctx;
+	ssize_t ret;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+		return;
+	}
+
+	efa_rdm_rma_fast_read_setup(resource, &ctx);
+	efa_env.rma_fast_path = 0;
+
+	will_return_int(efa_mock_efa_qp_post_read_return_mock, 0);
+	ret = efa_rdm_rma_fast_read_post(resource, &ctx, (void *) 0x1234560);
+	efa_rdm_rma_fast_read_restore(&ctx);
+	assert_int_equal(ret, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+	assert_false(efa_rdm_cq_wr_id_is_fast_rma((uint64_t) g_ibv_submitted_wr_id_vec[0]));
+	assert_int_equal(efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_TXE), 1);
+
+	efa_unit_test_buff_destruct(&ctx.buff);
+}
+
+/**
+ * @brief When the TX queue is full, the fast path returns -FI_EAGAIN and
+ * posts nothing.
+ */
+void test_efa_rdm_rma_fast_read_tx_queue_full_eagain(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_rma_fast_read_ctx ctx;
+	size_t outstanding_orig;
+	ssize_t ret;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+		return;
+	}
+
+	efa_rdm_rma_fast_read_setup(resource, &ctx);
+	outstanding_orig = ctx.ep->efa_outstanding_tx_ops;
+	ctx.ep->efa_outstanding_tx_ops = ctx.ep->efa_max_outstanding_tx_ops;
+
+	ret = efa_rdm_rma_fast_read_post(resource, &ctx, (void *) 0x1234560);
+	efa_rdm_rma_fast_read_restore(&ctx);
+	assert_int_equal(ret, -FI_EAGAIN);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ctx.ep, EFA_RDM_TXE), 0);
+
+	ctx.ep->efa_outstanding_tx_ops = outstanding_orig;
+	efa_unit_test_buff_destruct(&ctx.buff);
+}

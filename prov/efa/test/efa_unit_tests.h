@@ -822,6 +822,10 @@ void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rd
 void test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match(void **state);
 void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release(void **state);
 void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release(void **state);
+void test_efa_rdm_rma_fast_read_success(void **state);
+void test_efa_rdm_rma_fast_read_error_completion(void **state);
+void test_efa_rdm_rma_fast_read_disabled_uses_txe(void **state);
+void test_efa_rdm_rma_fast_read_tx_queue_full_eagain(void **state);
 void test_efa_rdm_rma_partial_post_retry_no_double_free(void **state);
 void test_efa_rdm_rma_partial_post_retry_no_double_free_read(void **state);
 void test_efa_rdm_rma_inject_write_bumps_tx_counter(void **state);

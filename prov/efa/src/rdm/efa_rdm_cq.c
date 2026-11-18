@@ -762,12 +762,14 @@ static inline struct efa_rdm_ep *efa_rdm_cq_get_rdm_ep(struct efa_ibv_cq *cq, st
  *
  * @param[in]	cq	IBV CQ
  * @param[in]	ep	EFA RDM endpoint that posted the RMA
+ * @param[in]	opcode	opcode the caller already read from the CQE
  * @param[in]	closing	the endpoint is closing: only drop the outstanding count
  * @return	Status code for the work completion
  */
 static inline
 enum ibv_wc_status efa_rdm_cq_process_fast_rma_wc(struct efa_ibv_cq *cq,
 						  struct efa_rdm_ep *ep,
+						  enum ibv_wc_opcode opcode,
 						  bool closing)
 	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
 {
@@ -784,8 +786,8 @@ enum ibv_wc_status efa_rdm_cq_process_fast_rma_wc(struct efa_ibv_cq *cq,
 	struct fi_cq_err_entry err_entry = {0};
 	int prov_errno, ret;
 
-	assert(efa_ibv_cq_wc_read_opcode(cq) != IBV_WC_RECV &&
-	       efa_ibv_cq_wc_read_opcode(cq) != IBV_WC_RECV_RDMA_WITH_IMM);
+	assert(opcode != IBV_WC_RECV && opcode != IBV_WC_RECV_RDMA_WITH_IMM);
+	(void) opcode;
 	assert(ep->efa_outstanding_tx_ops > 0);
 	ep->efa_outstanding_tx_ops--;
 
@@ -840,7 +842,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	int prov_errno;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && efa_rdm_cq_wr_id_is_fast_rma(wr_id))
-		return efa_rdm_cq_process_fast_rma_wc(cq, ep, true);
+		return efa_rdm_cq_process_fast_rma_wc(cq, ep, opcode, true);
 
 	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 
@@ -926,7 +928,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 	int prov_errno;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && efa_rdm_cq_wr_id_is_fast_rma(wr_id))
-		return efa_rdm_cq_process_fast_rma_wc(cq, ep, false);
+		return efa_rdm_cq_process_fast_rma_wc(cq, ep, opcode, false);
 
 	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 
