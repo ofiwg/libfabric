@@ -773,14 +773,19 @@ enum ibv_wc_status efa_rdm_cq_process_fast_rma_wc(struct efa_ibv_cq *cq,
 {
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
-	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
 	void *context = (void *) (uintptr_t) (wr_id & ~EFA_RDM_FAST_RMA_WR_ID_BIT);
-	uint64_t flags = FI_RMA | (opcode == IBV_WC_RDMA_WRITE ? FI_WRITE : FI_READ);
+	/*
+	 * The fast path only posts reads. Do not derive the op from the CQE:
+	 * the data-path-direct CQ reports an RDMA read completion as
+	 * IBV_WC_SEND (only RDMA write is distinguished on the send queue).
+	 */
+	uint64_t flags = FI_RMA | FI_READ;
 	struct util_cq *tx_cq = ep->base_ep.util_ep.tx_cq;
 	struct fi_cq_err_entry err_entry = {0};
 	int prov_errno, ret;
 
-	assert(opcode == IBV_WC_RDMA_READ || opcode == IBV_WC_RDMA_WRITE);
+	assert(efa_ibv_cq_wc_read_opcode(cq) != IBV_WC_RECV &&
+	       efa_ibv_cq_wc_read_opcode(cq) != IBV_WC_RECV_RDMA_WITH_IMM);
 	assert(ep->efa_outstanding_tx_ops > 0);
 	ep->efa_outstanding_tx_ops--;
 
