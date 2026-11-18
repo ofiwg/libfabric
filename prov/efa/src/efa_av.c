@@ -8,9 +8,12 @@
 
 #include <infiniband/efadv.h>
 #include <ofi_enosys.h>
+#include <rdma/fi_xpu.h>
+#include <rdma/fi_xpu_device_efa.h>
 
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_xpu.h"
 
 
 struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
@@ -535,6 +538,63 @@ const char *efa_av_straddr(struct fid_av *av_fid, const void *addr,
 }
 
 
+/**
+ * @brief Look up an AV entry, in the XPU's form when FI_XPU is asked for.
+ *
+ * Without FI_XPU this is fi_av_lookup(), as fi_av(3) requires. With FI_XPU it
+ * returns the entry as a struct efa_xpu_peer - the address handle number and
+ * the remote QP number and QKEY - which an XPU kernel copies into the send
+ * queue descriptors it builds. The XPU context names the device the address
+ * is for, and has to be one of the AV's domain; an EFA peer is the same for
+ * every device, so nothing else about it matters here. *
+ * @return 0, -FI_ETOOSMALL with *len set to the size required, -FI_EINVAL for
+ * a missing argument, an unknown address or an invalid XPU context,
+ * -FI_EBADFLAGS for a flag other than FI_XPU, or -FI_ENODATA for an entry
+ * with no address handle.
+ */
+static int efa_av_lookup2(struct fid_av *av_fid, fi_addr_t fi_addr, void *buf,
+			  size_t *len, uint64_t flags, struct fid_xpu_ctx *ctx)
+{
+	struct efa_av *av;
+	struct efa_av_entry *av_entry;
+	struct efa_ep_addr *ep_addr;
+	struct efa_xpu_peer *peer;
+
+	if (!flags)
+		return efa_av_lookup(av_fid, fi_addr, buf, len);
+	if (flags != FI_XPU)
+		return -FI_EBADFLAGS;
+	av = container_of(av_fid, struct efa_av, util_av.av_fid);
+	if (!buf || !len || !efa_xpu_ctx_of(ctx, av->domain))
+		return -FI_EINVAL;
+
+	if (*len < sizeof(*peer)) {
+		*len = sizeof(*peer);
+		return -FI_ETOOSMALL;
+	}
+	if (fi_addr == FI_ADDR_NOTAVAIL)
+		return -FI_EINVAL;
+
+	/* As in efa_av_lookup(): the entry cannot be removed under the read. */
+	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
+	av_entry = efa_av_addr_to_entry_checked(av, fi_addr);
+	if (!av_entry || !av_entry->ah) {
+		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
+		return av_entry ? -FI_ENODATA : -FI_EINVAL;
+	}
+
+	ep_addr = efa_av_entry_ep_addr(av_entry);
+	peer = (struct efa_xpu_peer *) buf;
+	memset(peer, 0, sizeof(*peer));
+	peer->ahn = av_entry->ah->ahn;
+	peer->remote_qpn = ep_addr->qpn;
+	peer->remote_qkey = ep_addr->qkey;
+	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
+
+	*len = sizeof(*peer);
+	return 0;
+}
+
 static struct fi_ops_av efa_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = efa_av_insert,
@@ -543,7 +603,7 @@ static struct fi_ops_av efa_av_ops = {
 	.remove = efa_av_remove,
 	.lookup = efa_av_lookup,
 	.straddr = efa_av_straddr,
-	.lookup2 = ofi_av_lookup2,
+	.lookup2 = efa_av_lookup2,
 };
 
 

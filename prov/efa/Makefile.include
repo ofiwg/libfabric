@@ -372,7 +372,10 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_domain_utils.c \
 	prov/efa/test/gtest/efa_gtest_domain.cc \
 	prov/efa/test/gtest/efa_gtest_comp_action.cc \
-	prov/efa/test/gtest/efa_gtest_xpu_ctx.cc
+	prov/efa/test/gtest/efa_gtest_xpu_ctx.cc \
+	prov/efa/test/gtest/efa_gtest_xpu_addr_utils.h \
+	prov/efa/test/gtest/efa_gtest_xpu_addr_utils.c \
+	prov/efa/test/gtest/efa_gtest_xpu_addr.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
