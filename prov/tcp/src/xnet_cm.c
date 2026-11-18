@@ -432,6 +432,18 @@ close:
 	ofi_close_socket(sock);
 }
 
+/* Accept the connections queued on a listening socket.
+ *
+ * With epoll, the listening socket is level-triggered: we are called
+ * again while connections remain queued, so accept one per call.
+ *
+ * With io_uring, the listening socket is watched by a multishot POLLIN
+ * request, and wakeups for connections arriving close together are
+ * coalesced into a single completion: accepting only one connection per
+ * completion would leave the others queued on the listening socket,
+ * possibly forever.  The listening socket is non-blocking, so drain the
+ * queue until accept() reports EAGAIN.
+ */
 void xnet_accept_sock(struct xnet_pep *pep)
 {
 	int ret;
@@ -439,18 +451,19 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
 	assert(xnet_progress_locked(pep->progress));
 
-	if (pep->state != XNET_LISTENING)
-		return;
-
-	ret = ofi_sockapi_accept_socket(&pep->progress->sockapi, pep->sock,
-					NULL, 0, NULL);
-	if (ret < 0) {
-		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
-			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"accept error: %d\n", -ret);
+	while (pep->state == XNET_LISTENING) {
+		ret = ofi_sockapi_accept_socket(&pep->progress->sockapi,
+						pep->sock, NULL, 0, NULL);
+		if (ret < 0) {
+			if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
+				FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+					"accept error: %d\n", -ret);
+			}
+			return;
 		}
-		return;
-	}
 
-	xnet_new_conn(pep, ret);
+		xnet_new_conn(pep, ret);
+		if (!xnet_io_uring)
+			return;
+	}
 }
