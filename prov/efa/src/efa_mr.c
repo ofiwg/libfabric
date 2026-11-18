@@ -4,9 +4,12 @@
 #include "config.h"
 #include <ofi_util.h>
 #include "efa.h"
+#include "efa_xpu.h"
 #include "efa_direct_ope.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
+#include <rdma/fi_xpu.h>
+#include <rdma/fi_xpu_device_efa.h>
 #if HAVE_CUDA
 #include <cuda.h>
 #endif
@@ -287,11 +290,54 @@ static int efa_mr_close(fid_t fid)
 	return ret;
 }
 
+/**
+ * @brief The control operations of an EFA MR: FI_GET_MR_XPU_DESC.
+ *
+ * FI_GET_MR_XPU_DESC (fi_mr_get_xpu_desc()) returns the registration as a
+ * struct efa_xpu_desc, its local key, which an XPU kernel copies into the
+ * descriptors it builds. With FI_XPU the XPU context names the device the
+ * descriptor is for, and has to be one of the MR's domain; an EFA key is the
+ * same for every device, so nothing else about it matters here.
+ *
+ * @return 0, -FI_ETOOSMALL with *len set to the size required, -FI_EINVAL for
+ * a missing argument or an invalid XPU context, -FI_EBADFLAGS for a flag other
+ * than FI_XPU, or -FI_ENOSYS for any other command.
+ */
+static int efa_mr_control(struct fid *fid, int command, void *arg)
+{
+	struct fi_mr_xpu_desc *req = (struct fi_mr_xpu_desc *) arg;
+	struct efa_mr *efa_mr;
+	struct efa_xpu_desc *desc;
+
+	if (command != FI_GET_MR_XPU_DESC)
+		return -FI_ENOSYS;
+
+	if (!req || !req->buf || !req->len)
+		return -FI_EINVAL;
+	if (req->flags & ~FI_XPU)
+		return -FI_EBADFLAGS;
+	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+	if ((req->flags & FI_XPU) && !efa_xpu_ctx_of(req->ctx, efa_mr->domain))
+		return -FI_EINVAL;
+
+	if (*req->len < sizeof(*desc)) {
+		*req->len = sizeof(*desc);
+		return -FI_ETOOSMALL;
+	}
+
+	desc = (struct efa_xpu_desc *) req->buf;
+	memset(desc, 0, sizeof(*desc));
+	desc->lkey = efa_mr->lkey;
+
+	*req->len = sizeof(*desc);
+	return 0;
+}
+
 struct fi_ops efa_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_mr_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = efa_mr_control,
 	.ops_open = fi_no_ops_open,
 };
 
