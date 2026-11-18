@@ -6,6 +6,7 @@
 #include <ofi_mem.h>
 #include <ofi_iov.h>
 #include "efa.h"
+#include "efa_data_path_ops.h"
 
 #include "efa_rdm_fabric.h"
 #include "efa_rdm_msg.h"
@@ -14,6 +15,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_cntr.h"
 #include "efa_rdm_tracepoint.h"
+#include "efa_rdm_cq.h"
 
 int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,
@@ -201,6 +203,75 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	return ret;
 }
 
+/**
+ * @brief Post a device RDMA read without a txe or pke (experimental fast path)
+ *
+ * Handles the common case of a single-segment device read to a peer that has
+ * completed the handshake: the read is posted straight to the QP with the
+ * application's context, tagged with EFA_RDM_FAST_RMA_WR_ID_BIT, as its wr_id.
+ * efa_rdm_cq_process_fast_rma_wc() writes the completion. Only the endpoint's
+ * outstanding TX count is kept, so the TX queue limit and endpoint close still
+ * account for these reads.
+ *
+ * @return 0 when posted; -FI_EAGAIN when the TX queue is full; -FI_ENOSYS when
+ * the read is not eligible, and the caller falls back to the txe path.
+ */
+static inline ssize_t efa_rdm_rma_try_fast_read(struct efa_rdm_ep *ep,
+						struct efa_rdm_peer *peer,
+						const struct fi_msg_rma *msg,
+						uint64_t fi_flags)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym)
+{
+	struct efa_mr *efa_mr;
+	struct ibv_sge sge;
+	size_t len, max_len;
+	int use_p2p, err;
+
+	if (msg->iov_count != 1 || msg->rma_iov_count != 1 || !msg->desc || !msg->desc[0])
+		return -FI_ENOSYS;
+
+	if (peer->is_self || ep->msg_prefix_size)
+		return -FI_ENOSYS;
+
+	/* The handshake tells us whether the peer supports device read */
+	if (!ep->homogeneous_peers && !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		return -FI_ENOSYS;
+
+	/* Only when a CQ entry is always written (see efa_rdm_txe_should_update_cq()) */
+	if (ep->base_ep.util_ep.tx_msg_flags != FI_COMPLETION && !(fi_flags & FI_COMPLETION))
+		return -FI_ENOSYS;
+
+	if ((uintptr_t) msg->context & EFA_RDM_FAST_RMA_WR_ID_BIT)
+		return -FI_ENOSYS;
+
+	len = msg->msg_iov[0].iov_len;
+	max_len = MIN(efa_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
+	if (len != msg->rma_iov[0].len || len > max_len)
+		return -FI_ENOSYS;
+
+	efa_mr = msg->desc[0];
+	use_p2p = efa_rdm_ep_use_p2p_for_mr(ep, efa_mr);
+	if (use_p2p <= 0 || !efa_rdm_rma_should_read_using_rdma(ep, peer, use_p2p))
+		return -FI_ENOSYS;
+
+	if (ep->efa_outstanding_tx_ops >= ep->efa_max_outstanding_tx_ops)
+		return -FI_EAGAIN;
+
+	sge.addr = (uint64_t) msg->msg_iov[0].iov_base;
+	sge.length = len;
+	sge.lkey = efa_mr->lkey;
+
+	err = efa_qp_post_read(ep->base_ep.qp, &sge, 1, msg->rma_iov[0].key,
+			       msg->rma_iov[0].addr,
+			       (uintptr_t) msg->context | EFA_RDM_FAST_RMA_WR_ID_BIT,
+			       fi_flags, peer->ah, peer->qpn, peer->qkey);
+	if (OFI_UNLIKELY(err))
+		return (err == ENOMEM) ? -FI_EAGAIN : -err;
+
+	ep->efa_outstanding_tx_ops++;
+	return 0;
+}
+
 ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep,
 				    const struct fi_msg_rma *msg, uint64_t fi_flags,
 				    uint32_t internal_flags)
@@ -232,6 +303,12 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
 		goto out;
+	}
+
+	if (efa_env.rma_fast_path && !internal_flags) {
+		err = efa_rdm_rma_try_fast_read(efa_rdm_ep, peer, msg, fi_flags);
+		if (err != -FI_ENOSYS)
+			goto out;
 	}
 
 	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_read_req, fi_flags, internal_flags);

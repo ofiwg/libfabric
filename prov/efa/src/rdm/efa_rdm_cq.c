@@ -756,6 +756,61 @@ static inline struct efa_rdm_ep *efa_rdm_cq_get_rdm_ep(struct efa_ibv_cq *cq, st
 }
 
 /**
+ * @brief Complete an RMA posted by the fast path (efa_rdm_rma_try_fast_read())
+ *
+ * The wr_id carries the application's op context; there is no txe or pke.
+ *
+ * @param[in]	cq	IBV CQ
+ * @param[in]	ep	EFA RDM endpoint that posted the RMA
+ * @param[in]	closing	the endpoint is closing: only drop the outstanding count
+ * @return	Status code for the work completion
+ */
+static inline
+enum ibv_wc_status efa_rdm_cq_process_fast_rma_wc(struct efa_ibv_cq *cq,
+						  struct efa_rdm_ep *ep,
+						  bool closing)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
+{
+	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
+	enum ibv_wc_status status = cq->ibv_cq_ex->status;
+	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
+	void *context = (void *) (uintptr_t) (wr_id & ~EFA_RDM_FAST_RMA_WR_ID_BIT);
+	uint64_t flags = FI_RMA | (opcode == IBV_WC_RDMA_WRITE ? FI_WRITE : FI_READ);
+	struct util_cq *tx_cq = ep->base_ep.util_ep.tx_cq;
+	struct fi_cq_err_entry err_entry = {0};
+	int prov_errno, ret;
+
+	assert(opcode == IBV_WC_RDMA_READ || opcode == IBV_WC_RDMA_WRITE);
+	assert(ep->efa_outstanding_tx_ops > 0);
+	ep->efa_outstanding_tx_ops--;
+
+	if (closing)
+		return status;
+
+	if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {
+		prov_errno = efa_rdm_cq_process_prov_errno(cq, NULL);
+		err_entry.op_context = context;
+		err_entry.flags = flags;
+		err_entry.err = to_fi_errno(prov_errno);
+		err_entry.prov_errno = prov_errno;
+		efa_rdm_cq_write_error(&ep->base_ep, tx_cq, &err_entry, "fast RMA");
+		efa_cntr_report_error(&ep->base_ep.util_ep, flags);
+		return status;
+	}
+
+	/* TX completions do not report a peer address */
+	if (ep->base_ep.util_ep.caps & FI_SOURCE)
+		ret = ofi_cq_write_src(tx_cq, context, flags, 0, NULL, 0, 0, FI_ADDR_NOTAVAIL);
+	else
+		ret = ofi_cq_write(tx_cq, context, flags, 0, NULL, 0, 0);
+	if (OFI_UNLIKELY(ret))
+		EFA_WARN(FI_LOG_CQ, "Unable to write fast RMA completion: %s\n", fi_strerror(-ret));
+
+	efa_cntr_report_tx_completion(&ep->base_ep.util_ep, flags);
+	return status;
+}
+
+/**
  * @brief Process work completions for a closing endpoint
  *
  * This is a lighter-weight counterpart to #efa_rdm_cq_process_wc(); avoiding
@@ -776,8 +831,13 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
-	struct efa_rdm_pke *pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
+	struct efa_rdm_pke *pkt_entry;
 	int prov_errno;
+
+	if (!efa_cq_wc_is_unsolicited(cq) && efa_rdm_cq_wr_id_is_fast_rma(wr_id))
+		return efa_rdm_cq_process_fast_rma_wc(cq, ep, true);
+
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 
 	/*
 	 * Two locks are required on the completion path:
@@ -856,9 +916,14 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
-	struct efa_rdm_pke *pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
+	struct efa_rdm_pke *pkt_entry;
 
 	int prov_errno;
+
+	if (!efa_cq_wc_is_unsolicited(cq) && efa_rdm_cq_wr_id_is_fast_rma(wr_id))
+		return efa_rdm_cq_process_fast_rma_wc(cq, ep, false);
+
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);

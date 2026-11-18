@@ -43,6 +43,18 @@ void efa_rdm_cq_wait_del_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep);
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
 
+/*
+ * wr_id of an RMA posted by the fast path (efa_rdm_rma_try_fast_read()): the
+ * application's op context with bit 63 set. Packet entries are user-space
+ * pointers, which never have bit 63 set, so the two cannot collide.
+ */
+#define EFA_RDM_FAST_RMA_WR_ID_BIT (1ULL << 63)
+
+static inline bool efa_rdm_cq_wr_id_is_fast_rma(uint64_t wr_id)
+{
+	return wr_id & EFA_RDM_FAST_RMA_WR_ID_BIT;
+}
+
 static inline struct efa_rdm_pke *efa_rdm_cq_get_pke_from_wr_id_solicited(uint64_t wr_id)
 {
 	struct efa_rdm_pke *pkt_entry;

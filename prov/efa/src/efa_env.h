@@ -67,6 +67,11 @@ struct efa_env {
 	enum efa_env_huge_page_setting huge_page_setting;
 	int use_unsolicited_write_recv;
 	/**
+	 * Post eligible device RDMA reads straight to the QP, without a txe or
+	 * pke (see efa_rdm_rma_try_fast_read()). Experimental; off by default.
+	 */
+	int rma_fast_path;
+	/**
 	 * The threshold that EFA provider will refill the internal rx pkt pool.
 	 * When the number of internal rx pkts to post is lower than this threshold,
 	 * the refill will be skipped.

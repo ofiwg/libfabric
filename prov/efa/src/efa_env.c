@@ -38,6 +38,7 @@ struct efa_env efa_env = {
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
+	.rma_fast_path = 0,
 	.internal_rx_refill_threshold = 8,
 	.rdm_txe_pool_size = EFA_RDM_TXE_POOL_SIZE_DEFAULT,
 	.use_data_path_direct = true,
@@ -176,6 +177,7 @@ void efa_env_param_get(void)
 			    &efa_env.efa_max_gdrcopy_from_hmem_size);
 	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
 	fi_param_get_bool(&efa_prov, "use_unsolicited_write_recv", &efa_env.use_unsolicited_write_recv);
+	fi_param_get_bool(&efa_prov, "rma_fast_path", &efa_env.rma_fast_path);
 
 	int use_huge_page;
 	if (fi_param_get_bool(&efa_prov, "use_huge_page", &use_huge_page) ==0) {
@@ -285,6 +287,9 @@ void efa_env_define()
 			"will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.");
 	fi_param_define(&efa_prov, "use_unsolicited_write_recv", FI_PARAM_BOOL,
 			"Use device's unsolicited write recv functionality when it's available. (Default: true)");
+	fi_param_define(&efa_prov, "rma_fast_path", FI_PARAM_BOOL,
+			"Experimental: post single-segment device RDMA reads to a handshaked peer "
+			"directly to the QP, without per-operation txe/pke bookkeeping. (Default: false)");
 	fi_param_define(&efa_prov, "internal_rx_refill_threshold", FI_PARAM_SIZE_T,
 			"The threshold that EFA provider will refill the internal rx pkt pool. (Default: %zu)", efa_env.internal_rx_refill_threshold);
 
