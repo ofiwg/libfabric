@@ -246,6 +246,10 @@ and use raw addresses and keys. The addr and key parameters specify
 the remote memory address and access key respectively. See
 [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
+What fi_xpu_write and fi_xpu_read do at each scope, and their return values,
+including when and how they return -FI_EAGAIN, are described under Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_readmsg and fi_writemsg calls allow the user to specify flags
@@ -326,6 +330,9 @@ fi_writemsg.
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
+
+For the device-side calls fi_xpu_write and fi_xpu_read, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 

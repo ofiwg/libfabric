@@ -388,9 +388,8 @@ generate an efficient jump table rather than a chain of comparisons.
 
 ## Scope
 
-The scope parameter specifies the concurrency of the operation. All threads
-in the scope are required to issue the same operation. This allows the
-implementation to optimize.
+The scope parameter specifies the set of threads that make the call together.
+This allows the implementation to optimize.
 
 | Scope | CUDA | SYCL |
 |-------|------|------|
@@ -398,6 +397,86 @@ implementation to optimize.
 | FI_XPU_SUBGROUP | Warp | Subgroup |
 | FI_XPU_WORK_GROUP | Thread block | Work group |
 | FI_XPU_DEVICE | Device | Device |
+
+FI_XPU_SUBGROUP, FI_XPU_WORK_GROUP and FI_XPU_DEVICE are referred to below as
+group scopes.
+
+At FI_XPU_WORK_ITEM a call is the calling thread's own, with arguments of its
+own: the threads of a subgroup may each post to an endpoint of their own, read
+a completion queue of their own or read a counter of their own. At a group
+scope every thread of the scope reaches the call and passes identical
+arguments, and the call returns the same value in every thread. This holds
+alike for post, completion queue and counter calls. A kernel may make the same
+call from several groups at the same time; each group's call is its own.
+
+A post call is a data transfer call (see Data Transfer Operations below) or a
+work request call that queues or flushes operations (see Work Requests). It
+submits one operation for its scope, which behaves as one call of its host
+counterpart does. At FI_XPU_WORK_ITEM concurrent calls of different threads are
+separate operations: each completes, and fails, as if it had been made alone.
+At a group scope the arguments are those of the whole operation, and memory
+written by the threads of the scope before the call is visible to it, so that
+they can prepare a buffer together and transfer it with one call. Threads that
+each want an operation of their own, such as a write of their own slice of a
+buffer, call at FI_XPU_WORK_ITEM with their own arguments.
+
+A post call returns 0 once its operation has been accepted, and -FI_EAGAIN when
+the provider currently lacks the resources to initiate it, with the meaning
+-FI_EAGAIN has for the host data transfer calls, under the domain's resource
+management (see ERRORS in [`fi_msg`(3)](fi_msg.3.html) and Resource Management
+in [`fi_domain`(3)](fi_domain.3.html)): the operation may be retried once
+resources become available, which may require the application to check for
+completions.
+
+When resources run out while several operations are requested at the same time,
+the provider returns -FI_EAGAIN for the ones it lacks the resources for: if N
+operations are requested at once and the provider has the resources for only M
+of them, where M is less than N, M of the calls succeed and the other N - M
+return -FI_EAGAIN. Which ones succeed is not defined, as with host threads that
+post to one endpoint concurrently.
+
+A kernel can handle -FI_EAGAIN as a host thread does, by reading completions
+between retries until the call succeeds. Where the threads that post are not
+the ones that read completions, the kernel has to let the posting threads know
+when resources have become available. One way to avoid this, where the provider
+supports binding an XPU endpoint to a host completion queue (see EP above), is
+a proxy thread on the host that reads that queue periodically: it frees
+resources independently of the kernel, which then only has to retry its calls.
+
+Message ordering (see msg_order in [`fi_endpoint`(3)](fi_endpoint.3.html)) is
+defined against the order in which operations are submitted. For device-side
+calls that order is defined only between calls the application has ordered:
+calls made by one thread in program order, or calls of different threads that
+the application orders through synchronization of its own. Concurrent calls of
+different threads of a kernel, such as calls that threads reach at the same
+instruction, have no defined submission order between them, so no message
+ordering applies between their operations.
+
+A call made at a scope the provider does not support returns -FI_EOPNOTSUPP
+before submitting anything. Any other failure is reported as a negative fabric
+errno, defined in `rdma/fi_errno.h`.
+
+A completion queue or counter call made by one scope behaves as one call of its
+host counterpart does (see [`fi_cq`(3)](fi_cq.3.html) and
+[`fi_cntr`(3)](fi_cntr.3.html)). At a group scope the buffer of a completion
+queue read is shared by the scope, so it must be memory every thread of the
+scope can access.
+
+## Scope Summary
+
+The following table summarizes what each call does at each scope, as
+described in Scope.
+
+| Call | Scope | Who calls | Arguments | What it does | Return value |
+|---|---|---|---|---|---|
+| Post (fi_xpu_write, fi_xpu_read, fi_xpu_send, fi_xpu_recv, ...) | Work item | One thread | The thread's own | One operation for the thread | The thread's own |
+| Post | Group | Every thread of the scope | Identical in every thread of the scope: those of the whole operation | One operation for the scope; memory the scope's threads wrote before the call is visible to it | The scope's, the same in every thread of that scope; other scopes get their own |
+| fi_xpu_cq_read, fi_xpu_cq_readerr | Work item | One thread | Its own completion queue, buffer and count | Reads up to count completions for the thread into its own buffer | The thread's own |
+| fi_xpu_cq_read, fi_xpu_cq_readerr | Group | Every thread of the scope | Identical in every thread of the scope; the buffer is shared by the scope, and every thread of it can access it | Reads up to count completions for the scope into the one buffer | The scope's, the same in every thread of that scope; other scopes get their own |
+| fi_xpu_cntr_read, fi_xpu_cntr_readerr | Work item | One thread | Its own counter | One read of the counter for the thread | The thread's own |
+| fi_xpu_cntr_read, fi_xpu_cntr_readerr | Group | Every thread of the scope | Identical in every thread of the scope | One read of the counter for the scope | The scope's, the same in every thread of that scope; other scopes get their own |
+| fi_xpu_cntr_wait | Work item | One thread | Its own counter and threshold | One wait for the thread | None |
+| fi_xpu_cntr_wait | Group | Every thread of the scope | Identical in every thread of the scope | One wait for the scope; every thread returns once the threshold is reached | None |
 
 ## Data Transfer Operations
 

@@ -635,6 +635,10 @@ The datatype and op parameters specify the data type and atomic
 operation respectively, matching the host-side enum values. See
 [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
+What fi_xpu_atomic, fi_xpu_fetch_atomic and fi_xpu_compare_atomic do at each
+scope, and their return values, including when and how they return -FI_EAGAIN,
+are described under Scope in [`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls
@@ -701,6 +705,9 @@ with atomic message calls.
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
+
+For the device-side calls fi_xpu_atomic, fi_xpu_fetch_atomic and
+fi_xpu_compare_atomic, see Scope in [`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
