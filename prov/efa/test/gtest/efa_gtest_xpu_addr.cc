@@ -14,17 +14,19 @@ using testing::TestWithParam;
 using testing::Values;
 
 /*
- * The layout is an ABI between libfabric and kernels compiled against this
- * header, and its size is what fi_xpu_ctx_query() reports, so it is pinned:
- * 8 bytes.
+ * The layouts are an ABI between libfabric and kernels compiled against this
+ * header, and their sizes are what fi_xpu_ctx_query() reports, so they are
+ * pinned: both are 8 bytes.
  */
 static_assert(sizeof(struct efa_xpu_peer) == 8, "efa_xpu_peer is 8 bytes");
+static_assert(sizeof(struct efa_xpu_desc) == 8, "efa_xpu_desc is 8 bytes");
 
 /*
- * fi_av_lookup2() hands an XPU kernel the peer it builds work requests for
- * (fi_av(3)). FI_XPU is an efa-direct capability; the efa fabric refuses it
- * (below). The call does not need FI_XPU to have been negotiated. The XPU
- * context has to be one of the AV's domain.
+ * fi_av_lookup2() and fi_mr_get_xpu_desc() hand an XPU kernel the peer and the
+ * key it builds work requests from (fi_av(3), fi_mr(3)). FI_XPU is an
+ * efa-direct capability; the efa fabric refuses it (below). Neither call needs
+ * FI_XPU to have been negotiated. The XPU context has to be one of the AV's or
+ * the MR's domain.
  */
 class EfaXpuAddrTest : public TestWithParam<const char *>
 {
@@ -34,6 +36,8 @@ class EfaXpuAddrTest : public TestWithParam<const char *>
 	struct fid_xpu_ctx *xpu_ctx = nullptr;
 	struct fid_xpu_ctx stand_in = {};
 	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
+	struct fid_mr *mr = nullptr;
+	uint8_t buf[4096] = {};
 	/* Arbitrary, and distinct from anything the provider could default to. */
 	static constexpr uint16_t peer_qpn = 0x4321;
 	static constexpr uint32_t peer_qkey = 0x00abcdef;
@@ -59,10 +63,15 @@ class EfaXpuAddrTest : public TestWithParam<const char *>
 						      peer_qpn, peer_qkey,
 						      &peer_addr),
 			  1);
+		ASSERT_EQ(fi_mr_reg(resource.domain, buf, sizeof(buf),
+				    FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
+			  0);
 	}
 
 	void TearDown() override
 	{
+		if (mr)
+			EXPECT_EQ(fi_close(&mr->fid), 0);
 		if (xpu_ctx && xpu_ctx != &stand_in)
 			EXPECT_EQ(fi_close(&xpu_ctx->fid), 0);
 		efa_test_resource_destruct(&resource);
@@ -136,13 +145,14 @@ TEST_P(EfaXpuAddrTest, lookup2_refuses_bad_arguments)
 		  -FI_EBADFLAGS);
 }
 
-/* A context of another domain is not one the AV can be used with. */
+/* A context of another domain is not one these objects can be used with. */
 TEST_P(EfaXpuAddrTest, a_context_of_another_domain_is_refused)
 {
 	struct efa_resource other = {};
 	struct fid_xpu_ctx *other_ctx = nullptr;
 	struct fi_xpu_attr attr = {};
 	struct efa_xpu_peer peer = {};
+	struct efa_xpu_desc desc = {};
 	size_t len;
 
 	ASSERT_NO_FATAL_FAILURE(efa_test_resource_construct(
@@ -154,9 +164,60 @@ TEST_P(EfaXpuAddrTest, a_context_of_another_domain_is_refused)
 	EXPECT_EQ(fi_av_lookup2(resource.av, peer_addr, &peer, &len, FI_XPU,
 				other_ctx),
 		  -FI_EINVAL);
+	len = sizeof(desc);
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, other_ctx),
+		  -FI_EINVAL);
 
 	EXPECT_EQ(fi_close(&other_ctx->fid), 0);
 	efa_test_resource_destruct(&other);
+}
+
+TEST_P(EfaXpuAddrTest, xpu_desc_reports_the_registration_lkey)
+{
+	struct efa_xpu_desc desc = {};
+	size_t len = sizeof(desc);
+
+	ASSERT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, xpu_ctx), 0);
+
+	EXPECT_EQ(len, sizeof(desc));
+	EXPECT_EQ(desc.lkey, efa_test_xpu_mr_lkey(mr));
+}
+
+TEST_P(EfaXpuAddrTest, xpu_desc_reserved_word_is_zero)
+{
+	struct efa_xpu_desc desc;
+	size_t len = sizeof(desc);
+
+	memset(&desc, 0xa5, sizeof(desc));
+	ASSERT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, xpu_ctx), 0);
+	EXPECT_EQ(desc.reserved, 0u);
+}
+
+TEST_P(EfaXpuAddrTest, xpu_desc_reports_the_size_a_small_buffer_needs)
+{
+	struct efa_xpu_desc desc = {};
+	size_t len = sizeof(desc) - 1;
+
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, xpu_ctx),
+		  -FI_ETOOSMALL);
+	EXPECT_EQ(len, sizeof(desc));
+	EXPECT_EQ(desc.lkey, 0u);
+}
+
+TEST_P(EfaXpuAddrTest, xpu_desc_refuses_bad_arguments)
+{
+	struct efa_xpu_desc desc = {};
+	size_t len = sizeof(desc);
+
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, NULL), -FI_EINVAL);
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, nullptr, &len, FI_XPU, xpu_ctx),
+		  -FI_EINVAL);
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, nullptr, FI_XPU, xpu_ctx),
+		  -FI_EINVAL);
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU | FI_MORE,
+				     xpu_ctx),
+		  -FI_EBADFLAGS);
+	EXPECT_EQ(fi_control(&mr->fid, -1, NULL), -FI_ENOSYS);
 }
 
 INSTANTIATE_TEST_SUITE_P(Fabrics, EfaXpuAddrTest,
@@ -166,7 +227,7 @@ INSTANTIATE_TEST_SUITE_P(Fabrics, EfaXpuAddrTest,
 			 });
 
 /*
- * The efa fabric has no FI_XPU: its AV refuses the XPU form, and
+ * The efa fabric has no FI_XPU: its AV and MR refuse the XPU form, and
  * fi_av_lookup2() without FI_XPU is still fi_av_lookup().
  */
 class EfaRdmXpuAddrTest : public EfaXpuAddrTest
@@ -176,10 +237,14 @@ class EfaRdmXpuAddrTest : public EfaXpuAddrTest
 TEST_P(EfaRdmXpuAddrTest, xpu_forms_are_refused)
 {
 	struct efa_xpu_peer peer = {};
+	struct efa_xpu_desc desc = {};
 	size_t len = sizeof(peer);
 
 	EXPECT_EQ(fi_av_lookup2(resource.av, peer_addr, &peer, &len, FI_XPU,
 				xpu_ctx),
+		  -FI_ENOSYS);
+	len = sizeof(desc);
+	EXPECT_EQ(fi_mr_get_xpu_desc(mr, &desc, &len, FI_XPU, xpu_ctx),
 		  -FI_ENOSYS);
 }
 

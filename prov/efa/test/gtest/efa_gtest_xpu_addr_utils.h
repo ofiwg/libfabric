@@ -21,6 +21,9 @@ int efa_test_xpu_av_insert_peer(struct fid_ep *ep, struct fid_av *av,
 /** @brief The address handle number of an AV entry, or -1 if it has none. */
 int efa_test_xpu_av_ahn(struct fid_av *av, fi_addr_t fi_addr);
 
+/** @brief The local key of an MR. */
+uint32_t efa_test_xpu_mr_lkey(struct fid_mr *mr);
+
 #ifdef __cplusplus
 }
 #endif

@@ -34,3 +34,11 @@ int efa_test_xpu_av_ahn(struct fid_av *av_fid, fi_addr_t fi_addr)
 
 	return (int) av_entry->ah->ahn;
 }
+
+uint32_t efa_test_xpu_mr_lkey(struct fid_mr *mr)
+{
+	struct efa_mr *efa_mr =
+		container_of(&mr->fid, struct efa_mr, mr_fid.fid);
+
+	return efa_mr->lkey;
+}
