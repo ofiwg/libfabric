@@ -267,6 +267,10 @@ FI_XPU. The scope parameter specifies the cooperative threading scope
 FI_XPU_DEVICE). See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
 programming model.
 
+What fi_xpu_send and fi_xpu_recv do at each scope, and their return values,
+including when and how they return -FI_EAGAIN, are described under Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
@@ -389,6 +393,9 @@ errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
 See the discussion below for details handling FI_EAGAIN.
+
+For the device-side calls fi_xpu_send and fi_xpu_recv, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
