@@ -19912,6 +19912,24 @@ The ofi_rxm provider checks for the following environment variables.
     by RxM. Note that no extra memory registration is performed with
     this option. (default: false)
 
+*FI_OFI_RXM_RMA_READ_BOUNCE_SIZE*
+:   When the MSG provider requires FI_MR_LOCAL and the application does
+    not, RxM registers the local buffer of every RMA operation. Reads of
+    host memory up to this size instead land in an internal, already
+    registered buffer and are copied to the user buffer before the
+    completion is reported. This avoids registering the user buffer per
+    operation for small reads. Larger values trade registration cost for
+    copy cost on the completion path. Capped at FI_OFI_RXM_BUFFER_SIZE;
+    0 disables. (default: 32)
+
+*FI_OFI_RXM_RMA_WRITE_BOUNCE_SIZE*
+:   When the MSG provider requires FI_MR_LOCAL and the application does
+    not, RxM registers the local buffer of every RMA operation. Writes
+    of host memory up to this size are instead copied into an internal,
+    already registered buffer when posted and written from there.
+    Completion semantics are those of the original write. Capped at
+    FI_OFI_RXM_BUFFER_SIZE; 0 disables. (default: 512)
+
 *FI_OFI_RXM_NUM_MSG_EPS*
 :   Number of MSG endpoints (and underlying connections/QPs) to open per
     RxM peer connection. Values greater than 1 spread traffic across
