@@ -167,7 +167,7 @@ TEST_F(EfaRdmMrAbortTest, rnr_on_peer_error_pkt_requeues)
 		EFA_TEST_MR_ABORT_PKT_PEER_ERROR);
 	ASSERT_NE(pke, nullptr);
 
-	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(EINVAL));
 
 	efa_test_mr_abort_handle_tx_error(pke, EFA_TEST_MR_ABORT_ERR_RNR);
 	efa_test_mr_abort_snapshot(&st);
@@ -177,6 +177,12 @@ TEST_F(EfaRdmMrAbortTest, rnr_on_peer_error_pkt_requeues)
 	EXPECT_EQ(st.queued_pkts, 1u);
 	EXPECT_EQ(st.ep_rnr_queued_pkt_cnt, 1u);
 	expect_cq_empty();
+
+	EXPECT_EQ(efa_test_mr_abort_process_queued(), -FI_EINVAL);
+	efa_test_mr_abort_snapshot(&st);
+	EXPECT_FALSE(st.alive);
+	EXPECT_EQ(st.ep_rnr_queued_pkt_cnt, 0u);
+	expect_peer_aborted_completion();
 }
 
 TEST_F(EfaRdmMrAbortTest, pre_handshake_abort_sends_handshake)

@@ -9,9 +9,16 @@
 #include "rdm/protocols/efa_rdm_proto_atomic.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longread.h"
+#include "rdm/protocols/efa_rdm_proto_longcts_rtr.h"
+#include "rdm/protocols/efa_rdm_proto_medium.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
+
+static void efa_rdm_txe_handle_error_ignore_result(struct efa_rdm_ope *txe, int err, int prov_errno)
+{
+	(void) efa_rdm_txe_handle_error(txe, err, prov_errno);
+}
 
 /* Compose the self-detected (RDMA READ) call-site behavior: mark the
  * rxe peer-aborted, notify the sender, then drain-release the rxe.
@@ -416,15 +423,18 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	pkt_entry->payload = pkt_entry->wiredata;
 	pkt_entry->payload_size = sizeof buf;
 
-	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
+	if (efa_rdm_pke_read_return == FI_SUCCESS) {
+		rxe = efa_unit_test_alloc_txe(resource, ofi_op_read_req);
+		rxe->proto = &efa_rdm_proto_longcts_rtr;
+	} else {
+		rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
+	}
 	cuda_mr.efa_mr.iface = FI_HMEM_CUDA;
 
 	rxe->desc[0] = &cuda_mr.efa_mr;
 	rxe->iov_count = 1;
 	rxe->iov[0] = iov;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
-
-	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	held_before = efa_rdm_ep->efa_rx_pkts_held;
 	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
@@ -443,13 +453,13 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 		assert_true(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS);
 
 		/* The internal txe must be live with local_read_pkt_entry set. */
-		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
-		txe = efa_unit_test_get_first_ope(efa_rdm_ep, EFA_RDM_TXE);
+		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		txe = context_pkt->ope;
 		assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
 		assert_non_null(txe->local_read_pkt_entry);
 
 		txe->local_read_pkt_entry->payload_size = 16;
-		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		rxe->state = EFA_RDM_OPE_ERR;
 		context_pkt->flags |= EFA_RDM_PKE_LOCAL_READ;
 		efa_rdm_pke_handle_rma_completion(context_pkt);
 
@@ -561,7 +571,7 @@ void test_efa_rdm_txe_handle_error_write_cq(void **state)
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
 	assert_non_null(txe);
 
-	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, true);
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error_ignore_result, txe, true);
 
 	efa_rdm_txe_release(txe);
 }
@@ -578,7 +588,7 @@ void test_efa_rdm_txe_handle_error_not_write_cq(void **state)
 
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
-	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error, txe, false);
+	test_efa_rdm_ope_handle_error_impl(resource, efa_rdm_txe_handle_error_ignore_result, txe, false);
 
 	efa_rdm_txe_release(txe);
 }
@@ -1582,6 +1592,16 @@ void test_efa_rdm_ope_ack_packet_failed_posting_common(void **state, int pkt_typ
 
 	/* should NOT add to list due to failure */
 	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+	if (pkt_type == EFA_RDM_RECEIPT_PKT) {
+		rxe->internal_flags |= EFA_RDM_RXE_ACK_IN_FLIGHT;
+		rxe->efa_outstanding_tx_ops = 1;
+		efa_rdm_rxe_handle_error(rxe, FI_EINVAL, FI_EFA_ERR_PKT_POST);
+		efa_rdm_rxe_release_control_error_if_drained(rxe, pkt_type);
+		assert_false(rxe->internal_flags & EFA_RDM_RXE_ACK_IN_FLIGHT);
+		rxe->efa_outstanding_tx_ops = 0;
+		efa_rdm_rxe_release_control_error_if_drained(rxe, EFA_RDM_CTS_PKT);
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_RXE), 0);
+	}
 }
 
 /**
@@ -3833,7 +3853,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
-	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ope *rxe, *txe;
 	struct efa_rdm_peer *peer;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -3904,6 +3924,24 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 	 * -FI_EAVAIL, not -FI_EAGAIN), then confirm nothing else remains. */
 	assert_cq_peer_aborted_error(resource);
 	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_ERR;
+	txe->peer_error_prov_errno = FI_EFA_ERR_PKT_POST;
+	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
+			       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, txe), 0);
+	efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
+	efa_rdm_pke_handle_tx_error(pkt_entry, EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR);
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, EIO);
+	assert_int_equal(efa_rdm_ope_process_queued_ope(txe), -FI_EIO);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+	assert_int_equal(ep->efa_rnr_queued_pkt_cnt, 0);
+	assert_cq_peer_aborted_error(resource);
 }
 
 /**
@@ -6046,8 +6084,8 @@ void test_efa_rdm_pke_handle_tx_error_dc_medium_emits_skip_on_zero_delivery(void
 }
 
 /**
- * @brief Medium sender-side: peer does not advertise the feature ->
- *        no PEER_ERROR_PKT. The user still sees a TX CQ error.
+ * @brief An ordinary medium TX error releases its final in-flight sibling.
+ *        The eager test below covers unsupported-peer gating.
  */
 void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void **state)
 {
@@ -6055,6 +6093,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
 	struct fi_cq_err_entry err_entry;
 	size_t outstanding_before;
 	int ret;
@@ -6069,6 +6108,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->msg_id = 0x99;
+	txe->proto = &efa_rdm_proto_medium;
 
 	peer = txe->peer;
 	/* Handshake received but feature bit NOT advertised -- old peer. */
@@ -6077,6 +6117,10 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
+	txe->req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT;
+	pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, peer);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_MEDIUM_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
@@ -6086,7 +6130,8 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 	assert_int_equal(err_entry.prov_errno,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* No PEER_ERROR_PKT posted. */
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
 }
 
@@ -6207,6 +6252,7 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->msg_id = 0x99;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	peer = txe->peer;
 	/* Handshake received but feature bit NOT advertised -- old peer. */
@@ -6218,9 +6264,9 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_EAGER_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* No PEER_ERROR_PKT posted, not flagged for abort. */
-	assert_false(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+	assert_cq_peer_aborted_error(resource);
 }
 
 /**

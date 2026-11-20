@@ -101,6 +101,7 @@ EFA_RDM_PROTO_DEF(longread,
 	.wants_mr = true,
 	.min_param_name = "inter_min_read_message_size",
 	.set_bounds = &efa_rdm_proto_longread_set_bounds,
+	.release_txe_on_error = true,
 	.can_use_protocol = &efa_rdm_proto_longread_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_longread_construct_tx_pkes,
 	/* Long read has no DC variant, so the DC entries reuse the non-DC types. */

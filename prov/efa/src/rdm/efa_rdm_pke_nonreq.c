@@ -350,6 +350,14 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	return 0;
 }
 
+static void efa_rdm_pke_proc_ctsdata_handle_error(struct efa_rdm_ope *ope,
+						   int err, int prov_errno){
+	if (ope->type == EFA_RDM_RXE)
+		efa_rdm_rxe_handle_error(ope, err, prov_errno);
+	else if (!efa_rdm_txe_handle_error(ope, err, prov_errno))
+		efa_rdm_txe_release_error_if_drained(ope);
+}
+
 void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 			      struct efa_rdm_ope *ope,
 			      char *data, size_t seg_offset,
@@ -381,7 +389,8 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, ope);
 	if (err) {
 		/* copy_payload_to_ope() releases pkt_entry on error; do not release it here. */
-		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
+		efa_rdm_pke_proc_ctsdata_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
+		return;
 	}
 
 	if (all_received)
@@ -391,7 +400,7 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 		err = efa_rdm_ope_post_send_or_queue(ope, EFA_RDM_CTS_PKT);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "post CTS packet failed!\n");
-			efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
+			efa_rdm_pke_proc_ctsdata_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
 }
@@ -471,6 +480,11 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
 	if (!txe) {
 		EFA_INFO(FI_LOG_CQ,
 			 "READRSP names a read that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	if (txe->state == EFA_RDM_OPE_ERR) {
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
@@ -619,6 +633,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 					fi_strerror(-err), -err);
 				efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 				efa_rdm_rxe_release(rxe);
+				return;
 			}
 
 			rxe->internal_flags |= EFA_RDM_RXE_ACK_IN_FLIGHT;
@@ -777,6 +792,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (txe->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	efa_rdm_txe_release_read_msg_slot(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -793,8 +813,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				EFA_RDM_LONGCTS_RTW_PKT;
 		txe->proto = &efa_rdm_proto_longcts_write;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		if (OFI_UNLIKELY(err) &&
+		    !efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+			efa_rdm_txe_release_error_if_drained(txe);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS %s "
@@ -809,8 +830,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_proto_get_tagged(txe);
 		txe->proto = &efa_rdm_proto_longcts;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
-		if (OFI_UNLIKELY(err))
-			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
+		if (OFI_UNLIKELY(err) &&
+		    !efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST))
+			efa_rdm_txe_release_error_if_drained(txe);
 	}
 }
 

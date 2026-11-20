@@ -17,6 +17,7 @@
 
 EFA_RDM_PROTO_DEF(zero_copy,
 	.wants_mr = false,
+	.release_txe_on_error = true,
 	.construct_tx_pkes = &efa_rdm_proto_zero_copy_construct_tx_pkes,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
 );

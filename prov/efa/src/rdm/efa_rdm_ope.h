@@ -164,6 +164,7 @@ struct efa_rdm_ope {
 	struct dlist_entry peer_entry;
 
 	uint64_t bytes_runt;
+	uint64_t bytes_runt_in_flight;
 
 	/* the following variables are for RX operation only */
 	uint64_t bytes_received;
@@ -346,6 +347,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
+void efa_rdm_rxe_release_control_error_if_drained(struct efa_rdm_ope *rxe, int pkt_type);
+
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /* The follow flags are applied to the internal_flags field
@@ -401,14 +404,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * emit/suppress into its drain helper.
  */
 #define EFA_RDM_OPE_PEER_ABORT_PENDING BIT_ULL(20)
-
-/**
- * @brief flag to indicate a txe has already written an cq error entry for RNR
- *
- * This flag is used to prevent writing multiple cq error entries
- * for the same txe
- */
-#define EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
 
 /**
  * @brief flag to indicate an ope has queued ctrl packet,
@@ -556,7 +551,9 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 

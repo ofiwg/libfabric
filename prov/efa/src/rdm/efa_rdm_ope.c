@@ -41,6 +41,7 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	txe->internal_flags = internal_flags;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
+	txe->bytes_queued_blocking_copy = 0;
 	txe->bytes_acked = 0;
 	txe->bytes_sent = 0;
 	txe->window = 0;
@@ -62,6 +63,8 @@ void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 	/* set flags */
 	txe->fi_flags = efa_rdm_msg_get_tx_flags(ep, fi_flags);
 	txe->bytes_runt = 0;
+	txe->bytes_runt_in_flight = 0;
+	txe->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
 
@@ -125,8 +128,23 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 
+	efa_rdm_txe_release_read_msg_slot(txe);
+
+#if ENABLE_DEBUG
+	if (dlist_entry_in_list(&txe->ep->ope_recv_list,
+				&txe->pending_recv_entry)) {
+		dlist_remove(&txe->pending_recv_entry);
+		assert(txe->ep->pending_recv_counter > 0);
+		txe->ep->pending_recv_counter--;
+	}
+#endif
+
 	/* txe->peer would be NULL for local read operation */
 	if (txe->peer) {
+		assert(txe->peer->num_runt_bytes_in_flight >=
+		       txe->bytes_runt_in_flight);
+		txe->peer->num_runt_bytes_in_flight -=
+			txe->bytes_runt_in_flight;
 		dlist_remove(&txe->peer_entry);
 	}
 
@@ -163,6 +181,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(txe);
+
 	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
 		dlist_remove(&txe->queued_entry);
 		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
@@ -178,6 +198,17 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 #endif
 	txe->gen = gen;
 	ofi_buf_free(txe);
+}
+
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe){
+
+	if (txe->state != EFA_RDM_OPE_ERR || !txe->proto ||
+	    !txe->proto->release_txe_on_error ||
+	    (txe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING | EFA_RDM_OPE_QUEUED_FLAGS)) ||
+	    txe->efa_outstanding_tx_ops || !dlist_empty(&txe->queued_pkts))
+		return;
+
+	efa_rdm_txe_release(txe);
 }
 
 /**
@@ -221,7 +252,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	 * down early (e.g. peer-aborted) can leave held packets pointing at it;
 	 * purging here keeps a later flush from touching the freed rxe.
 	 */
-	efa_rdm_ep_purge_queued_blocking_copy_for_rxe(rxe);
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(rxe);
 
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {
@@ -265,6 +296,31 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
 
 	/* release efa specific resources in rxe */
 	efa_rdm_rxe_release_internal(rxe);
+}
+
+void efa_rdm_rxe_release_control_error_if_drained(struct efa_rdm_ope *rxe, int pkt_type){
+	assert(rxe->type == EFA_RDM_RXE);
+
+	if (rxe->state != EFA_RDM_OPE_ERR)
+		return;
+
+	switch (pkt_type) {
+	case EFA_RDM_EOR_PKT:
+	case EFA_RDM_RECEIPT_PKT:
+		rxe->internal_flags &= ~EFA_RDM_RXE_ACK_IN_FLIGHT;
+		break;
+	case EFA_RDM_READ_NACK_PKT:
+	case EFA_RDM_CTS_PKT:
+		break;
+	default:
+		return;
+	}
+
+	if ((rxe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING | EFA_RDM_OPE_QUEUED_FLAGS)) ||
+	    rxe->efa_outstanding_tx_ops || !dlist_empty(&rxe->queued_pkts))
+		return;
+
+	efa_rdm_rxe_release(rxe);
 }
 
 /**
@@ -981,7 +1037,7 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 		return false;
 
 	/*
-	 * Any two-sided RTM: its msg_id was consumed at init, so the
+	 * Any posted two-sided RTM: its msg_id was consumed before posting, so the
 	 * receiver's reorder window is (or will be) waiting on it. That
 	 * includes a LONGREAD RTM, which carries no MR-backed payload of
 	 * its own; abandoning a canceled one without notifying the peer
@@ -1020,14 +1076,18 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
  *
  * 4. print warning message with self and peer's raw address
  *
- * Note It does NOT release txe because it is still possible to receive
- * send completion for this txe
+ * For an ordinary error, this function does not release the txe because it is
+ * still possible to receive a send completion for it. Peer-abort handling is
+ * the exception and may retain, park, or synchronously release the txe.
  *
  * @param[in]	txe	txe that encountered error
  * @param[in]	err			positive libfabric error code
  * @param[in]	prov_errno	positive EFA provider specific error code
+ * @param[in]	rtm_was_posted	whether an RTM carrying this txe's msg_id may have reached the peer
+ * @return	true if peer-abort handling owns the txe lifetime
  */
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
+static bool efa_rdm_txe_handle_error_impl(struct efa_rdm_ope *txe, int err, int prov_errno,
+										bool rtm_was_posted)
 {
 	struct efa_rdm_ep *ep;
 	struct fi_cq_err_entry err_entry;
@@ -1056,9 +1116,11 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		 * withheld completion + release happen once the WRs drain; an
 		 * ordinary errored txe needs nothing here. Nothing touches txe
 		 * after this. */
-		if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
 			efa_rdm_txe_progress_peer_abort_if_drained(txe);
-		return;
+			return true;
+		}
+		return false;
 	default:
 		EFA_WARN(FI_LOG_CQ, "txe unknown state %d\n",
 			txe->state);
@@ -1077,6 +1139,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 				     pkt_entry, entry, tmp)
 		efa_rdm_pke_release_tx(pkt_entry);
 
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(txe);
 	err_entry.flags = txe->cq_entry.flags;
 	err_entry.op_context = txe->cq_entry.op_context;
 	err_entry.buf = txe->cq_entry.buf;
@@ -1115,7 +1178,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		EFA_WARN(FI_LOG_CQ,
 			"Writing eq error for txe from internal operations\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		return;
+		return false;
 	}
 
 	/*
@@ -1141,15 +1204,22 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	 */
 	if ((txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION) &&
 	    (txe->internal_flags & EFA_RDM_TXE_NO_COUNTER))
-		return;
+		return false;
 
-	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
+	if (rtm_was_posted &&
+	    efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);
-		return;
+		return true;
 	}
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "TXE");
+	return false;
+}
+
+bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
+{
+	return efa_rdm_txe_handle_error_impl(txe, err, prov_errno, true);
 }
 
 /**
@@ -1543,7 +1613,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 				 "Posting of ctrl packet failed when complete rx! err=%s(%d)\n",
 				 fi_strerror(-err), -err);
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
-			efa_rdm_rxe_release(rxe);
+			efa_rdm_rxe_release_control_error_if_drained(rxe, EFA_RDM_RECEIPT_PKT);
 		}
 
 		return;
@@ -2475,9 +2545,12 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 {
 	int ret = 0;
+	bool peer_abort_owns_txe = false;
 	bool release_atomic_response = false;
 	bool release_atomic_txe = false;
 	struct efa_rdm_ep *ep = ope->ep;
+	struct dlist_entry *tmp;
+	struct efa_rdm_pke *pkt_entry;
 	/*
 	 * Default reason for the error path: a packet-post failure. Overridden
 	 * to FI_EFA_ERR_PEER_ABORTED below only when the MR gen check fails.
@@ -2511,7 +2584,8 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		case EFA_RDM_OPE_QUEUED_RNR:
 			assert(!dlist_empty(&ope->queued_pkts));
 			queued_response_pkt_type = efa_rdm_pkt_type_of(
-				container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
+				container_of(ope->queued_pkts.next,
+					     struct efa_rdm_pke, entry));
 			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
@@ -2539,16 +2613,52 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 		if (ret == -FI_EAGAIN)
 			return ret;
 
-		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
 		/*
-		 * An atomic-protocol TXE has no outstanding WR left to retire it
-		 * after a non-FI_EAGAIN repost failure, so release it below.
+		 * The dispatch switch captures the type unless the MR generation
+		 * check failed before dispatch.
 		 */
+		if (queued_response_pkt_type == -1) {
+			switch (flag) {
+			case EFA_RDM_OPE_QUEUED_RNR:
+				assert(!dlist_empty(&ope->queued_pkts));
+				queued_response_pkt_type = efa_rdm_pkt_type_of(
+					container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
+				break;
+			case EFA_RDM_OPE_QUEUED_CTRL:
+				queued_response_pkt_type = ope->queued_ctrl_type;
+				break;
+			default:
+				break;
+			}
+		}
+
+		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+
+		/* Terminal retry failures must leave no queued work; error handlers may
+		 * return early for operations already in the error state.
+		 */
+		dlist_foreach_container_safe(&ope->queued_pkts, struct efa_rdm_pke,
+									pkt_entry, entry, tmp)
+			efa_rdm_pke_release_tx(pkt_entry);
+		dlist_remove(&ope->queued_entry);
+		ope->internal_flags &= ~flag;
+
+		if (queued_response_pkt_type == EFA_RDM_PEER_ERROR_PKT &&
+		    (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)) {
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_progress_peer_abort_if_drained(ope);
+			else
+				efa_rdm_rxe_release_peer_abort_if_drained(ope);
+			return ret;
+		}
+
+		/* Release terminal atomic responses after queue bookkeeping. */
 		release_atomic_txe = (ope->type == EFA_RDM_TXE && ope->atomic_proto);
 		release_atomic_response =
 			efa_rdm_ope_is_internal_atomic_response(ope, queued_response_pkt_type);
 		if (ope->type == EFA_RDM_TXE)
-			efa_rdm_txe_handle_error(ope, -ret, prov_errno);
+			peer_abort_owns_txe = efa_rdm_txe_handle_error_impl(
+				ope, -ret, prov_errno, flag != EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 		else
 			efa_rdm_rxe_handle_error(ope, -ret, prov_errno);
 
@@ -2560,12 +2670,19 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	if (flag == EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 		--ep->ope_queued_before_handshake_cnt;
 
+	if (peer_abort_owns_txe)
+		return ret;
+
 	if (release_atomic_txe) {
 		assert(ope->efa_outstanding_tx_ops == 0);
 		efa_rdm_txe_release(ope);
+	} else if (ope->type == EFA_RDM_TXE) {
+		efa_rdm_txe_release_error_if_drained(ope);
 	} else if (release_atomic_response) {
 		assert(ope->efa_outstanding_tx_ops == 0);
 		efa_rdm_rxe_release(ope);
+	} else if (ope->type == EFA_RDM_RXE) {
+		efa_rdm_rxe_release_control_error_if_drained(ope, queued_response_pkt_type);
 	}
 
 	return ret;

@@ -202,6 +202,11 @@ void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	if (txe->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	/* Write send completion immediately to preserve DC semantics. */
 	efa_rdm_txe_report_completion(txe);
 
@@ -229,6 +234,11 @@ void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	if (!txe) {
 		EFA_INFO(FI_LOG_CQ,
 			 "EOR names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	if (txe->state == EFA_RDM_OPE_ERR) {
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
