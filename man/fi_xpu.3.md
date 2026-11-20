@@ -259,7 +259,10 @@ operations are available only to the host CPU.
 
 Once bound and enabled, `fi_ep_export_xpu` exports the EP for device access.
 The caller provides a `struct fid_xpu_ep` which the provider fills with the
-information needed for device-side data transfer functions.
+information needed for device-side data transfer functions. The *flags*
+parameter may carry a sharing flag (see Resource Sharing below). The flag
+applies to both the transmit and receive queues of the EP, so it must account
+for the threads that issue calls on either queue.
 
 Data transfer operations on the exported EP are only available to the given
 XPU. This includes [`fi_msg`(3)](fi_msg.3.html),
@@ -276,7 +279,8 @@ Control operations (`fi_cq_open`, `fi_close`, `fi_control`) remain CPU-only.
 `fi_cq_export_xpu` exports the CQ for device access. The caller provides a
 `struct fid_xpu_cq` which the provider fills with the information needed for
 the device-side completion functions (`fi_xpu_cq_read`,
-`fi_xpu_cq_readerr`). Host-side read operations (`fi_cq_read`, `fi_cq_sread`)
+`fi_xpu_cq_readerr`). The *flags* parameter may carry a sharing flag (see
+Resource Sharing below). Host-side read operations (`fi_cq_read`, `fi_cq_sread`)
 are not available on an exported CQ. See
 [`fi_cq`(3)](fi_cq.3.html) for details.
 
@@ -289,7 +293,8 @@ Control operations (`fi_cntr_open`, `fi_close`) remain CPU-only.
 `fi_cntr_export_xpu` exports the counter for device access. The caller provides
 a `struct fid_xpu_cntr` which the provider fills with the information needed
 for the device-side counter functions (`fi_xpu_cntr_read`,
-`fi_xpu_cntr_wait`). Host-side read operations (`fi_cntr_read`,
+`fi_xpu_cntr_wait`). The *flags* parameter may carry a sharing flag (see
+Resource Sharing below). Host-side read operations (`fi_cntr_read`,
 `fi_cntr_wait`) are not available on an exported counter. See
 [`fi_cntr`(3)](fi_cntr.3.html) for details.
 
@@ -477,6 +482,51 @@ described in Scope.
 | fi_xpu_cntr_read, fi_xpu_cntr_readerr | Group | Every thread of the scope | Identical in every thread of the scope | One read of the counter for the scope | The scope's, the same in every thread of that scope; other scopes get their own |
 | fi_xpu_cntr_wait | Work item | One thread | Its own counter and threshold | One wait for the thread | None |
 | fi_xpu_cntr_wait | Group | Every thread of the scope | Identical in every thread of the scope | One wait for the scope; every thread returns once the threshold is reached | None |
+
+## Resource Sharing
+
+Scope describes the threads that take part in one call. A separate property
+of an exported EP, CQ, or counter is how many threads issue calls on it. By
+default, the provider must assume that any thread of the XPU may call into the
+object. An application that knows the object is used by fewer threads can
+declare this to the provider, which may then use cheaper synchronization on
+the object's shared state.
+
+The application declares the sharing of an object by setting a flag in the
+*flags* parameter of `fi_ep_export_xpu`, `fi_cq_export_xpu`, or
+`fi_cntr_export_xpu`. These are the FI_XPU resource sharing flags. At most one
+of them may be set.
+
+*FI_XPU_SHARE_WORK_ITEM*
+: All device-side calls on the object are issued by one work item. Only
+  calls with a scope of FI_XPU_WORK_ITEM are valid.
+
+*FI_XPU_SHARE_WORK_GROUP*
+: All device-side calls on the object are issued by the threads of one work
+  group. Calls with a scope of FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, or
+  FI_XPU_WORK_GROUP are valid, provided that all threads taking part in the
+  call belong to that work group. Calls with a scope of FI_XPU_DEVICE are not
+  valid.
+
+If neither flag is set, any thread of the XPU may issue calls on the object.
+Setting multiple flags, or any other flag, fails with -FI_EINVAL.
+
+A sharing flag applies to every device-side function called on the object,
+and is independent of the *scope* argument of each call. It is set once for
+each exported object. Different objects used by the same kernel may be
+exported with different flags.
+
+The sharing of an object is recorded when it is first exported. Exporting the
+object again must specify the same flags, otherwise the call fails with
+-FI_EINVAL. A CQ or counter that is bound to multiple EPs is used by the
+threads of all of those EPs, and its flags must account for all of them.
+
+A sharing flag is a hint that the provider may ignore, or may satisfy by using
+a wider form of sharing than was requested. An application cannot determine
+which was used. The provider is not able to verify that the application
+follows its declaration. If the application issues a call that violates it, for
+example by posting to an EP exported with FI_XPU_SHARE_WORK_GROUP from two work
+groups, the behavior is undefined and the state of the object may be corrupted.
 
 ## Data Transfer Operations
 

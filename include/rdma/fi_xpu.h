@@ -23,6 +23,16 @@ enum {
 };
 
 /*
+ * Resource sharing promise — flags for fi_ep_export_xpu(),
+ * fi_cq_export_xpu() and fi_cntr_export_xpu().
+ */
+
+/* export: all device-side calls on the object come from one work item */
+#define FI_XPU_SHARE_WORK_ITEM	(1ULL << 0)
+/* export: all device-side calls on the object come from one work group */
+#define FI_XPU_SHARE_WORK_GROUP	(1ULL << 1)
+
+/*
  * Flags for fi_xpu_ops callbacks.
  */
 

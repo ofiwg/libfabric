@@ -319,6 +319,12 @@ provider dispatch details). The application must copy the structure to
 device-accessible memory before passing it to device-side counter
 functions (fi_xpu_cntr_read, fi_xpu_cntr_wait).
 
+The flags parameter may be 0 or one of the FI_XPU resource sharing flags,
+which declare how many threads issue device-side calls on the counter. If no
+flag is set, any thread of the XPU may issue calls. A provider whose counters
+need no synchronization between threads may ignore the flag. See the Resource
+Sharing section of [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 # RETURN VALUES
 
 Returns 0 on success.  On error, a negative value corresponding to
