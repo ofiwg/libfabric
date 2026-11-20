@@ -426,7 +426,6 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 			fi_addr = av_entry->implicit_fi_addr;
 		}
 		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-		efa_rdm_av_entry_uncache_peer(av_entry, ep);
 		peer = efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
 		if (peer) {
 			efa_rdm_peer_destruct(peer, ep);
@@ -503,7 +502,6 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	av_entry->av = rdm_av;
 	av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
-	efa_rdm_av_entry_cache_init(av_entry);
 	dlist_init(&av_entry->implicit_av_lru_entry);
 	dlist_init(&av_entry->ah_implicit_conn_list_entry);
 
@@ -586,7 +584,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 	util_av_entry = ofi_bufpool_get_ibuf(util_av_implicit->av_entry_pool, fi_addr);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(efa_av_entry)));
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	assert(av->type == FI_AV_TABLE);
 
 	av_entry = container_of(efa_av_entry, struct efa_rdm_av_entry, efa_av_entry);
 
@@ -596,7 +594,6 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 	av_entry->efa_av_entry.fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->implicit_fi_addr = fi_addr;
 	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
-	efa_rdm_av_entry_cache_init(av_entry);
 	dlist_init(&av_entry->implicit_av_lru_entry);
 	dlist_init(&av_entry->ah_implicit_conn_list_entry);
 
@@ -867,7 +864,7 @@ fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 					      pkt_entry, &check_prv,
 					      &prv_connid);
 	if (OFI_LIKELY(!!entry))
-		return efa_av_entry_to_fi_addr(av, entry);
+		return entry->fi_addr;
 
 	if (!check_prv)
 		return FI_ADDR_NOTAVAIL;
@@ -875,7 +872,7 @@ fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
 					      prv_connid);
-	fi_addr = (OFI_LIKELY(!!entry)) ? efa_av_entry_to_fi_addr(av, entry) : FI_ADDR_NOTAVAIL;
+	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	return fi_addr;
@@ -906,14 +903,14 @@ fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
 					      pkt_entry, &check_prv,
 					      &prv_connid);
 	if (OFI_LIKELY(!!entry))
-		return efa_av_entry_to_fi_addr(av, entry);
+		return entry->fi_addr;
 
 	if (!check_prv)
 		return FI_ADDR_NOTAVAIL;
 
 	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
 					      prv_connid);
-	fi_addr = (OFI_LIKELY(!!entry)) ? efa_av_entry_to_fi_addr(av, entry) : FI_ADDR_NOTAVAIL;
+	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
 
 	return fi_addr;
 }
@@ -1243,8 +1240,6 @@ static int efa_rdm_av_entry_move_peer_maps(struct efa_av *av,
 			err = efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
 							 fi_addr, peer);
 			assert(!err);
-			if (efa_av_is_map(av))
-				efa_rdm_av_entry_cache_peer(av_entry, ep, peer);
 		}
 		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	}
@@ -1386,7 +1381,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, *fi_addr);
 	explicit_base_entry = (struct efa_av_entry *) explicit_util_av_entry->data;
 	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(explicit_base_entry)));
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	assert(av->type == FI_AV_TABLE);
 
 	/* Copy information from the implicit entry to the explicit entry */
 	explicit_av_entry = container_of(explicit_base_entry, struct efa_rdm_av_entry, efa_av_entry);
@@ -1402,7 +1397,6 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	explicit_av_entry->av = rdm_av;
 	explicit_av_entry->shm_fi_addr = implicit_av_entry->shm_fi_addr;
 	explicit_av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	efa_rdm_av_entry_cache_init(explicit_av_entry);
 	dlist_init(&explicit_av_entry->implicit_av_lru_entry);
 	dlist_init(&explicit_av_entry->ah_implicit_conn_list_entry);
 
@@ -1522,7 +1516,7 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 			 "Found existing AV entry pointing to this "
 			 "address! fi_addr: %" PRId64 "\n",
 			 efa_fiaddr);
-		*fi_addr = efa_av_index_to_fi_addr(av, efa_fiaddr);
+		*fi_addr = efa_fiaddr;
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return 0;
 	}
@@ -1538,8 +1532,8 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 
 		ret = efa_rdm_av_entry_implicit_to_explicit(av, addr, implicit_fi_addr,
 						      fi_addr);
-		/* the move works on the util_av index; hand out the application fi_addr */
-		*fi_addr = ret ? FI_ADDR_NOTAVAIL : efa_av_index_to_fi_addr(av, *fi_addr);
+		if (ret)
+			*fi_addr = FI_ADDR_NOTAVAIL;
 
 		EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
@@ -1555,7 +1549,7 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = efa_av_entry_to_fi_addr(av, &av_entry->efa_av_entry);
+	*fi_addr = av_entry->efa_av_entry.fi_addr;
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
@@ -1682,7 +1676,8 @@ static int efa_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	if (av->type != FI_AV_TABLE)
+		return -FI_EINVAL;
 
 	/* The order in which the util domain and av locks are acquired must be
 	 * util_domain.lock -> util_av.lock in the AV insertion and removal
@@ -1690,7 +1685,7 @@ static int efa_rdm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	for (i = 0; i < count; i++) {
-		entry = efa_av_addr_to_entry_checked(av, fi_addr[i]);
+		entry = efa_av_addr_to_entry(av, fi_addr[i]);
 		if (!entry) {
 			err = -FI_EINVAL;
 			break;
@@ -1837,12 +1832,8 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct efa_rdm_av *rdm_av;
 	struct efa_av *av;
 	struct fi_av_attr av_attr = { 0 };
-	bool map;
 	int ret, retv;
 
-	/* decided before efa_av_open_prepare_attr(), which sets attr->type to
-	 * FI_AV_TABLE for util_av */
-	map = attr && attr->type == FI_AV_MAP && efa_env.support_av_map;
 	ret = efa_av_open_prepare_attr(domain_fid, attr, &efa_domain);
 	if (ret)
 		return ret;
@@ -1892,14 +1883,8 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		}
 	}
 
-	/* the shm AV above stays a table: its fi_addrs never reach the application */
-	if (map) {
-		av->type = FI_AV_MAP;
-		attr->type = FI_AV_MAP;
-	}
-
-	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 " type %s\n",
-			attr->flags, efa_av_is_map(av) ? "FI_AV_MAP" : "FI_AV_TABLE");
+	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
+			attr->flags);
 
 	rdm_av->implicit_av_size = efa_env.implicit_av_size;
 	rdm_av->shm_used = 0;
