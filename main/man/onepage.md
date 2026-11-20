@@ -4387,6 +4387,10 @@ datatype and op parameters specify the data type and atomic operation
 respectively, matching the host-side enum values. See
 [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
+What fi_xpu_atomic, fi_xpu_fetch_atomic and fi_xpu_compare_atomic do at
+each scope, and their return values, including when and how they return
+-FI_EAGAIN, are described under Scope in [`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls
@@ -4455,6 +4459,9 @@ operation (inclusive) to the posting of a subsequent fenced operation
 
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in `rdma/fi_errno.h`.
+
+For the device-side calls fi_xpu_atomic, fi_xpu_fetch_atomic and
+fi_xpu_compare_atomic, see Scope in [`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
@@ -12725,6 +12732,10 @@ scope parameter specifies the cooperative threading scope
 FI_XPU_DEVICE). See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
 programming model.
 
+What fi_xpu_send and fi_xpu_recv do at each scope, and their return
+values, including when and how they return -FI_EAGAIN, are described
+under Scope in [`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
@@ -12847,6 +12858,9 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in `rdma/fi_errno.h`.
 
 See the discussion below for details handling FI_EAGAIN.
+
+For the device-side calls fi_xpu_send and fi_xpu_recv, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
@@ -15889,6 +15903,10 @@ use raw addresses and keys. The addr and key parameters specify the
 remote memory address and access key respectively. See
 [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
+What fi_xpu_write and fi_xpu_read do at each scope, and their return
+values, including when and how they return -FI_EAGAIN, are described
+under Scope in [`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_readmsg and fi_writemsg calls allow the user to specify flags
@@ -15968,6 +15986,9 @@ operation (inclusive) to the posting of a subsequent fenced operation
 
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in `rdma/fi_errno.h`.
+
+For the device-side calls fi_xpu_write and fi_xpu_read, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
@@ -16268,6 +16289,10 @@ handle and include tag matching parameters. The tag and ignore
 parameters function identically to their host-side counterparts. See
 [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
+What fi_xpu_tsend and fi_xpu_trecv do at each scope, and their return
+values, including when and how they return -FI_EAGAIN, are described
+under Scope in [`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
@@ -16421,6 +16446,9 @@ ignored.
 The tagged send and receive calls return 0 on success. On error, a
 negative value corresponding to fabric *errno* is returned. Fabric errno
 values are defined in `fi_errno.h`.
+
+For the device-side calls fi_xpu_tsend and fi_xpu_trecv, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
