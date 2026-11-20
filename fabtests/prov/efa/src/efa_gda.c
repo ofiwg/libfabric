@@ -43,11 +43,13 @@
 #include <efa_gda_kernels.h>
 
 struct fi_efa_ops_gda *efa_gda_ops;
-struct efa_cuda_cq *gda_send_cq, *gda_recv_cq;
+/* Device copies of the queue structures the kernels operate on */
+void *gda_send_cq, *gda_recv_cq;
+struct efa_cuda_host_context *gda_ctx;
 struct fid_cq *txcq_ext, *rxcq_ext;
 void *send_cq_buffer, *recv_cq_buffer;
 struct fid_ep *gda_ep;
-struct efa_cuda_qp *gda_qp;
+void *gda_qp;
 static enum ibv_wr_opcode gda_op = IBV_WR_SEND;
 static bool use_hw_cntr;
 static volatile uint64_t *hw_send_cntr_ptr;
@@ -103,8 +105,83 @@ static int create_hw_cntr(struct fid_cntr **cntr,
 	return 0;
 }
 
-int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
-		  struct efa_cuda_cq **gda_cq)
+/*
+ * Bind the efa-dp-direct host library to the queue layout the kernels in
+ * libefagda were compiled against.
+ */
+static int create_gda_ctx(void)
+{
+	int major, minor, subminor;
+
+	efagda_get_dp_version(&major, &minor, &subminor);
+	gda_ctx = efa_cuda_host_context_create(major, minor, subminor);
+	if (!gda_ctx) {
+		FT_ERR("efa-dp-direct host library does not support layout "
+		       "version %d.%d.%d", major, minor, subminor);
+		return -FI_EOPNOTSUPP;
+	}
+	return 0;
+}
+
+/*
+ * Fill a queue structure in host memory with init_fn, then copy it to newly
+ * allocated device memory for the kernels.
+ */
+static int upload_gda_queue(int size, void **dev_queue,
+			    int (*init_fn)(void *buf, uint32_t size, void *arg),
+			    void *arg)
+{
+	cudaError_t err;
+	void *host_queue;
+	int ret;
+
+	*dev_queue = NULL;
+	if (size <= 0)
+		return size ? size : -FI_EINVAL;
+
+	host_queue = calloc(1, size);
+	if (!host_queue)
+		return -FI_ENOMEM;
+
+	ret = init_fn(host_queue, size, arg);
+	if (ret)
+		goto out;
+
+	err = cudaMalloc(dev_queue, size);
+	if (err != cudaSuccess) {
+		FT_ERR("cudaMalloc: %s", cudaGetErrorString(err));
+		*dev_queue = NULL;
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	err = cudaMemcpy(*dev_queue, host_queue, size, cudaMemcpyHostToDevice);
+	if (err != cudaSuccess) {
+		FT_ERR("cudaMemcpy: %s", cudaGetErrorString(err));
+		cudaFree(*dev_queue);
+		*dev_queue = NULL;
+		ret = -FI_EIO;
+	}
+out:
+	free(host_queue);
+	return ret;
+}
+
+static int init_gda_cq(void *buf, uint32_t size, void *arg)
+{
+	struct efa_cuda_cq_attrs *attrs = arg;
+
+	return efa_cuda_init_cq(gda_ctx, buf, size, attrs, sizeof(*attrs));
+}
+
+static int init_gda_qp(void *buf, uint32_t size, void *arg)
+{
+	struct efa_cuda_qp_attrs *attrs = arg;
+
+	return efa_cuda_init_qp(gda_ctx, buf, size, attrs, sizeof(*attrs));
+}
+
+int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext, void **gda_cq)
 {
 	int ret;
 	int dmabuf_fd;
@@ -159,13 +236,14 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 	cq_attrs.num_entries = cq_entries;
 	cq_attrs.entry_size = cq_ext_attr.entry_size;
 
-	*gda_cq = efa_cuda_create_cq(&cq_attrs, sizeof(cq_attrs));
-	if (!*gda_cq) {
-		ret = FI_EINVAL;
-		FT_PRINTERR("efa_cuda_create_cq", -ret);
+	ret = upload_gda_queue(efa_cuda_get_cq_size(gda_ctx), gda_cq,
+			       init_gda_cq, &cq_attrs);
+	if (ret) {
+		FT_PRINTERR("efa_cuda_init_cq", -ret);
+		goto close_cq;
 	}
 
-	return ret;
+	return 0;
 
 close_cq:
 	FT_CLOSE_FID(*cq_ext);
@@ -190,6 +268,12 @@ int create_gda_qp()
 	if (ret) {
 		FT_PRINTERR("query_qp_wqs", -ret);
 		return ret;
+	}
+
+	if (!(sq_attr.caps & FI_EFA_WQ_CAPS_64_BIT_REQ_ID)) {
+		FT_ERR("SQ does not support 64-bit request IDs, which "
+		       "efa-dp-direct requires");
+		return -FI_EOPNOTSUPP;
 	}
 
 	FT_DEBUG("sq_attr: buffer %p, entry_size %u, num_entries %u, doorbell "
@@ -266,11 +350,12 @@ int create_gda_qp()
 	qp_attrs.sq_max_batch = sq_attr.max_batch;
 	qp_attrs.rq_num_entries = rq_attr.num_entries;
 	qp_attrs.rq_entry_size = rq_attr.entry_size;
+	qp_attrs.sq_caps = EFA_CUDA_WQ_CAPS_64_BIT_REQ_ID;
 
-	gda_qp = efa_cuda_create_qp(&qp_attrs, sizeof(qp_attrs));
-	if (!gda_qp) {
-		FT_PRINTERR("efa_cuda_create_qp", -ret);
-	}
+	ret = upload_gda_queue(efa_cuda_get_qp_size(gda_ctx), &gda_qp,
+			       init_gda_qp, &qp_attrs);
+	if (ret)
+		FT_PRINTERR("efa_cuda_init_qp", -ret);
 	return ret;
 }
 
@@ -525,8 +610,12 @@ int main(int argc, char **argv)
 	hints->domain_attr->progress = FI_PROGRESS_MANUAL;
 	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 
-	if (use_hw_cntr)
-		ft_fiversion = FI_VERSION(2, 5);
+	/*
+	 * query_qp_wqs reports the SQ capabilities only from API 2.7, and
+	 * efa-dp-direct 1.x refuses an SQ without 64-bit request IDs. 2.7
+	 * also covers the hardware counters, which need 2.5.
+	 */
+	ft_fiversion = FI_VERSION(2, 7);
 
 	ret = ft_init_fabric();
 	if (ret) {
@@ -541,6 +630,10 @@ int main(int argc, char **argv)
 		FT_PRINTERR("fi_open_ops", -ret);
 		return ret;
 	}
+
+	ret = create_gda_ctx();
+	if (ret)
+		return ret;
 
 	// create extended CQs
 	cq_attr.format = FI_CQ_FORMAT_MSG;
@@ -638,12 +731,10 @@ int main(int argc, char **argv)
 			ret = run_bw(&remote_iov);
 	}
 
-	if (send_cq_buffer)
-		efa_cuda_destroy_cq(gda_send_cq);
-	if (recv_cq_buffer)
-		efa_cuda_destroy_cq(gda_recv_cq);
-	if (gda_qp)
-		efa_cuda_destroy_qp(gda_qp);
+	cudaFree(gda_send_cq);
+	cudaFree(gda_recv_cq);
+	cudaFree(gda_qp);
+	efa_cuda_host_context_destroy(gda_ctx);
 	// qp need to be destroyed before closing cq
 	FT_CLOSE_FID(gda_ep);
 	FT_CLOSE_FID(txcq_ext);
