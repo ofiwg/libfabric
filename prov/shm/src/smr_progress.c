@@ -271,6 +271,67 @@ static ssize_t smr_progress_inject(struct smr_ep *ep, struct smr_cmd *cmd,
 	return ret;
 }
 
+static ssize_t smr_stage_iov(struct smr_ep *ep, struct smr_cmd *cmd,
+			     struct ofi_mr **mr, struct iovec *iov,
+			     size_t iov_count, pid_t pid, void *xpmem)
+{
+	struct smr_unexp_buf *buf;
+	struct iovec remote[SMR_IOV_LIMIT];
+	struct iovec local, peer;
+	size_t remote_count, size, len, bytes = 0;
+	bool write = cmd->hdr.op == ofi_op_read_req;
+	ssize_t ret = FI_SUCCESS;
+
+	size = MIN(cmd->hdr.size, ofi_total_iov_len(iov, iov_count));
+
+	buf = ofi_buf_alloc(ep->unexp_buf_pool);
+	if (!buf)
+		return -FI_ENOMEM;
+
+	remote_count = cmd->data.iov_count;
+	memcpy(remote, cmd->data.iov, sizeof(*remote) * remote_count);
+
+	while (bytes < size) {
+		len = MIN(MIN(size - bytes, SMR_SAR_SIZE), remote[0].iov_len);
+		local.iov_base = buf->buf;
+		local.iov_len = len;
+		peer.iov_base = remote[0].iov_base;
+		peer.iov_len = len;
+
+		if (write) {
+			ret = ofi_copy_from_mr_iov(buf->buf, len, mr, iov,
+						   iov_count, bytes);
+			if (ret != (ssize_t) len)
+				goto copy_err;
+		}
+
+		ret = ofi_shm_p2p_copy(ep->p2p_type, &local, 1, &peer, 1, len,
+				       pid, write, xpmem);
+		if (ret)
+			goto out;
+
+		if (!write) {
+			ret = ofi_copy_to_mr_iov(mr, iov, iov_count, bytes,
+						 buf->buf, len);
+			if (ret != (ssize_t) len)
+				goto copy_err;
+		}
+
+		bytes += len;
+		ofi_consume_iov(remote, &remote_count, len);
+	}
+
+	ret = bytes == cmd->hdr.size ? FI_SUCCESS : -FI_ETRUNC;
+	goto out;
+
+copy_err:
+	if (ret >= 0)
+		ret = -FI_EIO;
+out:
+	ofi_buf_free(buf);
+	return ret;
+}
+
 static ssize_t smr_progress_iov(struct smr_ep *ep, struct smr_cmd *cmd,
 				struct fi_peer_rx_entry *rx_entry,
 				struct ofi_mr **mr, struct iovec *iov,
@@ -278,16 +339,20 @@ static ssize_t smr_progress_iov(struct smr_ep *ep, struct smr_cmd *cmd,
 {
 	struct smr_region *peer_smr;
 	struct ofi_xpmem_client *xpmem;
-	int ret;
+	ssize_t ret;
 
 	peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
 
 	xpmem = &smr_peer_data(ep->region)[cmd->hdr.rx_id].xpmem;
 
-	ret = ofi_shm_p2p_copy(ep->p2p_type, iov, iov_count, cmd->data.iov,
-			       cmd->data.iov_count, cmd->hdr.size,
-			       peer_smr->pid, cmd->hdr.op == ofi_op_read_req,
-			       xpmem);
+	if (mr && !ofi_mr_all_host(mr, iov_count))
+		ret = smr_stage_iov(ep, cmd, mr, iov, iov_count,
+				    peer_smr->pid, xpmem);
+	else
+		ret = ofi_shm_p2p_copy(ep->p2p_type, iov, iov_count,
+				       cmd->data.iov, cmd->data.iov_count,
+				       cmd->hdr.size, peer_smr->pid,
+				       cmd->hdr.op == ofi_op_read_req, xpmem);
 	if (ret)
 		cmd->hdr.smr_flags |= SMR_OP_ERROR;
 
