@@ -13,3 +13,11 @@ updates:
       time: "09:00"
       timezone: "America/Los_Angeles"
 
+  - package-ecosystem: "pip"
+    directory: "/cmake"
+    schedule:
+      interval: "weekly"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    commit-message:
+      prefix: "build"

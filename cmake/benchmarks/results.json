@@ -1,0 +1,84 @@
+{
+  "host": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+  "jobs": 8,
+  "runs": [
+    {
+      "system": "cmake",
+      "repetition": 0,
+      "bootstrap": 0,
+      "configure": 4.487921589000052,
+      "compile": 2.7773547870001494,
+      "total": 7.265276376000202,
+      "noop": 0.004179732000011427,
+      "incremental": 0.3552638010000919,
+      "stripped_bytes": 761608,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 725016\t  28312\t    848\t 754176\t  b8200\t/tmp/libfabric-cmake-refresh-validation/benchmarks/cmake-0/libfabric.stripped.so\n"
+    },
+    {
+      "system": "autotools",
+      "repetition": 0,
+      "bootstrap": 6.247127361000366,
+      "configure": 9.280217042000004,
+      "compile": 3.1250677500001984,
+      "total": 18.65241215300057,
+      "noop": 0.14853495400029715,
+      "incremental": 0.6460214910002833,
+      "stripped_bytes": 732928,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 699057\t  28304\t    856\t 728217\t  b1c99\t/tmp/libfabric-cmake-refresh-validation/benchmarks/autotools-0/libfabric.stripped.so\n"
+    },
+    {
+      "system": "autotools",
+      "repetition": 1,
+      "bootstrap": 6.19595180000033,
+      "configure": 9.249675131000004,
+      "compile": 3.102739339999971,
+      "total": 18.548366271000305,
+      "noop": 0.1514243639999222,
+      "incremental": 0.6511420570000155,
+      "stripped_bytes": 732928,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 699057\t  28304\t    856\t 728217\t  b1c99\t/tmp/libfabric-cmake-refresh-validation/benchmarks/autotools-1/libfabric.stripped.so\n"
+    },
+    {
+      "system": "cmake",
+      "repetition": 1,
+      "bootstrap": 0,
+      "configure": 3.8899386129996856,
+      "compile": 3.1105154810002205,
+      "total": 7.000454093999906,
+      "noop": 0.004480667999814614,
+      "incremental": 0.3880955909999102,
+      "stripped_bytes": 761608,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 725016\t  28312\t    848\t 754176\t  b8200\t/tmp/libfabric-cmake-refresh-validation/benchmarks/cmake-1/libfabric.stripped.so\n"
+    },
+    {
+      "system": "cmake",
+      "repetition": 2,
+      "bootstrap": 0,
+      "configure": 4.481373219000034,
+      "compile": 2.850798932000089,
+      "total": 7.3321721510001225,
+      "noop": 0.004229731000123138,
+      "incremental": 0.36200414599989017,
+      "stripped_bytes": 761608,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 725016\t  28312\t    848\t 754176\t  b8200\t/tmp/libfabric-cmake-refresh-validation/benchmarks/cmake-2/libfabric.stripped.so\n"
+    },
+    {
+      "system": "autotools",
+      "repetition": 2,
+      "bootstrap": 6.278853967000032,
+      "configure": 9.67467156399971,
+      "compile": 3.6809799980001117,
+      "total": 19.634505528999853,
+      "noop": 0.16119607800010272,
+      "incremental": 0.6840736129997822,
+      "stripped_bytes": 732928,
+      "size": "   text\t   data\t    bss\t    dec\t    hex\tfilename\n 699057\t  28304\t    856\t 728217\t  b1c99\t/tmp/libfabric-cmake-refresh-validation/benchmarks/autotools-2/libfabric.stripped.so\n"
+    }
+  ],
+  "revision": "c3eca6912825fb0e7da3d34e9124cb48c7724968",
+  "compiler": "cc (GCC) 16.2.1 20260810",
+  "cmake": "cmake version 4.4.4",
+  "ninja": "1.13.2",
+  "make": "GNU Make 4.4.1",
+  "autoreconf": "autoreconf (GNU Autoconf) 2.73"
+}
