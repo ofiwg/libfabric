@@ -19,3 +19,6 @@ atomic
 
 # FI_HMEM not supported
 hmem_scatter
+
+# RMA orderings not supported
+rma_order
