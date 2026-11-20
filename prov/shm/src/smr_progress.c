@@ -91,6 +91,20 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 	int ret = FI_SUCCESS;
 
 	switch (cmd->hdr.proto) {
+	case smr_proto_inline:
+		if (cmd->hdr.op != ofi_op_atomic &&
+		    !(cmd->hdr.smr_flags & SMR_OP_ERROR)) {
+			hmem_copy_ret = ofi_copy_to_mr_iov(pend->mr, pend->iov,
+							   pend->iov_count, 0,
+							   cmd->data.msg,
+							   cmd->hdr.size);
+			if (hmem_copy_ret != cmd->hdr.size) {
+				cmd->hdr.smr_flags |= SMR_OP_ERROR;
+				ret = hmem_copy_ret < 0 ?
+				      (int) hmem_copy_ret : -FI_ETRUNC;
+			}
+		}
+		break;
 	case smr_proto_iov:
 		break;
 	case smr_proto_ipc:
@@ -102,7 +116,9 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 			return -FI_EIO;
 		}
 
-		if (cmd->hdr.op == ofi_op_read_req) {
+		if (cmd->hdr.op == ofi_op_read_req ||
+		    cmd->hdr.op == ofi_op_atomic_fetch ||
+		    cmd->hdr.op == ofi_op_atomic_compare) {
 			ret = pend->sar_copy_fn(ep, pend);
 			if (ret == -FI_EBUSY)
 				return -FI_EAGAIN;
@@ -135,9 +151,9 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 		return -FI_EAGAIN;
 	case smr_proto_inject:
 		assert(pend);
+		tx_buf = smr_get_ptr(ep->region, cmd->hdr.proto_data);
 		if (pend->bytes_done != cmd->hdr.size &&
 			cmd->hdr.op != ofi_op_atomic) {
-			tx_buf = smr_get_ptr(ep->region, cmd->hdr.proto_data);
 			src = cmd->hdr.op == ofi_op_atomic_compare ?
 				tx_buf->buf : tx_buf->data;
 			hmem_copy_ret  = ofi_copy_to_mr_iov(
@@ -157,8 +173,8 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 					"buffer copied\n");
 				ret = -FI_ETRUNC;
 			}
-			smr_return_inject_buf(ep->region, tx_buf);
 		}
+		smr_return_inject_buf(ep->region, tx_buf);
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -629,9 +645,15 @@ static void smr_do_atomic(struct smr_cmd *cmd, void *src, struct ofi_mr *dst_mr,
 		memcpy(src, tmp_result, cnt * ofi_datatype_size(datatype));
 	} else if (cmd->hdr.op == ofi_op_atomic_fetch &&
 		   ofi_atomic_isreadwrite_op(op)) {
-		ofi_atomic_readwrite_handler(op, datatype, cpy_dst, src,
-					     tmp_result, cnt);
-		memcpy(src, tmp_result, cnt * ofi_datatype_size(datatype));
+		if (op == FI_ATOMIC_READ) {
+			ofi_atomic_readwrite_handler(op, datatype, cpy_dst,
+						     NULL, src, cnt);
+		} else {
+			ofi_atomic_readwrite_handler(op, datatype, cpy_dst, src,
+						     tmp_result, cnt);
+			memcpy(src, tmp_result,
+			       cnt * ofi_datatype_size(datatype));
+		}
 	} else if (ofi_atomic_iswrite_op(op)) {
 		ofi_atomic_write_handler(op, datatype, cpy_dst, src, cnt);
 	} else {
@@ -654,13 +676,13 @@ static int smr_progress_inline_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 {
 	int i;
 	uint8_t *src = cmd->data.msg;
-
-	assert(cmd->hdr.op == ofi_op_atomic);
+	uint8_t *comp = (cmd->hdr.op == ofi_op_atomic_compare) ?
+			src + cmd->hdr.size : NULL;
 
 	for (i = *len = 0; i < ioc_count && *len < cmd->hdr.size; i++) {
-		smr_do_atomic(cmd, &src[*len], mr[i], ioc[i].addr, NULL,
-			      cmd->hdr.datatype, cmd->hdr.atomic_op,
-			      ioc[i].count);
+		smr_do_atomic(cmd, &src[*len], mr[i], ioc[i].addr,
+			      comp ? &comp[*len] : NULL, cmd->hdr.datatype,
+			      cmd->hdr.atomic_op, ioc[i].count);
 		*len += ioc[i].count * ofi_datatype_size(cmd->hdr.datatype);
 	}
 
@@ -680,8 +702,7 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 	uint8_t *src, *comp;
 	int i;
 
-	if (cmd->hdr.op == ofi_op_atomic_compare ||
-	    cmd->hdr.op == ofi_op_atomic_fetch)
+	if (cmd->hdr.smr_flags & SMR_RETURN_CMD)
 		tx_buf = smr_get_ptr(smr_peer_region(ep, cmd->hdr.rx_id),
 				     cmd->hdr.proto_data);
 	else
@@ -705,8 +726,7 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 		*len += ioc[i].count * ofi_datatype_size(cmd->hdr.datatype);
 	}
 
-	if (cmd->hdr.op != ofi_op_atomic_compare &&
-	    cmd->hdr.op != ofi_op_atomic_fetch)
+	if (!(cmd->hdr.smr_flags & SMR_RETURN_CMD))
 		smr_return_inject_buf(ep->region, tx_buf);
 
 	if (*len != cmd->hdr.size) {
@@ -715,6 +735,84 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 	}
 
 	return FI_SUCCESS;
+}
+
+static ssize_t smr_copy_atomic_rx_sar(struct smr_ep *ep,
+				      struct smr_pend_entry *pend)
+{
+	struct smr_cmd *cmd = pend->cmd;
+	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
+	struct smr_sar_buf *sar_buf;
+	size_t dt_size = ofi_datatype_size(cmd->hdr.datatype);
+	size_t chunk_cap = (cmd->hdr.op == ofi_op_atomic_compare) ?
+			   SMR_SAR_SIZE / 2 : SMR_SAR_SIZE;
+	size_t chunk_len = MIN(cmd->hdr.size - pend->bytes_done, chunk_cap);
+	size_t copied = 0, skip = pend->bytes_done, len, step;
+	uint8_t *src, *comp;
+	size_t i;
+
+	sar_buf = smr_freestack_get_entry_from_index(smr_sar_pool(peer_smr),
+						     cmd->data.sar[0]);
+	src = (uint8_t *) sar_buf->buf;
+	comp = (cmd->hdr.op == ofi_op_atomic_compare) ?
+	       src + SMR_SAR_SIZE / 2 : NULL;
+
+	for (i = 0; i < pend->iov_count && copied < chunk_len; i++) {
+		if (skip >= pend->iov[i].iov_len) {
+			skip -= pend->iov[i].iov_len;
+			continue;
+		}
+		len = MIN(pend->iov[i].iov_len - skip, chunk_len - copied);
+		while (len) {
+			step = MIN(len, SMR_INJECT_SIZE);
+			smr_do_atomic(cmd, src + copied, pend->mr[i],
+				      (char *) pend->iov[i].iov_base + skip,
+				      comp ? comp + copied : NULL,
+				      cmd->hdr.datatype, cmd->hdr.atomic_op,
+				      step / dt_size);
+			copied += step;
+			skip += step;
+			len -= step;
+		}
+		skip = 0;
+	}
+
+	pend->bytes_done += copied;
+	if (copied != chunk_len)
+		return -FI_ETRUNC;
+
+	return FI_SUCCESS;
+}
+
+static int smr_progress_sar_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
+				   struct ofi_mr **mr, struct fi_ioc *ioc,
+				   size_t ioc_count, size_t *total_len)
+{
+	struct smr_pend_entry *pend;
+	struct iovec sar_iov[SMR_IOV_LIMIT];
+	size_t dt_size = ofi_datatype_size(cmd->hdr.datatype);
+	ssize_t ret;
+
+	ofi_ioc_to_iov(ioc, sar_iov, ioc_count, dt_size);
+	(void) ofi_truncate_iov(sar_iov, &ioc_count, cmd->hdr.size);
+
+	pend = ofi_buf_alloc(ep->pend_pool);
+	if (!pend)
+		return -FI_ENOMEM;
+
+	cmd->hdr.rx_ctx = (uintptr_t) pend;
+	smr_init_rx_pend(pend, cmd, NULL, mr, sar_iov, ioc_count);
+	pend->sar_copy_fn = &smr_copy_atomic_rx_sar;
+
+	ret = smr_try_copy_rx_sar(ep, pend);
+	if (pend->bytes_done == cmd->hdr.size) {
+		*total_len = pend->bytes_done;
+		cmd->hdr.rx_ctx = 0;
+		ofi_buf_free(pend);
+		ret = FI_SUCCESS;
+	}
+
+	return (int) ret;
 }
 
 static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
@@ -1281,6 +1379,9 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 	size_t ioc_count, dt_size, total_len = 0;
 	int err = 0, ret = 0;
 
+	if (cmd->hdr.rx_ctx)
+		return smr_progress_pending(ep, cmd);
+
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
@@ -1315,11 +1416,18 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = smr_progress_inject_atomic(cmd, mr, ioc, ioc_count,
 						 &total_len, ep);
 		break;
+	case smr_proto_sar:
+		err = smr_progress_sar_atomic(ep, cmd, mr, ioc, ioc_count,
+					      &total_len);
+		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unidentified operation type\n");
 		err = -FI_EINVAL;
 	}
+
+	if (cmd->hdr.rx_ctx)
+		goto out;
 
 	if (err) {
 		cmd->hdr.smr_flags |= SMR_OP_ERROR;
