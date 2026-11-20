@@ -497,6 +497,12 @@ application must copy the structure to device-accessible memory before
 passing it to device-side completion functions (fi_xpu_cq_read,
 fi_xpu_cq_readerr).
 
+The flags parameter may be 0 or one of the FI_XPU resource sharing flags,
+which declare how many threads issue device-side calls on the CQ. If no flag
+is set, any thread of the XPU may issue calls. The CQ is used by the threads
+of every endpoint bound to it, so the flag must account for all of them. See
+the Resource Sharing section of [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 # COMPLETION FIELDS
 
 The CQ entry data structures share many of the same fields.  The meanings
@@ -1050,7 +1056,8 @@ to report additional completions once the overrun occurs.
 : Returns 0 on success. On error, returns a negative fabric errno.
   Returns -FI_ENOSYS if the provider does not support exporting the
   CQ for XPU access. Returns -FI_EINVAL if the CQ was not created
-  with an XPU context.
+  with an XPU context, if flags contains an unknown flag or multiple
+  sharing flags, or if the CQ was already exported with different sharing flags.
 
 Fabric errno values are defined in
 `rdma/fi_errno.h`.

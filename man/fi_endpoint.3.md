@@ -1689,6 +1689,12 @@ device-accessible memory before passing it to device-side data transfer
 functions. The ep must have been created with FI_XPU and be in the
 enabled state.
 
+The flags parameter may be 0 or one of the FI_XPU resource sharing flags,
+which declare how many threads issue device-side calls on the endpoint. If no
+flag is set, any thread of the XPU may issue calls. The flag applies to both
+the transmit and receive queues of the endpoint. See the Resource Sharing
+section of [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 # OPERATION FLAGS
 
 Operation flags are obtained by OR-ing the following flags together.
@@ -1821,7 +1827,9 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 
 *-FI_EINVAL*
 : Returned by fi_ep_export_xpu if the endpoint was not created with
-  FI_XPU or is not in the enabled state.
+  FI_XPU or is not in the enabled state, if flags contains an unknown
+  flag or multiple sharing flags, or if the endpoint was already exported with
+  different sharing flags.
 
 # SEE ALSO
 
