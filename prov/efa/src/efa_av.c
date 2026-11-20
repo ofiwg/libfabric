@@ -26,22 +26,14 @@ struct efa_av_entry *efa_av_index_to_entry(struct efa_av_array *entry_table,
 
 
 /**
- * @brief whether an FI_AV_MAP entry is still in the AV
+ * @brief find the efa_av_entry using fi_addr in the explicit AV
  *
- * An FI_AV_MAP fi_addr points into util_av's indexed buffer pool, whose
- * memory stays mapped until the AV is closed, and a buffer keeps its index
- * for its lifetime. So a removed fi_addr can be checked without reading the
- * entry: it is valid if its index is allocated and the entry table still
- * holds this entry at that index.
+ * @param[in]	av	efa address vector
+ * @param[in]	fi_addr	fi_addr of the AV entry
  */
-bool efa_av_map_entry_is_valid(struct efa_av *av, const struct efa_av_entry *entry)
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
 {
-	struct util_av_entry *util_entry =
-		container_of((void *) entry, struct util_av_entry, data);
-	size_t index = ofi_buf_index(util_entry);
-
-	return ofi_bufpool_ibuf_is_valid(av->util_av.av_entry_pool, index) &&
-	       efa_av_index_to_entry(av->entry_table, index) == entry;
+	return efa_av_index_to_entry(av->entry_table, fi_addr);
 }
 
 
@@ -61,8 +53,7 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	cur_entry = efa_av_array_at(av->cur_reverse_av,
 				    efa_av_reverse_av_key(ahn, qpn));
 
-	return (OFI_LIKELY(!!cur_entry)) ? efa_av_entry_to_fi_addr(av, cur_entry)
-					  : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 
@@ -197,7 +188,7 @@ int efa_av_entry_base_construct(struct efa_av *av, struct efa_av_entry *entry,
 {
 	int err;
 
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	assert(av->type == FI_AV_TABLE);
 	entry->fi_addr = fi_addr;
 	entry->ah = ah;
 
@@ -351,8 +342,7 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 			 "Found existing AV entry pointing to this "
 			 "address! fi_addr: %" PRId64 "\n",
 			 efa_fiaddr);
-		*fi_addr = efa_av_entry_to_fi_addr(
-			av, efa_av_index_to_entry(av->entry_table, efa_fiaddr));
+		*fi_addr = efa_fiaddr;
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return 0;
 	}
@@ -371,7 +361,7 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	*fi_addr = efa_av_entry_to_fi_addr(av, entry);
+	*fi_addr = new_fi_addr;
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
@@ -446,13 +436,14 @@ int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_av_entry *entry = NULL;
 
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	if (av->type != FI_AV_TABLE)
+		return -FI_EINVAL;
 
 	if (fi_addr == FI_ADDR_NOTAVAIL)
 		return -FI_EINVAL;
 
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	entry = efa_av_addr_to_entry_checked(av, fi_addr);
+	entry = efa_av_addr_to_entry(av, fi_addr);
 	if (!entry) {
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return -FI_EINVAL;
@@ -503,7 +494,8 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		return -FI_EINVAL;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	assert(av->type == FI_AV_TABLE || av->type == FI_AV_MAP);
+	if (av->type != FI_AV_TABLE)
+		return -FI_EINVAL;
 
 	/* The order in which the util domain and av locks are acquired must be
 	 * util_domain.lock -> util_av.lock in the AV insertion and removal
@@ -511,7 +503,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	for (i = 0; i < count; i++) {
-		entry = efa_av_addr_to_entry_checked(av, fi_addr[i]);
+		entry = efa_av_addr_to_entry(av, fi_addr[i]);
 		if (!entry) {
 			err = -FI_EINVAL;
 			break;
@@ -577,7 +569,7 @@ static int efa_av_lookup2(struct fid_av *av_fid, fi_addr_t fi_addr, void *buf,
 
 	/* As in efa_av_lookup(): the entry cannot be removed under the read. */
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	av_entry = efa_av_addr_to_entry_checked(av, fi_addr);
+	av_entry = efa_av_addr_to_entry(av, fi_addr);
 	if (!av_entry || !av_entry->ah) {
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 		return av_entry ? -FI_ENODATA : -FI_EINVAL;
@@ -775,11 +767,10 @@ int efa_av_open_prepare_attr(struct fid_domain *domain_fid,
 	else
 		attr->count = MAX(attr->count, EFA_MIN_AV_SIZE);
 
-	/* FI_AV_MAP is honored on top of the table: util_av is always set up as
-	 * a table, and the open path marks the efa_av as FI_AV_MAP afterwards */
-	if (attr->type == FI_AV_MAP && !efa_env.support_av_map)
-		EFA_INFO(FI_LOG_AV, "FI_EFA_SUPPORT_AV_MAP is 0: using FI_AV_TABLE "
-				    "instead of the requested FI_AV_MAP.\n");
+	if (attr->type == FI_AV_MAP) {
+		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
+					"EFA provider will now switch to using FI_AV_TABLE.\n");
+	}
 	attr->type = FI_AV_TABLE;
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
@@ -798,12 +789,8 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct efa_domain *efa_domain;
 	struct efa_av *av;
-	bool map;
 	int ret;
 
-	/* decided before efa_av_open_prepare_attr(), which sets attr->type to
-	 * FI_AV_TABLE for util_av */
-	map = attr && attr->type == FI_AV_MAP && efa_env.support_av_map;
 	ret = efa_av_open_prepare_attr(domain_fid, attr, &efa_domain);
 	if (ret)
 		return ret;
@@ -817,13 +804,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_free;
 
-	if (map) {
-		av->type = FI_AV_MAP;
-		attr->type = FI_AV_MAP;
-	}
-
-	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 " type %s\n", attr->flags,
-		 efa_av_is_map(av) ? "FI_AV_MAP" : "FI_AV_TABLE");
+	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n", attr->flags);
 
 	*av_fid = &av->util_av.av_fid;
 	(*av_fid)->fid.fclass = FI_CLASS_AV;
