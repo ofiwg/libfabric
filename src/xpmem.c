@@ -36,8 +36,10 @@
 
 #include <rdma/fi_errno.h>
 #include <ofi_xpmem.h>
+#include <ofi_iov.h>
 #include <ofi_mem.h>
 #include <ofi_mr.h>
+#include <ofi_tree.h>
 #include <ofi.h>
 #include <stdio.h>
 
@@ -162,23 +164,26 @@ int ofi_xpmem_copy(struct iovec *local, size_t local_cnt,
                    struct iovec *remote, size_t remote_cnt,
                    size_t total, pid_t pid, bool write, void *user_data)
 {
-	int ret, i;
+	int ret;
+	size_t i, j = 0, local_off = 0, rem;
+	size_t offset, remote_len, chunk, delta;
 	struct iovec iov;
-	uint64_t offset, copy_len, delta;
 	void *mapped_addr;
 	struct ofi_mr_entry *mr_entry;
 	long page_size = ofi_get_page_size();
 
-	assert(local_cnt == remote_cnt);
+	rem = MIN3(total, ofi_total_iov_len(local, local_cnt),
+		   ofi_total_iov_len(remote, remote_cnt));
 
-	for (i = 0; i < remote_cnt; i++) {
+	for (i = 0; i < remote_cnt && rem > 0; i++) {
+		remote_len = MIN(remote[i].iov_len, rem);
+		if (!remote_len)
+			continue;
+
 		iov.iov_base = (void *) ofi_get_page_start(remote[i].iov_base,
 							   page_size);
-		iov.iov_len =
-			(uintptr_t) ofi_get_page_end(
-					(void*)((uintptr_t)remote[i].iov_base +
-					remote[i].iov_len), page_size) -
-					(uintptr_t)iov.iov_base;
+		iov.iov_len = ofi_get_page_bytes(remote[i].iov_base, remote_len,
+						 page_size);
 
 		ret = ofi_xpmem_cache_search(xpmem_cache, &iov, pid, &mr_entry,
 					     (struct ofi_xpmem_client *)user_data);
@@ -187,21 +192,34 @@ int ofi_xpmem_copy(struct iovec *local, size_t local_cnt,
 
 		delta = (uintptr_t) iov.iov_base -
 			(uintptr_t) mr_entry->info.iov.iov_base;
-		offset = (uintptr_t)((uintptr_t) remote[i].iov_base -
-				     (uintptr_t) iov.iov_base);
+		offset = (uintptr_t) remote[i].iov_base -
+			 (uintptr_t) iov.iov_base;
 
-		mapped_addr = (char*) (uintptr_t)mr_entry->info.mapped_addr +
+		mapped_addr = (char *) (uintptr_t)mr_entry->info.mapped_addr +
 				offset + delta;
 
-		copy_len = (local[i].iov_len <= iov.iov_len - offset) ?
-				local[i].iov_len : iov.iov_len - offset;
-
-		if (write)
-			xpmem_memcpy(mapped_addr, local[i].iov_base,
-				     copy_len);
-		else
-			xpmem_memcpy(local[i].iov_base, mapped_addr,
-				     copy_len);
+		rem -= remote_len;
+		while (remote_len > 0 && j < local_cnt) {
+			chunk = MIN(remote_len, local[j].iov_len - local_off);
+			if (chunk > 0) {
+				if (write)
+					xpmem_memcpy(mapped_addr,
+						     (char *)local[j].iov_base +
+						     local_off, chunk);
+				else
+					xpmem_memcpy((char *)local[j].iov_base +
+						     local_off, mapped_addr,
+						     chunk);
+				mapped_addr = (char *)mapped_addr + chunk;
+				remote_len -= chunk;
+				local_off += chunk;
+			}
+			if (local_off == local[j].iov_len) {
+				j++;
+				local_off = 0;
+			}
+		}
+		assert(!remote_len);
 
 		ofi_mr_cache_delete(xpmem_cache, mr_entry);
 	}
@@ -222,6 +240,27 @@ int ofi_xpmem_enable(struct ofi_xpmem_pinfo *peer,
 
 void ofi_xpmem_release(struct ofi_xpmem_client *xpmem)
 {
+	struct ofi_mr_entry *entry;
+	struct dlist_entry *tmp;
+
+	if (xpmem_cache) {
+		pthread_mutex_lock(&mm_lock);
+		dlist_foreach_container_safe(&xpmem_cache->lru_list,
+					     struct ofi_mr_entry, entry,
+					     list_entry, tmp) {
+			if (entry->info.peer_id != (uint64_t) xpmem->apid)
+				continue;
+			dlist_remove(&entry->list_entry);
+			ofi_rbmap_delete(&xpmem_cache->tree, entry->node);
+			entry->node = NULL;
+			xpmem_cache->cached_cnt--;
+			xpmem_cache->cached_size -= entry->info.iov.iov_len;
+			dlist_insert_tail(&entry->list_entry,
+					  &xpmem_cache->dead_region_list);
+		}
+		pthread_mutex_unlock(&mm_lock);
+		ofi_mr_cache_flush(xpmem_cache, false);
+	}
 	xpmem_release(xpmem->apid);
 }
 

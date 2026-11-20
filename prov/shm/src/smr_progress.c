@@ -284,7 +284,8 @@ static ssize_t smr_progress_iov(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	xpmem = &smr_peer_data(ep->region)[cmd->hdr.rx_id].xpmem;
 
-	ret = ofi_shm_p2p_copy(ep->p2p_type, iov, iov_count, cmd->data.iov,
+	ret = ofi_shm_p2p_copy(xpmem->avail ? FI_SHM_P2P_XPMEM : FI_SHM_P2P_CMA,
+			       iov, iov_count, cmd->data.iov,
 			       cmd->data.iov_count, cmd->hdr.size,
 			       peer_smr->pid, cmd->hdr.op == ofi_op_read_req,
 			       xpmem);

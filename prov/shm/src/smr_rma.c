@@ -77,7 +77,8 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	xpmem = &smr_peer_data(ep->region)[tx_id].xpmem;
 
-	ret = ofi_shm_p2p_copy(ep->p2p_type, vma_iovec, iov_count,
+	ret = ofi_shm_p2p_copy(xpmem->avail ? FI_SHM_P2P_XPMEM : FI_SHM_P2P_CMA,
+			       vma_iovec, iov_count,
 			       rma_iovec, rma_count, total_len, peer_smr->pid,
 			       op == ofi_op_write, xpmem);
 
