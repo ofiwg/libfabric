@@ -471,7 +471,7 @@ additional optimizations.
   computation devices, such as GPUs. At the endpoint level, indicates the
   endpoint should support such operations; at the domain level, indicates the
   domain supports creating an XPU context. See
-  [`fi_xpu`(3)](fi_xpu.3.html) for details.
+  [`fi_xpu`(3)](fi_xpu.3.html) for details. This capability is experimental.
 
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.  Primary capabilities must explicitly
