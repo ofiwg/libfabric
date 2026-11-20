@@ -286,6 +286,10 @@ ignore parameters function identically to their host-side
 counterparts. See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
 programming model.
 
+What fi_xpu_tsend and fi_xpu_trecv do at each scope, and their return values,
+including when and how they return -FI_EAGAIN, are described under Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
+
 # FLAGS
 
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
@@ -434,6 +438,9 @@ The following flags may be used with fi_trecvmsg.
 The tagged send and receive calls return 0 on success.  On error, a
 negative value corresponding to fabric _errno _ is returned. Fabric
 errno values are defined in `fi_errno.h`.
+
+For the device-side calls fi_xpu_tsend and fi_xpu_trecv, see Scope in
+[`fi_xpu`(3)](fi_xpu.3.html).
 
 # ERRORS
 
