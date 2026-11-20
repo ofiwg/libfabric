@@ -2075,6 +2075,156 @@ static bool vrb_pci_addr_equal(const struct fi_pci_attr *a, const struct fi_pci_
 }
 
 #define VRB_MAX_CONFIG_LINE_LEN 256
+#define VRB_NIC_ORDER_LEN 1024
+#define VRB_NIC_ORDER_SEP ", "
+#define VRB_NIC_ORDER_MORE "..."
+#define VRB_PCI_STR_LEN 16
+
+static const char *vrb_info_nic_name(const struct fi_info *info)
+{
+	if (info->nic && info->nic->device_attr && info->nic->device_attr->name)
+		return info->nic->device_attr->name;
+	return NULL;
+}
+
+/* NIC name for log messages; "unknown" if the entry has none */
+static const char *vrb_nic_log_name(const struct fi_info *info)
+{
+	const char *name = vrb_info_nic_name(info);
+
+	return name ? name : "unknown";
+}
+
+static const struct fi_pci_attr *vrb_nic_pci(const struct fi_info *info)
+{
+	if (!info->nic || !info->nic->bus_attr ||
+	    info->nic->bus_attr->bus_type != FI_BUS_PCI)
+		return NULL;
+	return &info->nic->bus_attr->attr.pci;
+}
+
+/*
+ * True if two entries belong to the same NIC: the same NIC name or, for
+ * entries without a name, the same PCI address. Entries with neither
+ * cannot be matched.
+ */
+static bool vrb_same_nic(const struct fi_info *a, const struct fi_info *b)
+{
+	const char *name_a = vrb_info_nic_name(a);
+	const char *name_b = vrb_info_nic_name(b);
+	const struct fi_pci_attr *pci_a;
+	const struct fi_pci_attr *pci_b;
+
+	if (name_a || name_b)
+		return name_a && name_b && !strcmp(name_a, name_b);
+
+	pci_a = vrb_nic_pci(a);
+	pci_b = vrb_nic_pci(b);
+	return pci_a && pci_b && vrb_pci_addr_equal(pci_a, pci_b);
+}
+
+/* True if an entry ahead of 'cur' in the list belongs to the same NIC */
+static bool vrb_nic_seen_before(const struct fi_info *head,
+				const struct fi_info *cur)
+{
+	for (; head && head != cur; head = head->next) {
+		if (vrb_same_nic(head, cur))
+			return true;
+	}
+	return false;
+}
+
+static void vrb_nic_pci_str(const struct fi_info *info, char *buf, size_t len)
+{
+	const struct fi_pci_attr *pci = vrb_nic_pci(info);
+
+	if (!pci) {
+		snprintf(buf, len, "unknown");
+		return;
+	}
+
+	snprintf(buf, len, "%04x:%02x:%02x.%x", pci->domain_id, pci->bus_id,
+		 pci->device_id, pci->function_id);
+}
+
+static const char *vrb_proximity_str(enum vrb_pcie_proximity proximity)
+{
+	switch (proximity) {
+	case VRB_PROXIMITY_BRIDGE:
+		return "bridge";
+	case VRB_PROXIMITY_PACKAGE:
+		return "package";
+	case VRB_PROXIMITY_MACHINE:
+		return "machine";
+	default:
+		return "unknown";
+	}
+}
+
+/*
+ * Log the NIC order after affinity reordering, in one pass over the list.
+ * With 'nic_array' (auto policy; entry i belongs to the i-th list entry),
+ * first log one line per NIC with its proximity. Then log the preferred
+ * NIC and the whole order. Each NIC is listed once, at its first entry,
+ * so the priorities and the order follow the real list order. A NIC
+ * without a name is listed as "unknown" (see vrb_same_nic()).
+ */
+static void vrb_log_nic_order(const struct fi_info *info,
+			      const struct vrb_nic_proximity_cache *nic_array)
+{
+	char order[VRB_NIC_ORDER_LEN] = "";
+	/* Room is kept for VRB_NIC_ORDER_MORE if the order does not fit */
+	const size_t max = sizeof(order) -
+			   sizeof(VRB_NIC_ORDER_SEP VRB_NIC_ORDER_MORE);
+	char pci_str[VRB_PCI_STR_LEN];
+	const struct fi_info *cur;
+	const char *preferred = NULL;
+	const char *name;
+	bool truncated = false;
+	size_t len = 0;
+	int priority = 0;
+	int ret;
+	int i;
+
+	if (!fi_log_enabled(&vrb_prov, FI_LOG_INFO, FI_LOG_CORE))
+		return;
+
+	for (cur = info, i = 0; cur; cur = cur->next, i++) {
+		if (vrb_nic_seen_before(info, cur))
+			continue;
+		name = vrb_nic_log_name(cur);
+		if (!preferred)
+			preferred = name;
+		priority++;
+
+		if (nic_array) {
+			vrb_nic_pci_str(cur, pci_str, sizeof(pci_str));
+			VRB_INFO(FI_LOG_CORE, "NIC %s [%s]: proximity=%s, "
+				 "priority=%d\n", name, pci_str,
+				 vrb_proximity_str(nic_array[i].proximity),
+				 priority);
+		}
+
+		if (truncated)
+			continue;
+		ret = snprintf(order + len, max + 1 - len, "%s%s",
+			       len ? VRB_NIC_ORDER_SEP : "", name);
+		if (ret < 0 || (size_t) ret > max - len) {
+			order[len] = '\0';
+			truncated = true;
+		} else {
+			len += ret;
+		}
+	}
+
+	if (truncated)
+		snprintf(order + len, sizeof(order) - len,
+			 "%s" VRB_NIC_ORDER_MORE, len ? VRB_NIC_ORDER_SEP : "");
+
+	VRB_INFO(FI_LOG_CORE, "Preferred NIC: %s\n",
+		 preferred ? preferred : "none");
+	VRB_INFO(FI_LOG_CORE, "Final NIC order: %s\n", order);
+}
 
 static int vrb_parse_manual_affinity_config(const struct fi_pci_attr *device_pci,
 					    char *nic_name, size_t nic_name_len)
@@ -2224,6 +2374,7 @@ static int vrb_proximity_compare(const void *a, const void *b)
 int vrb_nic_affinity_manual(struct fi_info **info, const struct fi_pci_attr *device_pci)
 {
 	char target_nic[VRB_MAX_CONFIG_LINE_LEN];
+	char pci_str[VRB_PCI_STR_LEN];
 	struct fi_info *cur;
 	struct fi_info *prev;
 	struct fi_info *next;
@@ -2236,8 +2387,15 @@ int vrb_nic_affinity_manual(struct fi_info **info, const struct fi_pci_attr *dev
 
 	ret = vrb_parse_manual_affinity_config(device_pci, target_nic,
 		sizeof(target_nic));
-	if (ret)
+	if (ret) {
+		/* The specific cause was logged by the config parser */
+		VRB_INFO(FI_LOG_CORE, "Manual policy: no usable mapping for "
+			 "device %04x:%02x:%02x.%x: %s (%d); skipping reordering\n",
+			 device_pci->domain_id, device_pci->bus_id,
+			 device_pci->device_id, device_pci->function_id,
+			 fi_strerror(-ret), ret);
 		return FI_SUCCESS;
+	}
 
 	VRB_DBG(FI_LOG_CORE, "Manual policy: device %04x:%02x:%02x.%x -> NIC %s\n",
 		device_pci->domain_id, device_pci->bus_id,
@@ -2273,9 +2431,13 @@ int vrb_nic_affinity_manual(struct fi_info **info, const struct fi_pci_attr *dev
 	if (target_head) {
 		target_tail->next = *info;
 		*info = target_head;
-		VRB_DBG(FI_LOG_CORE, "Moved fi_info entries for NIC %s to front of list\n", target_nic);
+		vrb_nic_pci_str(target_head, pci_str, sizeof(pci_str));
+		VRB_INFO(FI_LOG_CORE, "Manual policy: moved NIC %s [%s] to "
+			 "front of list\n", target_nic, pci_str);
+		vrb_log_nic_order(*info, NULL);
 	} else {
-		VRB_DBG(FI_LOG_CORE, "Target NIC %s not found in provider list, list unchanged\n", target_nic);
+		VRB_INFO(FI_LOG_CORE, "Manual policy: target NIC %s not found in "
+			 "provider list; skipping reordering\n", target_nic);
 	}
 
 	return FI_SUCCESS;
@@ -2289,6 +2451,7 @@ int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *devic
 	hwloc_obj_t nic_pci_obj;
 	struct fi_info *cur;
 	struct vrb_nic_proximity_cache *nic_array;
+	char pci_str[VRB_PCI_STR_LEN];
 	int entries_count;
 	int i;
 	int ret;
@@ -2329,9 +2492,10 @@ int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *devic
 
 	gpu_obj = vrb_find_pci_device(topology, device_pci);
 	if (!gpu_obj) {
-		VRB_DBG(FI_LOG_CORE, "Device %04x:%02x:%02x.%x not found in topology, "
-			"list unchanged\n", device_pci->domain_id, device_pci->bus_id,
-			device_pci->device_id, device_pci->function_id);
+		VRB_INFO(FI_LOG_CORE, "GPU device %04x:%02x:%02x.%x not found in "
+			 "topology; skipping reordering\n", device_pci->domain_id,
+			 device_pci->bus_id, device_pci->device_id,
+			 device_pci->function_id);
 		hwloc_topology_destroy(topology);
 		return FI_SUCCESS;
 	}
@@ -2353,21 +2517,23 @@ int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *devic
 		nic_array[i].index = i;
 
 		if (!cur->nic || !cur->nic->bus_attr ||
-		    cur->nic->bus_attr->bus_type != FI_BUS_PCI)
+		    cur->nic->bus_attr->bus_type != FI_BUS_PCI) {
+			VRB_DBG(FI_LOG_CORE, "NIC %s has no PCI bus info, "
+				"proximity unknown\n", vrb_nic_log_name(cur));
 			continue;
+		}
 
 		nic_array[i].pci = &cur->nic->bus_attr->attr.pci;
 		nic_pci_obj = vrb_find_pci_device(topology, nic_array[i].pci);
-		if (!nic_pci_obj)
+		if (!nic_pci_obj) {
+			vrb_nic_pci_str(cur, pci_str, sizeof(pci_str));
+			VRB_DBG(FI_LOG_CORE, "NIC %s [%s] not found in topology, "
+				"proximity unknown\n", vrb_nic_log_name(cur),
+				pci_str);
 			continue;
+		}
 
 		nic_array[i].proximity = vrb_calc_pcie_proximity(topology, gpu_obj, nic_pci_obj);
-
-		VRB_DBG(FI_LOG_CORE, "NIC %s proximity to GPU: %s\n",
-			cur->nic->device_attr ? cur->nic->device_attr->name : "unknown",
-			nic_array[i].proximity == VRB_PROXIMITY_BRIDGE ? "bridge" :
-			nic_array[i].proximity == VRB_PROXIMITY_PACKAGE ? "package" :
-			nic_array[i].proximity == VRB_PROXIMITY_MACHINE ? "machine" : "unknown");
 	}
 
 	/* Sort NICs by proximity (best first) */
@@ -2386,6 +2552,12 @@ int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *devic
 			tail = tail->next;
 		}
 	}
+
+	/* nic_array is now in list order, as vrb_log_nic_order() expects */
+	VRB_INFO(FI_LOG_CORE, "GPU-NIC affinity for GPU %04x:%02x:%02x.%x:\n",
+		 device_pci->domain_id, device_pci->bus_id,
+		 device_pci->device_id, device_pci->function_id);
+	vrb_log_nic_order(*info, nic_array);
 
 	free(nic_array);
 	hwloc_topology_destroy(topology);
