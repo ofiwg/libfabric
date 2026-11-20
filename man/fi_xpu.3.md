@@ -33,6 +33,14 @@ Detailed XPU behavior is documented in the corresponding man pages
 [`fi_cq`(3)](fi_cq.3.html), [`fi_cntr`(3)](fi_cntr.3.html),
 [`fi_mr`(3)](fi_mr.3.html)).
 
+The structure an export fills, for an EP, CQ or counter, remains valid across
+kernel launches until the object is closed or its export is updated. Control
+calls such as `fi_ep_bind` and `fi_close` are made on the host, and for
+performance an exported structure may not be kept synchronized with them as the
+host object is, depending on the provider. So while a kernel that may use an
+exported structure is running, the host must not close the object, change what
+is bound to it, or call any other control operation on it.
+
 # XPU CONTEXT
 
 Related EP, CQ, and counter resources created with FI_XPU must all target
@@ -250,11 +258,11 @@ devices) may report different sizes.
 An XPU EP is created by calling `fi_endpoint2` with `FI_XPU` in the flags
 parameter and setting `fi_ep_attr->xpu_ctx` to an open XPU context.
 
-An EP created with FI_XPU may be bound to XPU CQs and XPU counters created
-with the same XPU context. Binding to a host (non-XPU) CQ or counter is
-allowed but behavior is provider-specific. Control functions such
-as [`fi_ep_bind`](fi_ep_bind.3.html), [`fi_enable`](fi_endpoint.3.html),
-[`fi_setopt`](fi_endpoint.3.html), and CM
+An EP created with FI_XPU may be bound to XPU CQs and XPU counters created with
+the same XPU context. It may also be bound to a host (non-XPU) CQ or counter
+where the provider supports it; a provider that does not fails the binding with
+-FI_EOPNOTSUPP. Control functions such as [`fi_ep_bind`](fi_ep_bind.3.html),
+[`fi_enable`](fi_endpoint.3.html), [`fi_setopt`](fi_endpoint.3.html), and CM
 operations are available only to the host CPU.
 
 Once bound and enabled, `fi_ep_export_xpu` exports the EP for device access.
@@ -280,6 +288,13 @@ the device-side completion functions (`fi_xpu_cq_read`,
 are not available on an exported CQ. See
 [`fi_cq`(3)](fi_cq.3.html) for details.
 
+An exported CQ reflects the EPs bound to it when it was exported. After binding
+another EP to the CQ, or closing an EP bound to it, the application calls
+`fi_cq_export_xpu` again to update the export before the device uses the CQ.
+The update replaces the earlier export, and the application uses the newly
+filled structure from then on. For the reason given in OVERVIEW, an exported CQ
+does not follow later changes to its bindings.
+
 ## Counters
 
 An XPU counter is created by setting `FI_XPU` in `fi_cntr_attr->flags` and
@@ -292,6 +307,10 @@ for the device-side counter functions (`fi_xpu_cntr_read`,
 `fi_xpu_cntr_wait`). Host-side read operations (`fi_cntr_read`,
 `fi_cntr_wait`) are not available on an exported counter. See
 [`fi_cntr`(3)](fi_cntr.3.html) for details.
+
+An exported counter is updated in the same way: after binding another EP to the
+counter, or closing an EP bound to it, the application calls
+`fi_cntr_export_xpu` again before the device uses the counter.
 
 ## AV
 
