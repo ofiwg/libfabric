@@ -17,6 +17,11 @@ fi_xpu - OFI XPU API
 
 # OVERVIEW
 
+The FI_XPU capability and the interfaces described in this man page should be
+considered experimental. Until the experimental tag is removed, the
+interfaces, semantics, and data structures associated with FI_XPU may change
+between library versions.
+
 The FI_XPU capability allows for a specified XPU (or device) to access a given
 libfabric allocated resource for data path operations, with control operations
 being managed by host (CPU) software. A resource (endpoint, completion queue,
