@@ -545,6 +545,12 @@ static int exchange_run_info(uint64_t *ncases)
 	if (ret)
 		return ret;
 
+	if (info.ncases > ARRAY_SIZE(default_cases)) {
+		FT_ERR("invalid number of cases %" PRIu64 ", maximum is %zu",
+		       info.ncases, ARRAY_SIZE(default_cases));
+		return -FI_EINVAL;
+	}
+
 	server_device = info.server_device;
 	client_device = info.client_device;
 	*ncases = info.ncases;
