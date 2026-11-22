@@ -1158,6 +1158,32 @@ static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
 	return ret;
 }
 
+bool efa_rdm_cq_has_queued_work(struct efa_rdm_cq *cq)
+{
+	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
+	struct efa_rdm_cq *poll_cq;
+	struct dlist_entry *item;
+	bool queued = false;
+
+	EFA_GENLOCK_LOCK(&cq->ibv_cq_poll_list_lock,
+			 efa_ibv_cq_poll_list_lock_sym);
+	dlist_foreach(&cq->ibv_cq_poll_list, item) {
+		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
+		poll_cq = container_of(poll_list_entry->cq, struct efa_rdm_cq, efa_cq.ibv_cq);
+		EFA_GENLOCK_LOCK(&poll_cq->progress_ep_list_lock,
+				 efa_progress_ep_list_lock_sym);
+		queued = !dlist_empty(&poll_cq->progress_ep_list);
+		EFA_GENLOCK_UNLOCK(&poll_cq->progress_ep_list_lock,
+				   efa_progress_ep_list_lock_sym);
+		if (queued)
+			break;
+	}
+	EFA_GENLOCK_UNLOCK(&cq->ibv_cq_poll_list_lock,
+			   efa_ibv_cq_poll_list_lock_sym);
+
+	return queued;
+}
+
 /**
  * @brief Blocking CQ read with source address
  *
@@ -1209,7 +1235,9 @@ static ssize_t efa_rdm_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t cou
 		ret = util_cq->wait->wait_try(util_cq->wait);
 		if (ret == FI_SUCCESS) {
 			/* No completions; ready to block */
-			ret = efa_rdm_cq_poll_events(efa_rdm_cq, shm_enabled
+			ret = efa_rdm_cq_poll_events(efa_rdm_cq,
+						     (shm_enabled ||
+						      efa_rdm_cq_has_queued_work(efa_rdm_cq))
 						     ? (timeout < 0 ? 1 : MIN(timeout, 1))
 						     : timeout);
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN))

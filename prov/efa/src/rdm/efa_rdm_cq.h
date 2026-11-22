@@ -28,6 +28,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 int efa_rdm_cq_wait_add_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq);
 void efa_rdm_cq_wait_del_ibv_cq(struct efa_rdm_cq *cq, struct efa_ibv_cq *ibv_cq);
+bool efa_rdm_cq_has_queued_work(struct efa_rdm_cq *cq);
 
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep);
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
