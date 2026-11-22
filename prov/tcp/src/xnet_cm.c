@@ -410,19 +410,13 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	ofi_sockctx_init(&conn->rx_sockctx, &conn->fid);
 	dlist_init(&conn->pep_entry);
 
-	ret = conn->sockapi->accept(conn->sockapi, pep->sock, NULL, 0,
-				    &conn->rx_sockctx);
+	/* The listening socket is non-blocking: accept synchronously, also
+	 * with io_uring.
+	 */
+	ret = ofi_sockapi_accept_socket(conn->sockapi, pep->sock, NULL, 0,
+					&conn->rx_sockctx);
 	if (ret < 0) {
 		conn->sock = INVALID_SOCKET;
-		if (ret == -OFI_EINPROGRESS_URING) {
-			/* Accept is in-flight.  Track the handle so
-			 * pep close can cancel it.
-			 */
-			dlist_insert_tail(&conn->pep_entry,
-					  &pep->conn_list);
-			return;
-		}
-
 		/* FIXME: handle EAGAIN */
 
 		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
@@ -433,7 +427,15 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	}
 
 	conn->sock = ret;
-	ret = xnet_monitor_sock(pep->progress, conn->sock, POLLIN, &conn->fid);
+	/* Wait for the connect request before reading it, see
+	 * xnet_handle_conn().
+	 */
+	if (xnet_io_uring)
+		ret = xnet_uring_pollin_add(pep->progress, conn->sock, false,
+					    &conn->rx_sockctx);
+	else
+		ret = xnet_monitor_sock(pep->progress, conn->sock, POLLIN,
+					&conn->fid);
 	if (ret)
 		goto close;
 
