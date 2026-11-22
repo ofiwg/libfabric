@@ -1339,7 +1339,7 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 }
 
 /* The connect request has arrived on an accepted socket (POLLIN), see
- * xnet_accept_sock().
+ * xnet_new_conn().  As with epoll, it is read synchronously.
  */
 static void xnet_uring_run_conn(struct xnet_conn_handle *conn, int res)
 {
