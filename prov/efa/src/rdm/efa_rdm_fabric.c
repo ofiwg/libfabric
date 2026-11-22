@@ -14,6 +14,7 @@
 #include "efa_cq.h"
 #include "efa_domain.h"
 #include "efa_fabric_util.h"
+#include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_domain.h"
 #include "rdm/efa_rdm_fabric.h"
 
@@ -110,6 +111,9 @@ static int efa_rdm_trywait(struct fid_fabric *fabric, struct fid **fids, int cou
 			if (!efa_cq->util_cq.wait)
 				return -FI_EINVAL;
 			ret = efa_cq->util_cq.wait->wait_try(efa_cq->util_cq.wait);
+			if (!ret && efa_rdm_cq_has_queued_work(
+					container_of(efa_cq, struct efa_rdm_cq, efa_cq)))
+				ret = -FI_EAGAIN;
 		} else {
 			ret = efa_non_cq_trywait(fids[i]);
 		}
