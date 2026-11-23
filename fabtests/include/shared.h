@@ -266,6 +266,7 @@ extern char **tx_mr_bufs, **rx_mr_bufs;
 extern size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 extern int tx_fd, rx_fd;
 extern int timeout;
+extern int ft_oob_timeout;
 extern bool allow_rx_cq_data;
 extern bool ft_wr_batching_enabled;
 
