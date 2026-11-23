@@ -306,8 +306,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
  * send completion means that EFA device has acknowledge that data has been
  * sent, therefore buffer can be safely reused.
  *
- * This function will call each packet type's send completion handler,
- * then release the packet entry.
+ * This function calls the packet's send completion handler, which releases
+ * the packet entry.
  *
  * @param[in,out]	pkt_entry	packet entry
  */

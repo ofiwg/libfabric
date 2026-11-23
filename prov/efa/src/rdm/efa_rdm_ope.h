@@ -324,7 +324,7 @@ static inline uint32_t efa_rdm_ope_get_ope_id(struct efa_rdm_ope *ope)
  * @brief Initialize the txe fields that every TX path needs.
  *
  * Does not touch txe->mr, txe->desc or the MR generation snapshot: the
- * refactored protocol path populates those before the txe is filled, so that
+ * protocol path populates those before the txe is filled, so that
  * protocol selection can attempt memory registration. Callers that have not
  * already populated them must use efa_rdm_txe_construct() instead.
  */

@@ -158,7 +158,7 @@ TEST_P(EfaRdmOpeCtrlPostTest, builds_expected_wire_packet)
 			  efa_test_ctrl_expected_hdr_size(which));
 		break;
 	case EFA_TEST_CTRL_PEER_ERROR_TXE_PROTO:
-		/* The migrated protocol on the txe must not have been used. */
+		/* The protocol on the txe must not have been used. */
 		EXPECT_EQ(wire.op_id, efa_test_ctrl_ope_id_invalid());
 		EXPECT_EQ(wire.msg_id, res.ids.msg_id);
 		EXPECT_EQ((int) wire.emitter_ope_type,
