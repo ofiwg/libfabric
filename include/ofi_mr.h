@@ -213,6 +213,8 @@ void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitors_init(void);
 void ofi_monitors_cleanup(void);
 int ofi_monitor_import(struct fid *fid);
+int ofi_parse_mr_cache_monitor(const char *name,
+			       struct ofi_mem_monitor **monitor);
 
 int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 			   struct ofi_mr_cache *cache);
