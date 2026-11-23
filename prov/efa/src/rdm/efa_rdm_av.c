@@ -1302,16 +1302,22 @@ static int efa_rdm_av_entry_publish(struct efa_av *av,
 			return err;
 		}
 
+		/* The peer maps are updated. The reverse AV add makes the
+		 * entry visible to the lock-free CQ read lookup, which can then
+		 * resolve the peer right away, so mark the entry published
+		 * before adding it. */
 		EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-						   EFA_RDM_AV_ENTRY_PEERS_READY);
+						   EFA_RDM_AV_ENTRY_PUBLISHED);
 
 		efa_rdm_av_reverse_av_add_reserved(av->cur_reverse_av,
 						   &rdm_av->prv_reverse_av,
 						   &av_entry->efa_av_entry,
 						   prv_entry);
 	} else {
+		/* A new entry has no peers to move. See above: published
+		 * before the entry becomes visible. */
 		EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-						   EFA_RDM_AV_ENTRY_PEERS_READY);
+						   EFA_RDM_AV_ENTRY_PUBLISHED);
 
 		err = efa_rdm_av_reverse_av_add(av->cur_reverse_av,
 						&rdm_av->prv_reverse_av,
@@ -1327,9 +1333,6 @@ static int efa_rdm_av_entry_publish(struct efa_av *av,
 			return err;
 		}
 	}
-
-	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
-					   EFA_RDM_AV_ENTRY_PUBLISHED);
 
 	return 0;
 }
