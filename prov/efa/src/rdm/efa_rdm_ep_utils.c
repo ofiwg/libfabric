@@ -428,7 +428,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
  *
  * Sometimes we need release TX pkt_entry without
  * decreasing the tx_op counter. For example, when
- * efa_rdm_ope_post_send() failed to post a pkt entry.
+ * a pkt entry fails to post.
  *
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains
@@ -1270,9 +1270,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 
 		if (ope->window > 0) {
 			if (efa_rdm_mr_gen_check_ope(ope)) {
-				/* A protocol that owns its continuation sends the
-				 * next batch itself; otherwise fall back to the
-				 * shared CTSDATA send.
+				/* The protocol sends the next batch.
 				 *
 				 * TODO: Future protocols that need to send packets
 				 * in response to a received packet should NOT

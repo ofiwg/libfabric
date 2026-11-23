@@ -114,9 +114,8 @@ struct efa_rdm_proto {
 
 	/* Send the next batch of data for a flow-controlled transfer whose
 	 * peer has granted more window (long CTS). Called from the progress
-	 * engine for an ope on ep->ope_longcts_send_list. NULL for protocols
-	 * that do not drive a continuation, in which case the progress engine
-	 * sends CTSDATA directly.
+	 * engine for an ope on ep->ope_longcts_send_list, so every protocol
+	 * whose ope can go on that list must set it.
 	 */
 	ssize_t (*post_continuation)(struct efa_rdm_ope *ope);
 

@@ -2091,9 +2091,9 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 /**
  * @brief post a single non-REQ ctrl packet.
  *
- * Builds the packet by calling the init function for its type directly, rather
- * than going through efa_rdm_pke_fill_data(). CTSDATA is also non-REQ but is not
- * handled here: it is multiple packets and is posted by the progress engine.
+ * Builds the packet by calling the init function for its type. CTSDATA is also
+ * non-REQ but is not handled here: it is multiple packets and is posted by the
+ * progress engine.
  *
  * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        non-REQ packet type.
@@ -2130,8 +2130,7 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 		pke_handle_sent = &efa_rdm_pke_handle_cts_sent;
 		break;
 	case EFA_RDM_READRSP_PKT:
-		/* These two carry data, so the old path passed ope->bytes_sent
-		 * as the segment offset and asserted it was 0. */
+		/* READRSP and ATOMRSP carry data from the start of the buffer. */
 		assert(ope->bytes_sent == 0);
 		err = efa_rdm_pke_init_readrsp(pkt_entry, ope);
 		pke_handle_sent = &efa_rdm_pke_handle_readrsp_sent;
@@ -2166,8 +2165,8 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 	if (OFI_UNLIKELY(err))
 		goto release;
 
-	/* TODO: a non-REQ packet setting REQ_SENT looks wrong, but it is what
-	 * efa_rdm_ope_post_send() did. Revisit separately. */
+	/* TODO: a non-REQ packet setting REQ_SENT looks wrong. Revisit
+	 * separately. */
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	/* Only CTS and READRSP have anything to do once the device takes the WR. */
 	if (pke_handle_sent)

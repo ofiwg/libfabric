@@ -83,7 +83,7 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 }
 
 /**
- * @brief Post a send on the refactored protocol path.
+ * @brief Post a send on the protocol path.
  *
  * Called from efa_rdm_msg_generic_send() for a fresh send, and from
  * efa_rdm_ope_post_ctrl() for a REQ ctrl packet. The repost after a
@@ -204,8 +204,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	/* First try to use the refactored code path.
-	 *
+	/*
 	 * A peer with zero-copy receive enabled rejects any packet that carries
 	 * a protocol header, so the zero-copy protocol is its only option: go
 	 * straight to it. Keeping it out of efa_rdm_protocols[] spares every
