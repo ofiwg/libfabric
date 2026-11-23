@@ -501,6 +501,7 @@ int ibv_get_cq_event(struct ibv_comp_channel *channel, struct ibv_cq **cq,
 		*cq = &cq_nd->cq;
 		*cq_context = cq_nd->cq.cq_context;
 		dlistfd_remove(channel_nd->q.list.next, &channel_nd->q);
+		cq_nd->queued = 0;
 	}
 	ofi_mutex_unlock(&channel_nd->q_lock);
 

@@ -237,6 +237,9 @@ struct nd_cq {
 	IND2CompletionQueue *nd2cq;
 	struct nd_event_base notification;
 	struct dlist_entry entry;
+	/* Set while entry is on the list of the completion channel. Guarded
+	 * by the q_lock of the channel. */
+	int queued;
 };
 
 struct nd_mr {
