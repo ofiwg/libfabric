@@ -63,8 +63,12 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
  * sequence so the ordering can be checked with asserts and unit tests.
  *
  *   UNPUBLISHED  allocated, fi_addr assigned, invisible to lookups 1 and 3
- *   PEERS_READY  peer maps updated, still invisible to lookups 1 and 3
- *   PUBLISHED    visible to lookups 1 and 3, so lookup 2 must resolve
+ *   PUBLISHED    peer maps updated, so lookup 2 must resolve; the entry is
+ *                about to become, or is, visible to lookups 1 and 3
+ *
+ * The state moves to PUBLISHED after the peer maps are updated and before the
+ * reverse AV add that makes the entry visible to the lock-free lookup 1, so a
+ * reader that finds the entry there never sees an earlier state.
  *
  * Implicit AV entries also start in the UNPUBLISHED state but they can only
  * get to the IMPLICIT state.
@@ -80,7 +84,6 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
  */
 enum efa_rdm_av_entry_publish_state {
 	EFA_RDM_AV_ENTRY_UNPUBLISHED = 0,
-	EFA_RDM_AV_ENTRY_PEERS_READY,
 	EFA_RDM_AV_ENTRY_PUBLISHED,
 	EFA_RDM_AV_ENTRY_IMPLICIT,
 };
