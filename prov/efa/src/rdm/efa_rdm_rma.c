@@ -120,6 +120,13 @@ static ssize_t efa_rdm_rma_post_read_proto(struct efa_rdm_ep *ep,
 	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
 				ep->send_pkt_entry_vec_size, pke_send_flags);
 	if (err) {
+		if (err != -FI_EAGAIN)
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "%s protocol: posting %zu pkts of pkt type %u failed, op %u, ope id %u, total_len %" PRIu64 ": %s\n",
+				 proto->name, ep->send_pkt_entry_vec_size,
+				 txe->req_pkt_type, txe->op,
+				 efa_rdm_ope_get_ope_id(txe), txe->total_len,
+				 fi_strerror(-err));
 #if ENABLE_DEBUG
 		dlist_remove(&txe->pending_recv_entry);
 		ep->pending_recv_counter--;
@@ -440,6 +447,13 @@ ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
 	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
 				ep->send_pkt_entry_vec_size, pke_send_flags);
 	if (err) {
+		if (err != -FI_EAGAIN)
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "%s protocol: posting %zu pkts of pkt type %u failed, op %u, ope id %u, total_len %" PRIu64 ": %s\n",
+				 proto->name, ep->send_pkt_entry_vec_size,
+				 txe->req_pkt_type, txe->op,
+				 efa_rdm_ope_get_ope_id(txe), txe->total_len,
+				 fi_strerror(-err));
 		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 		return err;

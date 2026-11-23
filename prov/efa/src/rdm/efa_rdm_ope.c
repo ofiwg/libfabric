@@ -2152,6 +2152,9 @@ static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_typ
 		err = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
 		break;
 	default:
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Cannot post unknown non-REQ ctrl pkt type %d for ope type %d, ope id %u\n",
+			 pkt_type, ope->type, efa_rdm_ope_get_ope_id(ope));
 		assert(0 && "unknown non-REQ ctrl packet type to post");
 		err = -FI_EINVAL;
 		break;
@@ -2278,6 +2281,9 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	case ofi_op_tagged:
 		if (ope->proto)
 			return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "Cannot repost op %u msg_id %u queued before handshake: it has no protocol\n",
+			 ope->op, ope->msg_id);
 		return -FI_EINVAL;
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);

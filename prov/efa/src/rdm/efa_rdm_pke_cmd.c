@@ -107,9 +107,6 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
-	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
-	        efa_strerror(prov_errno), prov_errno);
-
 	ep = pkt_entry->ep;
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 
@@ -118,12 +115,22 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		 * If peer is NULL, it means the peer has been removed from AV.
 		 * In this case, ignore this error completion.
 		 */
-		EFA_WARN(FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
+		EFA_WARN(FI_LOG_CQ,
+			 "ignoring send error completion of a packet to a removed peer: pkt type %d, %s (%d)\n",
+			 efa_rdm_pkt_type_of(pkt_entry),
+			 efa_strerror(prov_errno), prov_errno);
 		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
 
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
+
+	EFA_DBG(FI_LOG_CQ,
+		"Packet send error: pkt type %d, ope type %d, ope id %u: %s (%d)\n",
+		efa_rdm_pkt_type_of(pkt_entry), pkt_entry->ope->type,
+		efa_rdm_ope_get_ope_id(pkt_entry->ope),
+		efa_strerror(prov_errno), prov_errno);
+
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;

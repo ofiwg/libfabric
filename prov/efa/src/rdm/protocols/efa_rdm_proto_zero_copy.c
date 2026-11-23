@@ -95,6 +95,9 @@ int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
 	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, 0, 0,
 						txe->total_len);
 	if (ret) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "zero-copy: payload init failed, total_len %" PRIu64 ", msg_id %u: %s\n",
+			 txe->total_len, txe->msg_id, fi_strerror(-ret));
 		efa_rdm_pke_release_tx(pkt_entry);
 		return ret;
 	}

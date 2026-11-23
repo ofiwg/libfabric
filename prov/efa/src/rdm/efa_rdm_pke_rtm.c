@@ -162,6 +162,10 @@ efa_rdm_pke_proc_msgrtm_with_callback(
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "READ_NACK msgrtm msg_id %u from peer %s names no rxe\n",
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_EINVAL,
 				FI_EFA_ERR_PKT_PROC_MSGRTM);
@@ -172,6 +176,11 @@ efa_rdm_pke_proc_msgrtm_with_callback(
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "Cannot allocate an rxe for pkt type %d, msg_id %u from peer %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry),
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
@@ -220,6 +229,10 @@ efa_rdm_pke_proc_tagrtm_with_callback(
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "READ_NACK tagrtm msg_id %u from peer %s names no rxe\n",
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_EINVAL,
 				FI_EFA_ERR_PKT_PROC_TAGRTM);
@@ -230,6 +243,11 @@ efa_rdm_pke_proc_tagrtm_with_callback(
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
+			EFA_RDM_GET_PKE_PEER_ADDR_STR(pkt_entry, peer_addr_str);
+			EFA_WARN(FI_LOG_CQ,
+				 "Cannot allocate an rxe for pkt type %d, msg_id %u from peer %s\n",
+				 efa_rdm_pkt_type_of(pkt_entry),
+				 efa_rdm_pke_get_rtm_msg_id(pkt_entry), peer_addr_str);
 			efa_base_ep_write_eq_error(
 				&ep->base_ep, FI_ENOBUFS,
 				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
