@@ -71,6 +71,12 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 				ep->send_pkt_entry_vec_size,
 				pke_send_flags);
 	if (err) {
+		if (err != -FI_EAGAIN)
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "%s protocol: posting %zu pkts of pkt type %u failed, msg_id %u, total_len %" PRIu64 ": %s\n",
+				 proto->name, ep->send_pkt_entry_vec_size,
+				 txe->req_pkt_type, txe->msg_id, txe->total_len,
+				 fi_strerror(-err));
 		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 		return err;

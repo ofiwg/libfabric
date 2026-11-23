@@ -1285,6 +1285,11 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 				ret = -FI_ECANCELED;
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "Posting CTSDATA failed: ope type %d, op %u, ope id %u, bytes_sent %" PRIu64 " of %" PRIu64 ": %s\n",
+					 ope->type, ope->op, efa_rdm_ope_get_ope_id(ope),
+					 ope->bytes_sent,
+					 ope->total_len, fi_strerror(-ret));
 				efa_rdm_txe_handle_error(ope, -ret, ret == -FI_ECANCELED ?
 							 FI_EFA_ERR_PEER_ABORTED :
 							 FI_EFA_ERR_PKT_POST);
