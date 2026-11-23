@@ -9,27 +9,6 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
 
-/*
- * Tripwire for packet types whose protocol moved to the efa_rdm_proto
- * interface: the legacy dispatch must never reach them. Fails loudly in both
- * debug and release builds. "proto" is a string literal naming the protocol.
- */
-#define EFA_RDM_PROTO_MOVED(proto) \
-	do { \
-		assert(0 && (proto " protocol moved to refactored code path")); \
-		abort(); \
-	} while (0)
-
-/*
- * Tripwire for packet types that are no longer constructed by the legacy
- * path. "pkt" is a string literal naming the packet type.
- */
-#define EFA_RDM_PKT_TYPE_MOVED(pkt) \
-	do { \
-		assert(0 && (pkt " packet is no longer built here")); \
-		abort(); \
-	} while (0)
-
 /**
  * @brief Interface for EFA RDM protocols.
  *

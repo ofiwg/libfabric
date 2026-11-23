@@ -69,7 +69,6 @@ TEST_P(EfaRdmOpeCtrlPostTest, builds_expected_wire_packet)
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
 		.WillOnce(DoAll(SaveArg<7>(&seen_flags), Return(0)));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av, which,
 				     EFA_TEST_CTRL_PERTURB_NONE, &res),
@@ -197,7 +196,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, tx_full_queues_without_allocating)
 	struct efa_test_ctrl_result res = {};
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -217,7 +215,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, device_queue_full_queues_and_releases_packet)
 
 	/* ENOMEM is the device's queue-full, which sendv maps to -FI_EAGAIN. */
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(ENOMEM));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -235,7 +232,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, post_error_is_reported_not_queued)
 	struct efa_test_ctrl_result res = {};
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).WillOnce(Return(EINVAL));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,
@@ -255,7 +251,6 @@ TEST_F(EfaRdmOpeCtrlQueueTest, fi_more_is_not_propagated_to_the_qp)
 
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
 		.WillOnce(DoAll(SaveArg<7>(&seen_flags), Return(0)));
-	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 
 	ASSERT_EQ(efa_test_ctrl_post(resource.ep, resource.av,
 				     EFA_TEST_CTRL_CTS_RXE,

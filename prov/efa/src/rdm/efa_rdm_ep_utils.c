@@ -23,7 +23,6 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_rtw.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
-#include "protocols/efa_rdm_proto_longcts.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -1282,11 +1281,8 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 				 * construction and sending in the receive
 				 * completion callback itself.
 				 */
-				if (ope->proto) {
-					assert(ope->proto->post_continuation);
-					ret = ope->proto->post_continuation(ope);
-				} else
-					ret = efa_rdm_proto_post_ctsdata(ope);
+				assert(ope->proto && ope->proto->post_continuation);
+				ret = ope->proto->post_continuation(ope);
 			} else
 				ret = -FI_ECANCELED;
 

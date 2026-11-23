@@ -167,6 +167,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 
 	txe->msg_id = peer->next_msg_id++;
 
+	assert(txe->atomic_proto);
 	err = efa_rdm_proto_atomic_post(txe);
 
 	if (OFI_UNLIKELY(err)) {
