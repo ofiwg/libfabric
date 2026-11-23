@@ -1285,7 +1285,8 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 				ret = -FI_ECANCELED;
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
-				efa_rdm_txe_handle_error(ope, -ret,
+				efa_rdm_txe_handle_error(ope, -ret, ret == -FI_ECANCELED ?
+							 FI_EFA_ERR_PEER_ABORTED :
 							 FI_EFA_ERR_PKT_POST);
 			}
 		}
