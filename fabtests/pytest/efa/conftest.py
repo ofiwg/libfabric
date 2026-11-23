@@ -513,6 +513,15 @@ def pytest_collection_modifyitems(session, config, items):
                                     config.getoption("--environments"), op)
                    for op in ("read", "write", "writedata"))
 
+    def efa_uses_device_rma():
+        # FI_EFA_USE_DEVICE_RDMA applies to the efa fabric only, and
+        # fi_efa_rdma_checker reads the device caps without it.
+        for env in (config.getoption("--environments") or "").split():
+            name, _, value = env.partition("=")
+            if name == "FI_EFA_USE_DEVICE_RDMA" and value.lower() in ("0", "false", "no", "off"):
+                return False
+        return has_device_rma()
+
     def uses_cuda_without_p2p(item):
         # Without p2p (GDR) the efa fabric emulates RMA on cuda memory.
         return ("cuda" in item.callspec.params.get("memory_type", "") and
@@ -541,7 +550,7 @@ def pytest_collection_modifyitems(session, config, items):
             deselected.append(item)
         elif "fi_wr" in markers and not have_fi_wr:
             deselected.append(item)
-        elif is_efa_mr_abort(item) and not has_device_rma():
+        elif is_efa_mr_abort(item) and not efa_uses_device_rma():
             deselected.append(item)
         elif is_efa_mr_abort(item) and uses_cuda_without_p2p(item):
             deselected.append(item)
