@@ -789,7 +789,7 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		if (cq->shm_cq) {
+		if (cq->shm_cq && efa_rdm_ep->shm_ep) {
 			/* Bind ep with shm provider's cq */
 			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &cq->shm_cq->fid, flags);
 			if (ret)
@@ -803,7 +803,7 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		if (cntr->shm_cntr) {
+		if (cntr->shm_cntr && efa_rdm_ep->shm_ep) {
 			/* Bind shm ep with shm provider's cntr */
 			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &cntr->shm_cntr->fid, flags);
 			if (ret)
@@ -1385,90 +1385,15 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 }
 
 /**
- * @brief Close all shm resources bound to the efa ep and domain.
- * This function will do this cleanup as best effort. When there is failure
- * to clean up shm resource, it will still move forward by setting the resource
- * pointer to NULL so it won't be used later.
- *
- * @param efa_rdm_ep pointer to efa_rdm_ep.
- * return 0 on success, negative integer on error
- */
-int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
-{
-	int ret, retv = 0;
-	struct efa_domain *efa_domain;
-	struct efa_av *efa_av;
-	struct efa_rdm_domain *rdm_domain;
-	struct efa_rdm_fabric *rdm_fabric;
-	struct efa_rdm_cq *efa_rdm_cq;
-
-	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
-	if (ret) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm ep resources: %s\n", fi_strerror(-ret));
-		retv = ret;
-	}
-
-	efa_av = efa_rdm_ep->base_ep.av;
-	if (((struct efa_rdm_av *)(efa_av))->shm_rdm_av) {
-		ret = fi_close(&((struct efa_rdm_av *)(efa_av))->shm_rdm_av->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-		((struct efa_rdm_av *)(efa_av))->shm_rdm_av = NULL;
-	}
-
-	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	if (efa_rdm_cq->shm_cq) {
-		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-		efa_rdm_cq->shm_cq = NULL;
-	}
-
-	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	if (efa_rdm_cq->shm_cq) {
-		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-		efa_rdm_cq->shm_cq = NULL;
-	}
-
-	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
-	rdm_domain = efa_rdm_ep_rdm_domain(efa_rdm_ep);
-	rdm_fabric = (struct efa_rdm_fabric *) efa_domain->fabric;
-
-	if (rdm_domain->shm_domain) {
-		ret = fi_close(&rdm_domain->shm_domain->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm domain: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-		rdm_domain->shm_domain = NULL;
-	}
-
-	if (rdm_fabric->shm_fabric) {
-		ret = fi_close(&rdm_fabric->shm_fabric->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-		rdm_fabric->shm_fabric = NULL;
-	}
-
-	return retv;
-}
-
-/**
  * @brief update the shm resources based on the
- * the current ep status. When cuda_api_permitted
- * is set as false via fi_setopt, shm should be
- * shut down. This function must be called inside
- * fi_enable which is called after fi_setopt.
+ * the current ep status. When shm is not permitted on
+ * this endpoint (FI_OPT_SHARED_MEMORY_PERMITTED set to
+ * false, or FI_OPT_CUDA_API_PERMITTED set to false with
+ * FI_HMEM), only this endpoint's shm resources are closed.
+ * The shm av, cq, counter, domain and fabric can be shared
+ * by other endpoints and are closed by their owners.
+ * This function must be called inside fi_enable which is
+ * called after fi_setopt.
  *
  * @param[in,out]	ep	efa_rdm_ep
  */
@@ -1504,7 +1429,7 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 	}
 
 	if (!use_shm)
-		(void) efa_rdm_ep_close_shm_resources(ep);
+		(void) efa_rdm_ep_close_shm_ep_resources(ep);
 }
 
 static inline

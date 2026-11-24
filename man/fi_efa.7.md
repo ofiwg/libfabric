@@ -578,6 +578,15 @@ fi_writemsg(ep, (struct fi_msg_rma *)&emsg, FI_EFA_EXTENDED_MSG);
  It's not supported in `efa-direct`, DGRAM endpoint, and the zero-copy receive mode of
  the `efa` fabric in RDM endpoint.
 
+## Shared memory
+- `FI_OPT_SHARED_MEMORY_PERMITTED` is applied per endpoint, but endpoints that
+  communicate within a node must use the same setting. Otherwise, a local peer
+  that has shared memory enabled still sends to an endpoint with shared memory
+  disabled through the SHM provider, and its transmit operations to that
+  endpoint do not complete. This also applies to an endpoint that requests
+  `FI_HMEM` with CUDA and sets `FI_OPT_CUDA_API_PERMITTED` to `false`, which
+  also disables shared memory.
+
 ## (Deprecated) [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
  - Support for the zero-copy mode was deprecated in Libfabric v2.6
 

@@ -11,6 +11,23 @@
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_ep.h"
 
+/**
+ * @brief Check whether any shm endpoint is bound to the shm peer counter
+ *
+ * The shm peer cntr is opened with the efa cntr and stays open after endpoints
+ * disable shm, so polling it is only useful while a shm endpoint is bound.
+ *
+ * @param[in]	cntr	efa rdm counter
+ * @return	true if shm progress is needed, false otherwise
+ */
+static inline bool efa_rdm_cntr_shm_active(struct efa_rdm_cntr *cntr)
+{
+	return cntr->shm_cntr &&
+	       ofi_atomic_get32(
+		       &container_of(cntr->shm_cntr, struct util_cntr, cntr_fid)
+				->ref);
+}
+
 static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct efa_rdm_cntr *efa_rdm_cntr;
@@ -19,7 +36,7 @@ static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
 
 	/* Flush SHM completions into the peer counter before reading */
-	if (efa_rdm_cntr->shm_cntr)
+	if (efa_rdm_cntr_shm_active(efa_rdm_cntr))
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
 
 	ret = ofi_cntr_read(cntr_fid);
@@ -34,7 +51,7 @@ static uint64_t efa_rdm_cntr_readerr(struct fid_cntr *cntr_fid)
 
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
 
-	if (efa_rdm_cntr->shm_cntr)
+	if (efa_rdm_cntr_shm_active(efa_rdm_cntr))
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
 
 	ret = ofi_cntr_readerr(cntr_fid);

@@ -1078,13 +1078,29 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	return err;
 }
 
+/**
+ * @brief Check whether any shm endpoint is bound to the shm peer cq
+ *
+ * The shm peer cq is opened with the efa cq and stays open after endpoints
+ * disable shm, so polling it is only useful while a shm endpoint is bound.
+ *
+ * @param[in]	cq	efa rdm cq
+ * @return	true if shm progress is needed, false otherwise
+ */
+static inline bool efa_rdm_cq_shm_active(struct efa_rdm_cq *cq)
+{
+	return cq->shm_cq &&
+	       ofi_atomic_get32(
+		       &container_of(cq->shm_cq, struct util_cq, cq_fid)->ref);
+}
+
 static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr)
 {
 	struct efa_rdm_cq *cq;
 	ssize_t ret;
 
 	cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
-	if (cq->shm_cq) {
+	if (efa_rdm_cq_shm_active(cq)) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
 		/*
@@ -1201,7 +1217,7 @@ static ssize_t efa_rdm_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t cou
 	struct efa_rdm_cq *efa_rdm_cq = container_of(cq_fid, struct efa_rdm_cq, efa_cq.util_cq.cq_fid);
 	struct efa_cq *efa_cq = &efa_rdm_cq->efa_cq;
 	struct util_cq *util_cq = &efa_cq->util_cq;
-	bool shm_enabled = efa_rdm_cq->shm_cq != NULL;
+	bool shm_enabled;
 	const uint64_t endtime = ofi_timeout_time(timeout);
 	ssize_t ret;
 	size_t num_completions = 0, threshold = 1;
@@ -1234,6 +1250,7 @@ static ssize_t efa_rdm_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t cou
 
 		ret = util_cq->wait->wait_try(util_cq->wait);
 		if (ret == FI_SUCCESS) {
+			shm_enabled = efa_rdm_cq_shm_active(efa_rdm_cq);
 			/* No completions; ready to block */
 			ret = efa_rdm_cq_poll_events(efa_rdm_cq,
 						     (shm_enabled ||
