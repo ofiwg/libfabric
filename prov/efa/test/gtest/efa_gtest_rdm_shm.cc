@@ -120,3 +120,21 @@ TEST_F(EfaRdmShmPermittedTest, shm_cntr_ref_tracks_bound_shm_eps)
 	EXPECT_TRUE(efa_test_rdm_ep_has_shm_ep(ep2));
 	EXPECT_GT(efa_test_rdm_cntr_shm_cntr_ref(cntr), 0);
 }
+
+TEST_F(EfaRdmShmPermittedTest, setopt_after_enable_is_rejected)
+{
+	bool shm_permitted;
+
+	ASSERT_EQ(fi_enable(resource.ep), 0);
+
+	for (bool value : {false, true}) {
+		shm_permitted = value;
+		EXPECT_EQ(fi_setopt(&resource.ep->fid, FI_OPT_ENDPOINT,
+				    FI_OPT_SHARED_MEMORY_PERMITTED,
+				    &shm_permitted, sizeof(shm_permitted)),
+			  -FI_EINVAL)
+			<< "shm_permitted=" << value;
+	}
+
+	EXPECT_TRUE(efa_test_rdm_ep_has_shm_ep(resource.ep));
+}
