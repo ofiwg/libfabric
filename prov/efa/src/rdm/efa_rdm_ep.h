@@ -774,8 +774,6 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 
 bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep);
 
-int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep);
-
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
 
 /* Macro for getting local endpoint address string */
