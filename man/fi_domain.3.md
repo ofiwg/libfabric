@@ -245,6 +245,9 @@ threads to progress the data interfaces at the same time. Applications
 which can guarantee serialization in their access of provider allocated
 resources and interfaces enable a provider to eliminate lower-level locks.
 
+The threading attribute does not apply to objects created with FI_XPU. Their
+threading is set by the XPU context (see [`fi_xpu`(3)](fi_xpu.3.html)).
+
 *FI_THREAD_COMPLETION*
 : The completion threading model is best suited for multi-threaded applications
   using scalable endpoints which desire lockless operation.  Applications must

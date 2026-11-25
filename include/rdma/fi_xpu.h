@@ -58,6 +58,8 @@ struct fi_xpu_attr {
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
 	struct fi_xpu_ops	*ops;
+	/* Added in 2.8 */
+	enum fi_threading	threading;
 };
 
 /*

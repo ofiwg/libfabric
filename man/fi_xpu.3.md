@@ -89,6 +89,8 @@ struct fi_xpu_attr {
     int                  iface;    /* enum fi_hmem_iface */
     uint64_t             device;
     struct fi_xpu_ops    *ops;
+    /* Added in 2.8 */
+    enum fi_threading    threading;
 };
 ```
 
@@ -101,6 +103,12 @@ struct fi_xpu_attr {
 *ops*
 : Optional pointer to a `fi_xpu_ops` structure containing memory management
   callbacks. If NULL, the provider uses its default mechanisms.
+
+*threading*
+: The threading model between the XPU objects of this context, with the
+  values and meaning of the domain *threading* attribute (see
+  [`fi_domain`(3)](fi_domain.3.html)). The domain *threading* attribute does not
+  apply to XPU objects.
 
 ## fi_xpu_ops
 
