@@ -144,6 +144,7 @@ struct fi_cq_attr {
 	enum fi_cq_wait_cond wait_cond; /* wait condition format */
 	struct fid_wait     *wait_set;  /* optional wait set, deprecated */
 	struct fid_xpu_ctx  *xpu_ctx;   /* optional XPU context */
+	enum fi_resource_sharing_mode sharing_mode; /* threads issuing calls */
 };
 ```
 
@@ -308,6 +309,11 @@ struct fi_cq_tagged_entry {
   together with `FI_XPU` in the flags field, the CQ is created for XPU
   device-side access. See [`fi_xpu`(3)](fi_xpu.3.html) for details. This
   field must be NULL if the CQ is not created with FI_XPU.
+
+*sharing_mode*
+: Declares which threads issue calls on the CQ, as an
+  `enum fi_resource_sharing_mode` value. See
+  [`fi_domain`(3)](fi_domain.3.html).
 
 ## fi_close
 

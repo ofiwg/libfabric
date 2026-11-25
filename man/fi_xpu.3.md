@@ -486,6 +486,33 @@ described in Scope.
 | fi_xpu_cntr_wait | Work item | One thread | Its own counter and threshold | One wait for the thread | None |
 | fi_xpu_cntr_wait | Group | Every thread of the scope | Identical in every thread of the scope | One wait for the scope; every thread returns once the threshold is reached | None |
 
+## Resource Sharing
+
+The *threading* attribute of the XPU context states whether different XPU
+objects may be accessed in parallel. The *sharing_mode* attribute of an EP,
+CQ, or counter created with FI_XPU states which device threads issue calls on
+that one object (see [`fi_domain`(3)](fi_domain.3.html)). The value is separate
+from the *scope* argument of each call, and it limits which scopes are valid on
+the object:
+
+*FI_RESOURCE_SHARING_UNSPEC*
+: Any scope is valid.
+
+*FI_RESOURCE_SHARING_SAFE*
+: Any scope is valid.
+
+*FI_RESOURCE_SHARING_GROUP*
+: Calls with a scope of FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, or
+  FI_XPU_WORK_GROUP are valid, provided that all threads taking part in the
+  call belong to that work group. Calls with a scope of FI_XPU_DEVICE are not
+  valid.
+
+*FI_RESOURCE_SHARING_SINGLE*
+: Only calls with a scope of FI_XPU_WORK_ITEM are valid.
+
+Each object carries its own value, so one kernel may use objects with
+different values at the same time.
+
 ## Data Transfer Operations
 
 Device-side data transfer operations correspond to the standard libfabric

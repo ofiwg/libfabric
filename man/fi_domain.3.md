@@ -295,6 +295,38 @@ threading is set by the XPU context (see [`fi_xpu`(3)](fi_xpu.3.html)).
   providers will return a threading model that allows for the greatest
   level of parallelism.
 
+The threading model describes inter-object access: whether distinct objects,
+such as an endpoint and its completion queue, are accessed in parallel. The
+*sharing_mode* attribute of `fi_ep_attr`, `fi_cq_attr`, and `fi_cntr_attr`
+describes intra-object access: which threads issue calls on that one object.
+The two are independent. By default the object follows the domain threading
+model. An application that knows fewer threads access an object can narrow this
+when it creates the object, which lets the provider use cheaper synchronization
+on the object's state than the threading model alone allows.
+
+*FI_RESOURCE_SHARING_UNSPEC*
+: The object follows the threading model. This is the default.
+
+*FI_RESOURCE_SHARING_SAFE*
+: Any thread may issue calls on the object, and calls may run concurrently.
+  For an XPU object this is any thread of the device.
+
+*FI_RESOURCE_SHARING_GROUP*
+: All calls on the object are issued by the threads of a single work group at
+  a time. Calls from different groups must be serialized. This value only takes
+  effect for objects created with FI_XPU, and is ignored for a host object.
+
+*FI_RESOURCE_SHARING_SINGLE*
+: All calls on the object are issued by a single thread at a time, a work item
+  for an XPU. Calls from different threads must be serialized.
+
+The value covers only calls made on that object, so objects of one application
+may have different values. A provider may ignore the value, or satisfy it with
+a wider form of sharing than was requested, and the application cannot tell
+which. The provider cannot verify that the application follows its declaration.
+If the application violates it, the behavior is undefined and the state of the
+object may be corrupted.
+
 ## Progress Models (progress)
 
 Progress is the ability of the underlying implementation to complete

@@ -260,6 +260,7 @@ struct fi_cq_attr {
 	enum fi_cq_wait_cond	wait_cond;
 	struct fid_wait		*wait_set;	/* deprecated */
 	struct fid_xpu_ctx	*xpu_ctx;
+	enum fi_resource_sharing_mode	sharing_mode;
 };
 
 struct fi_ops_cq {
@@ -302,6 +303,7 @@ struct fi_cntr_attr {
 	struct fid_wait		*wait_set;	/* deprecated */
 	uint64_t		flags;
 	struct fid_xpu_ctx	*xpu_ctx;
+	enum fi_resource_sharing_mode	sharing_mode;
 };
 
 struct fi_ops_cntr {
