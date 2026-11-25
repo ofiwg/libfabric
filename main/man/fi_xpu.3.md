@@ -401,10 +401,8 @@ This allows the implementation to optimize.
 | FI_XPU_WORK_ITEM | Thread | Work item |
 | FI_XPU_SUBGROUP | Warp | Subgroup |
 | FI_XPU_WORK_GROUP | Thread block | Work group |
-| FI_XPU_DEVICE | Device | Device |
 
-FI_XPU_SUBGROUP, FI_XPU_WORK_GROUP and FI_XPU_DEVICE are referred to below as
-group scopes.
+FI_XPU_SUBGROUP and FI_XPU_WORK_GROUP are referred to below as group scopes.
 
 At FI_XPU_WORK_ITEM a call is the calling thread's own, with arguments of its
 own: the threads of a subgroup may each post to an endpoint of their own, read
