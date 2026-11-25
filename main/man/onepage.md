@@ -12729,9 +12729,8 @@ an exported endpoint handle obtained from fi_ep_export_xpu. The desc
 parameter is a raw descriptor from fi_mr_get_xpu_desc with FI_XPU, and
 dest_addr/src_addr are raw addresses from fi_av_lookup2 with FI_XPU. The
 scope parameter specifies the cooperative threading scope
-(FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, FI_XPU_WORK_GROUP, or
-FI_XPU_DEVICE). See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
-programming model.
+(FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP or FI_XPU_WORK_GROUP). See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
 What fi_xpu_send and fi_xpu_recv do at each scope, and their return
 values, including when and how they return -FI_EAGAIN, are described
