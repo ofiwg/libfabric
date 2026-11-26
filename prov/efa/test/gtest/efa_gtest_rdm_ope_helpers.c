@@ -9,6 +9,7 @@
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_pke.h"
+#include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_peer.h"
@@ -16,6 +17,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_rma.h"
 #include "rdm/efa_rdm_srx.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
 #include "ofi_util.h"
 
 int efa_test_drive_rxe_unexp_handle_error(struct fid_ep *ep, void *op_context,
@@ -550,4 +552,97 @@ int efa_test_abort_without_local_read_copy_completes_now(
 
 	efa_test_mark_and_drain(efa_rdm_ep, state->rxe);
 	return 0;
+}
+
+int efa_test_fail_cts_replenishment(struct fid_ep *ep_fid, struct fid_av *av,
+				    char *buf, size_t len, void *op_context,
+				    int *prov_errno)
+{
+	static struct efa_rdm_mr cuda_mr = { .efa_mr = { .iface = FI_HMEM_CUDA } };
+	struct efa_rdm_ep *ep = container_of(ep_fid, struct efa_rdm_ep,
+					    base_ep.util_ep.ep_fid);
+	struct util_srx_ctx *srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	struct efa_rdm_ctsdata_hdr *hdr;
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ope *rxe;
+	size_t seg_size = len / 4;
+	size_t max_data_payload_size = ep->max_data_payload_size;
+	int tx_min_credits = efa_env.tx_min_credits;
+	int hmem_p2p_opt = ep->hmem_p2p_opt;
+	bool use_device_rdma = ep->use_device_rdma;
+	bool cuda_p2p = g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device;
+	int ret;
+
+	ret = efa_test_alloc_matched_rxe(ep, av, buf, len, op_context, &rxe);
+	if (ret)
+		return ret;
+
+	ofi_genlock_lock(srx_ctx->lock);
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (!pke) {
+		efa_rdm_rxe_release(rxe);
+		ret = -FI_ENOMEM;
+		goto unlock;
+	}
+
+	rxe->bytes_received = seg_size;
+	rxe->bytes_copied = seg_size;
+	ep->max_data_payload_size = seg_size;
+	efa_env.tx_min_credits = 1;
+	ret = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_CTS_PKT);
+	efa_env.tx_min_credits = tx_min_credits;
+	ep->max_data_payload_size = max_data_payload_size;
+	if (ret) {
+		efa_rdm_pke_release_rx(pke);
+		efa_rdm_rxe_release(rxe);
+		goto unlock;
+	}
+
+	rxe->state = EFA_RDM_RXE_RECV;
+	rxe->desc[0] = &cuda_mr;
+#if ENABLE_DEBUG
+	dlist_insert_tail(&rxe->pending_recv_entry, &ep->ope_recv_list);
+	ep->pending_recv_counter++;
+#endif
+	hdr = efa_rdm_pke_get_ctsdata_hdr(pke);
+	*hdr = (struct efa_rdm_ctsdata_hdr) {
+		.type = EFA_RDM_CTSDATA_PKT,
+		.version = EFA_RDM_PROTOCOL_VERSION,
+		.recv_id = rxe->rx_id,
+		.seg_length = seg_size,
+		.seg_offset = seg_size,
+	};
+	pke->peer = rxe->peer;
+	pke->payload = pke->wiredata + sizeof(*hdr);
+	pke->payload_size = seg_size;
+	pke->pkt_size = sizeof(*hdr) + seg_size;
+
+	ep->use_device_rdma = true;
+	ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+	efa_rdm_proto_longcts_handle_ctsdata_recv(pke);
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = cuda_p2p;
+	ep->hmem_p2p_opt = hmem_p2p_opt;
+	ep->use_device_rdma = use_device_rdma;
+	*prov_errno = FI_EFA_ERR_PKT_POST;
+
+unlock:
+	ofi_genlock_unlock(srx_ctx->lock);
+	return ret;
+}
+
+void efa_test_complete_cts_replenishment_wr(uintptr_t wr_id)
+{
+	struct efa_rdm_pke *pke = efa_rdm_cq_get_pke_from_wr_id_solicited(wr_id);
+	struct efa_rdm_ep *ep = pke->ep;
+	struct util_srx_ctx *srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	ofi_genlock_lock(srx_ctx->lock);
+	if (pke->flags & EFA_RDM_PKE_LOCAL_READ) {
+		efa_rdm_ep_record_tx_op_completed(ep, pke);
+		efa_rdm_pke_handle_rma_completion(pke);
+	} else {
+		efa_rdm_pke_handle_send_completion(pke);
+	}
+	ofi_genlock_unlock(srx_ctx->lock);
 }

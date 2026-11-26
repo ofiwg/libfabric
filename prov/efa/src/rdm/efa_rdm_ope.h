@@ -182,6 +182,8 @@ struct efa_rdm_ope {
 	struct efa_rdm_pke *unexp_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
+	/* Pending error from posting the next CTS, or zero. */
+	int cts_post_err;
 	/* the rxe_map that the rxe is ever inserted */
 	struct efa_rdm_rxe_map *rxe_map;
 	/* end of RX related variables */
@@ -556,6 +558,9 @@ bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
+
+void efa_rdm_rxe_handle_cts_post_error(struct efa_rdm_ope *rxe, int err);
+void efa_rdm_rxe_finish_cts_post_error(struct efa_rdm_ope *rxe);
 
 bool efa_rdm_rxe_mark_peer_aborted_if_needed(struct efa_rdm_ope *rxe, int prov_errno);
 

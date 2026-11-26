@@ -468,6 +468,66 @@ TEST_F(EfaRdmOpeLocalReadAbortTest, abort_waits_for_local_read_copy)
 	EXPECT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), -FI_EAGAIN);
 }
 
+enum class CtsDrainOrder { copy_first, prior_cts_first };
+
+class EfaRdmOpeCtsPostFailureTest
+	: public EfaRdmOpeLocalReadAbortTest,
+	  public testing::WithParamInterface<CtsDrainOrder> {};
+
+TEST_P(EfaRdmOpeCtsPostFailureTest, replenishment_error_waits_for_cts_and_copy)
+{
+	struct fi_cq_err_entry err_entry = {};
+	struct fi_cq_data_entry entry = {};
+	char recv_buf[64] = {};
+	uintptr_t copy_wr_id = 0;
+	uintptr_t prior_cts_wr_id = 0;
+	int op_context = 0;
+	int prov_errno = 0;
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<5>(&prior_cts_wr_id), Return(0)))
+		.WillOnce(Return(EINVAL));
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_read)
+		.WillOnce(DoAll(SaveArg<5>(&copy_wr_id), Return(0)));
+
+	ASSERT_EQ(efa_test_fail_cts_replenishment(
+			  resource.ep, resource.av, recv_buf, sizeof(recv_buf),
+			  &op_context, &prov_errno), 0);
+	ASSERT_NE(copy_wr_id, 0u);
+	ASSERT_NE(prior_cts_wr_id, 0u);
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 1);
+	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
+		  -FI_EAGAIN);
+
+	const bool copy_first = GetParam() == CtsDrainOrder::copy_first;
+	efa_test_complete_cts_replenishment_wr(
+		copy_first ? copy_wr_id : prior_cts_wr_id);
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 1);
+	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
+		  -FI_EAGAIN);
+
+	efa_test_complete_cts_replenishment_wr(
+		copy_first ? prior_cts_wr_id : copy_wr_id);
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 0);
+	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
+		  -FI_EAVAIL);
+	ASSERT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);
+	EXPECT_EQ(err_entry.err, FI_EINVAL);
+	EXPECT_EQ(err_entry.prov_errno, prov_errno);
+	EXPECT_EQ(err_entry.op_context, &op_context);
+	EXPECT_EQ(err_entry.flags, (uint64_t) (FI_RECV | FI_MSG));
+	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
+		  -FI_EAGAIN);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaRdmOpeCtsPostFailureTest,
+	Values(CtsDrainOrder::copy_first, CtsDrainOrder::prior_cts_first),
+	[](const testing::TestParamInfo<CtsDrainOrder> &info) {
+		return info.param == CtsDrainOrder::copy_first ?
+			"copy_first" : "prior_cts_first";
+	});
+
 TEST_F(EfaRdmOpeLocalReadAbortTest, abort_without_local_read_copy_completes_now)
 {
 	struct efa_test_local_read_abort state = {};

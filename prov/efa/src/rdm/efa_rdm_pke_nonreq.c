@@ -403,7 +403,10 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 				 "post CTS packet failed! ope type %d, op %u, ope id %u: %s\n",
 				 ope->type, ope->op, efa_rdm_ope_get_ope_id(ope),
 				 fi_strerror(-err));
-			efa_rdm_pke_proc_ctsdata_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
+			if (ope->type == EFA_RDM_RXE)
+				efa_rdm_rxe_handle_cts_post_error(ope, -err);
+			else
+				efa_rdm_pke_proc_ctsdata_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
 }
@@ -552,6 +555,37 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->handle_pke = &efa_rdm_pke_handle_rma_completion;
 }
 
+/* Cancel unposted work and retire the copy after all accepted reads finish. */
+bool efa_rdm_pke_drain_failed_cts_read(struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_pke *data_pkt = txe->local_read_pkt_entry;
+	struct efa_rdm_ope *rxe;
+
+	if (!data_pkt)
+		return false;
+
+	rxe = data_pkt->ope;
+	if (rxe->type != EFA_RDM_RXE || !rxe->cts_post_err)
+		return false;
+
+	efa_rdm_pke_assert_ope_valid(data_pkt);
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_READ) {
+		dlist_remove(&txe->queued_entry);
+		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
+	}
+
+	if (!txe->efa_outstanding_tx_ops) {
+		assert(rxe->efa_outstanding_tx_ops > 0);
+		rxe->efa_outstanding_tx_ops--;
+		txe->local_read_pkt_entry = NULL;
+		efa_rdm_pke_release_rx(data_pkt);
+		efa_rdm_txe_release(txe);
+		efa_rdm_rxe_finish_cts_post_error(rxe);
+	}
+
+	return true;
+}
+
 static
 void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entry)
 {
@@ -570,6 +604,9 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	if (x_entry_type == EFA_RDM_TXE) {
 		txe = context_pkt_entry->ope;
 		assert(txe->op == ofi_op_read_req);
+		if (efa_rdm_pke_drain_failed_cts_read(txe))
+			return;
+
 		txe->bytes_read_completed += rma_context_pkt->seg_size;
 		if (txe->bytes_read_total_len == txe->bytes_read_completed) {
 			if (txe->peer == NULL) {
@@ -611,6 +648,11 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	} else {
 		assert(x_entry_type == EFA_RDM_RXE);
 		rxe = context_pkt_entry->ope;
+
+		if (rxe->cts_post_err) {
+			efa_rdm_rxe_finish_cts_post_error(rxe);
+			return;
+		}
 
 		/*
 		 * A long-read posts multiple READ WRs on one rxe; on a
@@ -950,6 +992,9 @@ ssize_t efa_rdm_pke_handle_peer_error_send_completion(struct efa_rdm_pke *pkt_en
 static void efa_rdm_pke_peer_error_handle_rxe(struct efa_rdm_ope *rxe,
 						      int prov_errno)
 {
+	if (rxe->cts_post_err)
+		return;
+
 	if (rxe->internal_flags & EFA_RDM_OPE_RECV_COMPLETED) {
 		EFA_INFO(FI_LOG_CQ,
 			 "PEER_ERROR names msg_id=%u whose recv already "

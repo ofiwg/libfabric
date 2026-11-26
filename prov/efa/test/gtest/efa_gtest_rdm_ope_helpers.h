@@ -153,6 +153,10 @@ struct efa_test_local_read_abort {
 /** @brief Count the rxes still on the endpoint's ope list. */
 int efa_test_ope_list_rxe_count(struct fid_ep *ep);
 
+int efa_test_fail_cts_replenishment(struct fid_ep *ep, struct fid_av *av,
+				    char *buf, size_t len, void *op_context, int *prov_errno);
+void efa_test_complete_cts_replenishment_wr(uintptr_t wr_id);
+
 /**
  * @brief Peer-abort a matched recv whose local-read payload copy is still
  * outstanding, and attempt the drain once. The caller must arm

@@ -471,6 +471,9 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 	return ope->bytes_runt;
 }
 
+static void efa_rdm_rxe_report_error(struct efa_rdm_ope *rxe, int err,
+				    int prov_errno, bool was_unexpected);
+
 /**
  * @brief handle the situation that an error has happened to an RX (receive) operation
  *
@@ -498,23 +501,11 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
  */
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 {
-	struct efa_rdm_ep *ep;
-	struct fi_cq_err_entry err_entry;
-	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 	enum efa_rdm_ope_state prev_state;
-	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	assert(rxe->type == EFA_RDM_RXE);
-
-	memset(&err_entry, 0, sizeof(err_entry));
-
-	ep = rxe->ep;
-	util_cq = ep->base_ep.util_ep.rx_cq;
-
-	err_entry.err = err;
-	err_entry.prov_errno = prov_errno;
 
 	switch (rxe->state) {
 	case EFA_RDM_RXE_INIT:
@@ -556,12 +547,24 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		rxe->unexp_pkt = NULL;
 	}
 
-	err_entry.flags = rxe->cq_entry.flags;
-	if (prev_state != EFA_RDM_RXE_UNEXP)
-		err_entry.op_context = rxe->cq_entry.op_context;
-	err_entry.buf = rxe->cq_entry.buf;
-	err_entry.data = rxe->cq_entry.data;
-	err_entry.tag = rxe->cq_entry.tag;
+	if (!rxe->cts_post_err)
+		efa_rdm_rxe_report_error(rxe, err, prov_errno, prev_state == EFA_RDM_RXE_UNEXP);
+}
+
+static void efa_rdm_rxe_report_error(struct efa_rdm_ope *rxe, int err, int prov_errno, bool was_unexpected) {
+	struct efa_rdm_ep *ep = rxe->ep;
+	struct util_cq *util_cq = ep->base_ep.util_ep.rx_cq;
+	struct fi_cq_err_entry err_entry = {
+		.err = err,
+		.prov_errno = prov_errno,
+		.flags = rxe->cq_entry.flags,
+		.op_context = was_unexpected ? NULL : rxe->cq_entry.op_context,
+		.buf = rxe->cq_entry.buf,
+		.data = rxe->cq_entry.data,
+		.tag = rxe->cq_entry.tag,
+	};
+	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
+
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, rxe->peer, prov_errno,
 	                                         err_msg, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
@@ -600,6 +603,33 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "RXE");
+}
+
+void efa_rdm_rxe_finish_cts_post_error(struct efa_rdm_ope *rxe) {
+	assert(rxe->cts_post_err);
+	if (rxe->efa_outstanding_tx_ops)
+		return;
+
+	efa_rdm_rxe_report_error(rxe, rxe->cts_post_err, FI_EFA_ERR_PKT_POST, false);
+	efa_rdm_rxe_release(rxe);
+}
+
+void efa_rdm_rxe_handle_cts_post_error(struct efa_rdm_ope *rxe, int err) {
+	/* The previous grant is exhausted and the next one never posted. */
+	assert(!rxe->window);
+	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+		efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+		return;
+	}
+
+	if (rxe->state == EFA_RDM_OPE_ERR)
+		return;
+
+	/* The error completion lets the app reuse its receive buffer. */
+	rxe->cts_post_err = err;
+	efa_rdm_rxe_handle_error(rxe, err, FI_EFA_ERR_PKT_POST);
+	efa_rdm_ep_purge_queued_blocking_copy_for_ope(rxe);
+	efa_rdm_rxe_finish_cts_post_error(rxe);
 }
 
 /**
@@ -2395,6 +2425,10 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	 * EFA_RDM_OPE_QUEUED_* bit can be set at a time.
 	 */
 	assert((flag & (flag - 1)) == 0);
+
+	if (flag == EFA_RDM_OPE_QUEUED_READ && ope->type == EFA_RDM_TXE &&
+	    efa_rdm_pke_drain_failed_cts_read(ope))
+		return 0;
 
 	/*
 	 * Strip stale FI_MORE: the flushing (non-FI_MORE) operation that followed

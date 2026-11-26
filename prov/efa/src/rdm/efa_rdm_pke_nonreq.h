@@ -170,6 +170,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry);
+bool efa_rdm_pke_drain_failed_cts_read(struct efa_rdm_ope *txe);
 
 static inline
 struct efa_rdm_ctsdata_hdr *efa_rdm_pke_get_ctsdata_hdr(struct efa_rdm_pke *pke)

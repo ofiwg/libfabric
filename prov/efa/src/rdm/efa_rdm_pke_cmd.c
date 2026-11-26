@@ -68,6 +68,17 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 	}
 }
 
+static bool efa_rdm_pke_finish_cts_post_error(struct efa_rdm_pke *pkt_entry) {
+	struct efa_rdm_ope *ope = pkt_entry->ope;
+
+	if (!ope || ope->type != EFA_RDM_RXE || !ope->cts_post_err)
+		return false;
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_rxe_finish_cts_post_error(ope);
+	return true;
+}
+
 /**
  * @brief handle the a packet that encountered error completion while sending
  *
@@ -114,6 +125,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 
 	ep = pkt_entry->ep;
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
+
+	if (efa_rdm_pke_finish_cts_post_error(pkt_entry))
+		return;
+
+	if ((pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ) &&
+	    efa_rdm_pke_drain_failed_cts_read(pkt_entry->ope)) {
+		efa_rdm_pke_release_tx(pkt_entry);
+		return;
+	}
 
 	if (!pkt_entry->peer) {
 		/*
@@ -354,6 +374,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
+
+	if (efa_rdm_pke_finish_cts_post_error(pkt_entry))
+		return;
 
 	if (pkt_entry->ope->type == EFA_RDM_TXE &&
 	    pkt_entry->ope->state == EFA_RDM_OPE_ERR &&
