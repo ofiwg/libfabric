@@ -100,6 +100,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_get_max_inline_data=0
 	have_efadv_action_block_offset=0
 	have_efadv_comp_action=0
+	have_ibv_query_port_speed=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -294,6 +295,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_ibv_query_comp_cntr_caps=0],
 			[[#include <infiniband/verbs.h>]])
 
+		AC_CHECK_DECL([ibv_query_port_speed],
+			[have_ibv_query_port_speed=1],
+			[have_ibv_query_port_speed=0],
+			[[#include <infiniband/verbs.h>]])
+
 		AC_CHECK_MEMBER([struct efadv_device_attr.inline_buf_size_ex],
 			[have_inline_buf_size_ex=1],
 			[have_inline_buf_size_ex=0],
@@ -372,6 +378,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_COMP_CNTR_CAPS],
 		[$have_ibv_query_comp_cntr_caps],
 		[Indicates if ibv_query_comp_cntr_caps is available])
+	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_PORT_SPEED],
+		[$have_ibv_query_port_speed],
+		[Indicates if ibv_query_port_speed is available])
 
 	dnl Completion actions need the create/destroy verbs, the inline-size
 	dnl query used to report the reduced inject size, and the queried

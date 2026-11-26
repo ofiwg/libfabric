@@ -188,6 +188,29 @@ static void efa_device_set_cntr_max_values(struct efa_device *efa_device)
 }
 
 /**
+ * @brief query the port's effective speed in 100 Mb/s units
+ *
+ * @param	efa_device[in,out]	pointer to a struct efa_device
+ */
+static void efa_device_set_port_speed(struct efa_device *efa_device)
+{
+	efa_device->port_speed = 0;
+#if HAVE_IBV_QUERY_PORT_SPEED
+	{
+		int err;
+		uint64_t port_speed;
+
+		err = ibv_query_port_speed(efa_device->ibv_ctx, 1, &port_speed);
+		if (err) {
+			EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_port_speed failed", err);
+		} else {
+			efa_device->port_speed = port_speed;
+		}
+	}
+#endif
+}
+
+/**
  * @brief initialize data members of a struct of efa_device after the gid
  * including the prov info
  *
@@ -231,6 +254,7 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	efa_device->device_caps = 0;
 #endif
 	efa_device_set_cntr_max_values(efa_device);
+	efa_device_set_port_speed(efa_device);
 	efa_device->rdm_info = NULL;
 	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, FI_EP_RDM);
 	if (err) {

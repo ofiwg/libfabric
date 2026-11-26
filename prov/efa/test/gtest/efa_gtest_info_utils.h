@@ -5,6 +5,7 @@
 #define EFA_GTEST_INFO_UTILS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,14 @@ extern "C" {
  */
 void efa_test_set_queue_size_env(size_t tx, size_t rx, size_t *prev_tx,
 				 size_t *prev_rx);
+
+int efa_test_prov_info_link_speed(uint64_t port_speed, size_t *link_speed);
+
+size_t efa_test_device_vrb_link_speed(void);
+
+uint64_t efa_test_device_port_speed(void);
+
+size_t efa_test_device_rdm_info_link_speed(void);
 
 #ifdef __cplusplus
 }
