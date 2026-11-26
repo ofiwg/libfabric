@@ -967,6 +967,9 @@ void test_efa_rdm_rxe_list_removal(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *efa_rdm_ep;
+#if ENABLE_DEBUG
+	struct efa_rdm_ope *pending_rxe;
+#endif
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -981,9 +984,23 @@ void test_efa_rdm_rxe_list_removal(void **state)
 	dlist_insert_tail(&rxe->entry, &efa_rdm_ep->ope_longcts_send_list);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_longcts_send_list), 1);
 
+#if ENABLE_DEBUG
+	pending_rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, rxe->peer, ofi_op_tagged);
+	assert_non_null(pending_rxe);
+	pending_rxe->state = EFA_RDM_RXE_RECV;
+	dlist_insert_tail(&pending_rxe->pending_recv_entry,
+			  &efa_rdm_ep->ope_recv_list);
+	efa_rdm_ep->pending_recv_counter++;
+#endif
+
 	/* Lists should be empty after releasing the ope */
 	efa_rdm_rxe_release(rxe);
-	dlist_empty(&efa_rdm_ep->ope_longcts_send_list);
+	assert_true(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
+#if ENABLE_DEBUG
+	efa_rdm_rxe_release(pending_rxe);
+	assert_true(dlist_empty(&efa_rdm_ep->ope_recv_list));
+	assert_int_equal(efa_rdm_ep->pending_recv_counter, 0);
+#endif
 }
 
 void test_efa_rdm_txe_list_removal(void **state)

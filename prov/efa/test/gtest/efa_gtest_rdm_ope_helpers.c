@@ -554,6 +554,16 @@ int efa_test_abort_without_local_read_copy_completes_now(
 	return 0;
 }
 
+#if ENABLE_DEBUG
+size_t efa_test_pending_recv_count(struct fid_ep *ep)
+{
+	struct efa_rdm_ep *rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	return rdm_ep->pending_recv_counter;
+}
+#endif
+
 int efa_test_fail_cts_replenishment(struct fid_ep *ep_fid, struct fid_av *av,
 				    char *buf, size_t len, void *op_context,
 				    int *prov_errno)

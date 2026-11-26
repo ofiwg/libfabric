@@ -496,6 +496,9 @@ TEST_P(EfaRdmOpeCtsPostFailureTest, replenishment_error_waits_for_cts_and_copy)
 	ASSERT_NE(copy_wr_id, 0u);
 	ASSERT_NE(prior_cts_wr_id, 0u);
 	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 1);
+#if ENABLE_DEBUG
+	EXPECT_EQ(efa_test_pending_recv_count(resource.ep), 0u);
+#endif
 	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
 		  -FI_EAGAIN);
 
@@ -509,6 +512,9 @@ TEST_P(EfaRdmOpeCtsPostFailureTest, replenishment_error_waits_for_cts_and_copy)
 	efa_test_complete_cts_replenishment_wr(
 		copy_first ? prior_cts_wr_id : copy_wr_id);
 	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 0);
+#if ENABLE_DEBUG
+	EXPECT_EQ(efa_test_pending_recv_count(resource.ep), 0u);
+#endif
 	EXPECT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry),
 		  -FI_EAVAIL);
 	ASSERT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);

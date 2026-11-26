@@ -4,6 +4,7 @@
 #ifndef EFA_GTEST_RDM_OPE_HELPERS_H
 #define EFA_GTEST_RDM_OPE_HELPERS_H
 
+#include "config.h"
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 
@@ -152,6 +153,10 @@ struct efa_test_local_read_abort {
 
 /** @brief Count the rxes still on the endpoint's ope list. */
 int efa_test_ope_list_rxe_count(struct fid_ep *ep);
+
+#if ENABLE_DEBUG
+size_t efa_test_pending_recv_count(struct fid_ep *ep);
+#endif
 
 int efa_test_fail_cts_replenishment(struct fid_ep *ep, struct fid_av *av,
 				    char *buf, size_t len, void *op_context, int *prov_errno);

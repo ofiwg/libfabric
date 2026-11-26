@@ -121,6 +121,19 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	}
 }
 
+#if ENABLE_DEBUG
+static void efa_rdm_ope_remove_pending_recv(struct efa_rdm_ope *ope)
+{
+	struct efa_rdm_ep *ep = ope->ep;
+
+	if (dlist_entry_in_list(&ep->ope_recv_list, &ope->pending_recv_entry)) {
+		dlist_remove(&ope->pending_recv_entry);
+		assert(ep->pending_recv_counter > 0);
+		ep->pending_recv_counter--;
+	}
+}
+#endif
+
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 {
 	int i, err = 0;
@@ -131,12 +144,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	efa_rdm_txe_release_read_msg_slot(txe);
 
 #if ENABLE_DEBUG
-	if (dlist_entry_in_list(&txe->ep->ope_recv_list,
-				&txe->pending_recv_entry)) {
-		dlist_remove(&txe->pending_recv_entry);
-		assert(txe->ep->pending_recv_counter > 0);
-		txe->ep->pending_recv_counter--;
-	}
+	efa_rdm_ope_remove_pending_recv(txe);
 #endif
 
 	/* txe->peer would be NULL for local read operation */
@@ -222,6 +230,10 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	struct dlist_entry *tmp;
 	int i, err;
 	uint8_t gen;
+
+#if ENABLE_DEBUG
+	efa_rdm_ope_remove_pending_recv(rxe);
+#endif
 
 	if (rxe->peer)
 		dlist_remove(&rxe->peer_entry);
@@ -517,7 +529,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		break;
 	case EFA_RDM_RXE_RECV:
 #if ENABLE_DEBUG
-		dlist_remove(&rxe->pending_recv_entry);
+		efa_rdm_ope_remove_pending_recv(rxe);
 #endif
 		break;
 	case EFA_RDM_OPE_ERR:
