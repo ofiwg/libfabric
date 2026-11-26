@@ -208,11 +208,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	ofi_buf_free(txe);
 }
 
-void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe){
-
-	if (txe->state != EFA_RDM_OPE_ERR || !txe->proto ||
-	    !txe->proto->release_txe_on_error ||
-	    (txe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING | EFA_RDM_OPE_QUEUED_FLAGS)) ||
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe)
+{
+	if (!efa_rdm_txe_releases_on_error(txe) ||
+	    (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) ||
 	    txe->efa_outstanding_tx_ops || !dlist_empty(&txe->queued_pkts))
 		return;
 
@@ -2449,20 +2448,26 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	 */
 	ope->fi_flags &= ~FI_MORE;
 
+	/* Capture the type even if MR validation skips dispatch, and before
+	 * reposting can remove the packet from the queue.
+	 */
+	if (flag == EFA_RDM_OPE_QUEUED_RNR) {
+		assert(!dlist_empty(&ope->queued_pkts));
+		pkt_entry = container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry);
+		queued_response_pkt_type = efa_rdm_pkt_type_of(pkt_entry);
+	} else if (flag == EFA_RDM_OPE_QUEUED_CTRL) {
+		queued_response_pkt_type = ope->queued_ctrl_type;
+	}
+
 	if (efa_rdm_mr_gen_check_ope(ope)) {
 		switch (flag) {
 		case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
 			ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
 			break;
 		case EFA_RDM_OPE_QUEUED_RNR:
-			assert(!dlist_empty(&ope->queued_pkts));
-			queued_response_pkt_type = efa_rdm_pkt_type_of(
-				container_of(ope->queued_pkts.next,
-					     struct efa_rdm_pke, entry));
 			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
-			queued_response_pkt_type = ope->queued_ctrl_type;
 			ret = efa_rdm_ope_post_ctrl(ope, ope->queued_ctrl_type);
 			break;
 		case EFA_RDM_OPE_QUEUED_READ:
@@ -2485,25 +2490,6 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 	if (OFI_UNLIKELY(ret)) {
 		if (ret == -FI_EAGAIN)
 			return ret;
-
-		/*
-		 * The dispatch switch captures the type unless the MR generation
-		 * check failed before dispatch.
-		 */
-		if (queued_response_pkt_type == -1) {
-			switch (flag) {
-			case EFA_RDM_OPE_QUEUED_RNR:
-				assert(!dlist_empty(&ope->queued_pkts));
-				queued_response_pkt_type = efa_rdm_pkt_type_of(
-					container_of(ope->queued_pkts.next, struct efa_rdm_pke, entry));
-				break;
-			case EFA_RDM_OPE_QUEUED_CTRL:
-				queued_response_pkt_type = ope->queued_ctrl_type;
-				break;
-			default:
-				break;
-			}
-		}
 
 		assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
 

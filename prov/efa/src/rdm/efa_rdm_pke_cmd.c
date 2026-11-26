@@ -379,11 +379,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 
 	if (pkt_entry->ope->type == EFA_RDM_TXE &&
-	    pkt_entry->ope->state == EFA_RDM_OPE_ERR &&
-	    pkt_entry->ope->proto &&
-	    pkt_entry->ope->proto->release_txe_on_error &&
-	    !(pkt_entry->ope->internal_flags &
-	      EFA_RDM_OPE_PEER_ABORT_PENDING)) {
+	    efa_rdm_txe_releases_on_error(pkt_entry->ope)) {
 		struct efa_rdm_ope *txe = pkt_entry->ope;
 
 		efa_rdm_pke_release_tx(pkt_entry);

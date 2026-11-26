@@ -129,6 +129,13 @@ struct efa_rdm_proto {
 	int req_pkt_type_tagged_dc;
 };
 
+static inline bool efa_rdm_txe_releases_on_error(const struct efa_rdm_ope *txe)
+{
+	return txe->state == EFA_RDM_OPE_ERR && txe->proto &&
+	       txe->proto->release_txe_on_error &&
+	       !(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+}
+
 #define EFA_RDM_PROTO_DEF(_name, ...) \
 	struct efa_rdm_proto efa_rdm_proto_##_name = { \
 		.name = #_name, \
