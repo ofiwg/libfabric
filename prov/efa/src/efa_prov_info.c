@@ -375,8 +375,15 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 	}
 
 	link_attr->mtu = device->ibv_port_attr.max_msg_sz;
-	link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
-	                                 device->ibv_port_attr.active_width);
+
+	if (device->port_speed) {
+		/* convert from 100 Mb/s to bits/s */
+		link_attr->speed = device->port_speed * 100000000ULL;
+	}
+	else {
+		link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
+										 device->ibv_port_attr.active_width);
+	}
 
 	switch (device->ibv_port_attr.state) {
 	case IBV_PORT_DOWN:

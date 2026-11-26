@@ -35,6 +35,7 @@ struct efa_device {
 	uint32_t		max_comp_cntr;
 	uint64_t		comp_count_max_value;
 	uint64_t		err_count_max_value;
+	uint64_t		port_speed;
 	/* Refcount of open domains using this device. efa_device_list_finalize
 	 * skips destruction when ref_cnt > 0, preventing use-after-free when
 	 * fi_fini races with threads still inside the provider.

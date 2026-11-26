@@ -243,3 +243,42 @@ TEST_F(EfaInfoQueueDepthTest, getinfo_raises_hint_rx_size_to_min_rdm)
 		  std::min(efa_test_device_max_rx_size(),
 			   efa_test_rdm_ep_min_rx_size()));
 }
+
+class EfaInfoLinkSpeedTest : public Test
+{
+	protected:
+	void SetUp() override
+	{
+		ASSERT_EQ(efa_test_device_probe(), 0);
+	}
+};
+
+TEST_F(EfaInfoLinkSpeedTest, prov_info_link_speed_from_port_speed)
+{
+	size_t link_speed = 0;
+
+	ASSERT_EQ(efa_test_prov_info_link_speed(1234, &link_speed), 0);
+
+	EXPECT_EQ(link_speed, (size_t) 123400000000ULL);
+}
+
+TEST_F(EfaInfoLinkSpeedTest, prov_info_link_speed_falls_back_without_port_speed)
+{
+	size_t link_speed = 1;
+
+	ASSERT_EQ(efa_test_prov_info_link_speed(0, &link_speed), 0);
+
+	EXPECT_EQ(link_speed, efa_test_device_vrb_link_speed());
+}
+
+TEST_F(EfaInfoLinkSpeedTest, device_link_speed_matches_queried_port_speed)
+{
+	uint64_t port_speed = efa_test_device_port_speed();
+
+	if (port_speed)
+		EXPECT_EQ(efa_test_device_rdm_info_link_speed(),
+			  (size_t) (port_speed * 100000000ULL));
+	else
+		EXPECT_EQ(efa_test_device_rdm_info_link_speed(),
+			  efa_test_device_vrb_link_speed());
+}
