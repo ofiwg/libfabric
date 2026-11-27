@@ -48,6 +48,7 @@ class EfaRdmCqRaceTest : public Test
 		efa_test_set_ibv_cq_ex(ibv_cq, IBV_WC_SUCCESS, ctx.wr_id);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
