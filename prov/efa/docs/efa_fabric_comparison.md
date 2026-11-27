@@ -266,7 +266,7 @@ operations and use bounce buffer to send data over the NIC.
 
 | **Other Libfabric Features**      |efa|efa-direct|
 | ---------------------------- |:-:|:--------:|
-| FI_RM_ENABLED                |\*|\*       |
+| FI_RM_ENABLED                |\*|❌       |
 | fi_counter  |✓  |✓          |
 | fi_cancel support            |\* |❌       |
 | message ordering        |\*  |❌       |
@@ -277,7 +277,7 @@ operations and use bounce buffer to send data over the NIC.
 - **message ordering**: efa fabric supports FI_ORDER_SAS, FI_ORDER_ATOMIC_RAR,  FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, FI_ORDER_ATOMIC_WAW ordering, efa-direct
 doesn't support any ordering.
 
-- **FI_RM_ENABLED**: Both fabrics provide limited resource management support. One thing required for FI_RM_ENABLED is that provider needs to protect the resource (including CQ) from being overrun. But today efa and efa-direct doesn't have that protection.
+- **FI_RM_ENABLED**: FI_RM_ENABLED requires the provider to protect its resources (including the CQ) from being overrun. efa advertises limited resource management support, though it does not fully provide that protection today. efa-direct leaves SQ/RQ/CQ protection entirely to the application, so it advertises FI_RM_DISABLED and rejects hints that request FI_RM_ENABLED (fi_getinfo returns -FI_ENODATA).
 
 
 | **EFA proivider specific Features and Restrictions**      |efa|efa-direct|

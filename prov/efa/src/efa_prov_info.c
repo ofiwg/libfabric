@@ -103,9 +103,6 @@ int efa_prov_info_set_domain_attr(struct fi_info *prov_info,
 	if (ep_type == FI_EP_RDM) {
 		/* EFA direct path is thread safe */
 		prov_info->domain_attr->threading = FI_THREAD_SAFE;
-
-		/* EFA direct path retries indefinitely when Receiver Not Ready (RNR) */
-		prov_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	}
 
 	EFA_DBG(FI_LOG_DOMAIN, "Domain attribute :\n"
