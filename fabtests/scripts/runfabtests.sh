@@ -114,6 +114,7 @@ functional_tests=(
 	"fi_rdm"
 	"fi_rdm -U"
 	"fi_rdm_rma_event"
+	"fi_rdm_rma_order"
 	"fi_rdm_rma_trigger"
 	"fi_shared_ctx"
 	"fi_shared_ctx --no-tx-shared-ctx"

@@ -113,6 +113,45 @@ features of libfabric.
 : An RMA write example over an RDM endpoint that uses RMA events
   to notify the peer that the RMA transfer has completed.
 
+*fi_rdm_rma_order*
+: Checks, one ordering at a time, the RMA and message orderings the provider
+  supports.  Each case issues two operations to the same target memory and
+  checks that the result matches the order they were issued in.  The cases
+  are named by the later operation first: write after write (waw), read
+  after write (raw), write after read (war), send after write (saw), send
+  after read (sar) and send after send (sas).  Read after read (rar), read
+  after send (ras) and write after send (was) cannot be seen from the data
+  alone, so they are best effort.  Orderings the provider does not
+  advertise are skipped.  Works with RDM endpoints.
+
+  The client is the initiator and the server is the target.  Each side can
+  use host or device memory, chosen with -D, -H and -i.  The server's RMA
+  target is separate from its receive buffers, so the two never overlap.
+
+  Each case runs in these steps, for every message size and every iteration:
+
+  1. The server fills the target with a known value: a sentinel byte, or the
+     old data for cases where the initial contents matter.
+  2. Both sides synchronize.
+  3. The client posts both operations back to back, without waiting between
+     them, so they are in flight together.  The server may react, for
+     example by waiting for a message before looking at the target.
+  4. Both sides synchronize again.  The server keeps making progress while it
+     waits, so it can service the client's operations.
+  5. The target, or the initiator for cases that read, checks the data
+     against the value that only the correct order can produce.  Both sides
+     then exchange the result and the case is reported as PASS or FAIL.
+
+  Each operation writes its own byte pattern, so a failure shows which
+  operation landed last or which data a read returned.  Writes use
+  FI_DELIVERY_COMPLETE so a write is not reported complete before it has
+  landed.  The test requests every ordering it is about to test, because a
+  provider can report orderings only when asked.
+
+  Use -y to run only some of the cases, -S for the size of the large
+  operation, and -I for the number of iterations.  The client and the server
+  must be given the same -y, -S and -I.
+
 *fi_rdm_rma_trigger*
 : A basic example of queuing an RMA write operation that is initiated
   upon the firing of a triggering completion. Works with RDM endpoints.
@@ -584,6 +623,9 @@ the list available for that test.
   for device N of the -D interface, for example h,d0,h.  A device entry needs
   -D.  fi_hmem_scatter_recvv runs only this test instead of its default tests.
   fi_rdm_hmem_scatter_bw uses h,h when it is not given.  The client ignores it.
+  For fi_rdm_rma_order, a comma separated list of the ordering cases to run
+  (waw, raw, war, saw, sar, sas, rar, ras, was).  Give the same list to both
+  sides.
 
 *-z <bytes>*
 : For fi_hmem_scatter_recvv and fi_rdm_hmem_scatter_bw, the size of each of
