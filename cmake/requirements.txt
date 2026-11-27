@@ -1,0 +1,2 @@
+# Development tools for checking the project's CMake formatting.
+cmakelang[YAML]==0.6.13

@@ -79,6 +79,15 @@ To install from a libfabric source package run the following commands:
 If building directly from the libfabric git tree, run './autogen.sh'
 before the configure step.
 
+CMake builds can start directly from a Git checkout:
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+cmake --install build
+
+See docs/cmake.md for provider selection, static builds, tests, and CMake
+package consumption.
+
 Configure Options
 -----------------
 The configure script has many built-in options (see './configure --help').
