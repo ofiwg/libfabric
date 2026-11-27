@@ -187,35 +187,40 @@ static void cleanup_monitor_list() {
 	monitor_list_size = 0;
 }
 
-static void set_default_monitor(const char *monitor)
+/* Return -FI_ENOSYS for an unavailable monitor and -FI_EINVAL for an
+ * unknown name. A recognized name sets the output to the built-in
+ * monitor, or NULL if disabled or unavailable.
+ */
+int ofi_parse_mr_cache_monitor(const char *name,
+			       struct ofi_mem_monitor **monitor)
 {
-	if (!monitor)
-		return;
+	struct ofi_mem_monitor *selected = NULL;
+	bool disabled = !strcmp(name, "disabled");
 
-	if (!strcmp(monitor, "userfaultfd") || !strcmp(monitor, "uffd")) {
+	if (!strcmp(name, "userfaultfd") || !strcmp(name, "uffd")) {
 #if HAVE_UFFD_MONITOR
-		default_monitor = uffd_monitor;
-#else
-		FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
-		default_monitor = NULL;
+		selected = uffd_monitor;
 #endif
-	} else if (!strcmp(monitor, "memhooks")) {
+	} else if (!strcmp(name, "memhooks")) {
 #if HAVE_MEMHOOKS_MONITOR
-		default_monitor = memhooks_monitor;
-#else
-		FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
-		default_monitor = NULL;
+		selected = memhooks_monitor;
 #endif
-	} else if (!strcmp(monitor, "kdreg2")) {
+	} else if (!strcmp(name, "kdreg2")) {
 #if HAVE_KDREG2_MONITOR
-		default_monitor = kdreg2_monitor;
-#else
-		FI_WARN(&core_prov, FI_LOG_MR, "kdreg2 monitor not available\n");
-		default_monitor = NULL;
+		selected = kdreg2_monitor;
 #endif
-	} else if (!strcmp(monitor, "disabled")) {
-		default_monitor = NULL;
+	} else if (!disabled) {
+		return -FI_EINVAL;
 	}
+
+	*monitor = selected;
+	return selected || disabled ? 0 : -FI_ENOSYS;
+}
+
+static void set_default_monitor(const char *name)
+{
+	if (ofi_parse_mr_cache_monitor(name, &default_monitor) == -FI_ENOSYS)
+		FI_WARN(&core_prov, FI_LOG_MR, "%s monitor not available\n", name);
 }
 
 /*
