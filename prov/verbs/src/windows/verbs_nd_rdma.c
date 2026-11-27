@@ -337,6 +337,32 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 	return 0;
 }
 
+/* Puts an address or route resolution event in the id's event channel. */
+static int nd_queue_resolved_event(struct rdma_cm_id *id,
+				   enum rdma_cm_event_type type)
+{
+	struct nd_cm_event *entry_nd;
+	struct nd_event_channel *ch_nd;
+
+	entry_nd = calloc(1, sizeof(*entry_nd));
+	if (!entry_nd) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	entry_nd->event.id = id;
+	entry_nd->event.listen_id = NULL;
+	entry_nd->event.event = type;
+	entry_nd->event.status = 0;
+
+	ch_nd = container_of(id->channel, struct nd_event_channel, channel);
+	dlistfd_insert_tail(&entry_nd->entry, &ch_nd->q);
+	VRB_DBG(FI_LOG_EQ, "EQ SET event:%p %p %d\n", entry_nd->event.id,
+		entry_nd->event.listen_id, entry_nd->event.event);
+
+	return 0;
+}
+
 int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 		      struct sockaddr *dst_addr, int timeout_ms)
 {
@@ -388,14 +414,18 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 	}
 
 	memcpy(&id->route.addr.dst_addr, dst_addr, ofi_sizeofaddr(dst_addr));
+
+	/* As with librdmacm, an id that has an event channel is asynchronous,
+	 * and the caller waits for RDMA_CM_EVENT_ADDR_RESOLVED before it
+	 * resolves the route. The address is already resolved here. */
+	if (id->channel)
+		return nd_queue_resolved_event(id, RDMA_CM_EVENT_ADDR_RESOLVED);
+
 	return 0;
 }
 
 int rdma_resolve_route(struct rdma_cm_id *id, int timeout_ms)
 {
-	struct nd_cm_event *entry_nd;
-	struct nd_event_channel *ch_nd;
-
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 
 	if ((!id) || (!id->channel)) {
@@ -403,23 +433,7 @@ int rdma_resolve_route(struct rdma_cm_id *id, int timeout_ms)
 		return -1;
 	}
 
-	entry_nd = calloc(1, sizeof(*entry_nd));
-	if (!entry_nd) {
-		errno = ENOMEM;
-		return -1;
-	}
-
-	entry_nd->event.id = id;
-	entry_nd->event.listen_id = NULL;
-	entry_nd->event.event = RDMA_CM_EVENT_ROUTE_RESOLVED;
-	entry_nd->event.status = 0;
-
-	ch_nd = container_of(id->channel, struct nd_event_channel, channel);
-	dlistfd_insert_tail(&entry_nd->entry, &ch_nd->q);
-	VRB_DBG(FI_LOG_EQ, "EQ SET event:%p %p %d\n", entry_nd->event.id,
-		entry_nd->event.listen_id, entry_nd->event.event);
-
-	return 0;
+	return nd_queue_resolved_event(id, RDMA_CM_EVENT_ROUTE_RESOLVED);
 }
 
 int rdma_listen(struct rdma_cm_id *id, int backlog)
@@ -548,7 +562,7 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	}
 	ofi_mutex_unlock(&id_nd->connect_event.base.lock);
 
-	return 0;
+	return ret;
 }
 
 int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)

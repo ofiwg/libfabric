@@ -430,8 +430,18 @@ void nd_cq_notify_event(struct nd_event_base *base, DWORD bytes)
 	ch_nd = container_of(cq_nd->cq.channel, struct nd_comp_channel,
 			     channel);
 
+	/* ibv_req_notify_cq arms a new notification as soon as this one has
+	 * completed, which can be before ibv_get_cq_event has taken the entry
+	 * off the list. Inserting the entry a second time corrupts the list:
+	 * the list head still points to the entry after it is removed, so
+	 * ibv_get_cq_event reports an event without end, and vrb_cq_trywait
+	 * and fi_cq_sread do not return. An entry that is on the list already
+	 * says that the CQ has events, which is all that this one says. */
 	ofi_mutex_lock(&ch_nd->q_lock);
-	dlistfd_insert_tail(&cq_nd->entry, &ch_nd->q);
+	if (!cq_nd->queued) {
+		dlistfd_insert_tail(&cq_nd->entry, &ch_nd->q);
+		cq_nd->queued = 1;
+	}
 	ofi_mutex_unlock(&ch_nd->q_lock);
 }
 

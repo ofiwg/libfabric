@@ -501,6 +501,7 @@ int ibv_get_cq_event(struct ibv_comp_channel *channel, struct ibv_cq **cq,
 		*cq = &cq_nd->cq;
 		*cq_context = cq_nd->cq.cq_context;
 		dlistfd_remove(channel_nd->q.list.next, &channel_nd->q);
+		cq_nd->queued = 0;
 	}
 	ofi_mutex_unlock(&channel_nd->q_lock);
 
@@ -691,7 +692,10 @@ struct ibv_mr *ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t length,
 	}
 
 	mr->lkey = mr_nd->region->lpVtbl->GetLocalToken(mr_nd->region);
-	mr->rkey = mr_nd->region->lpVtbl->GetRemoteToken(mr_nd->region);
+	/* A NetworkDirect token is in network byte order, and a verbs rkey is
+	 * in host byte order. The rkey goes to the peer, which can be a Linux
+	 * host, so convert it here and convert it back in ibv_post_send. */
+	mr->rkey = ntohl(mr_nd->region->lpVtbl->GetRemoteToken(mr_nd->region));
 
 	return mr;
 err5:
@@ -826,8 +830,8 @@ int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
 			hr = qp_nd->nd2qp->lpVtbl->Read(
 				qp_nd->nd2qp, (void *)wr->wr_id,
 				(ND2_SGE *)wr->sg_list, wr->num_sge,
-				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
-				flags);
+				wr->wr.rdma.remote_addr,
+				htonl(wr->wr.rdma.rkey), flags);
 			VRB_DBG(FI_LOG_EP_DATA,
 				"IND2QueuePair::Read: hr=0x%08lx, nsge=%d, "
 				"addr=0x%016llx, raddr=0x%016llx, "
@@ -844,8 +848,8 @@ int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
 			hr = qp_nd->nd2qp->lpVtbl->Write(
 				qp_nd->nd2qp, (void *)wr->wr_id,
 				(ND2_SGE *)wr->sg_list, wr->num_sge,
-				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
-				flags);
+				wr->wr.rdma.remote_addr,
+				htonl(wr->wr.rdma.rkey), flags);
 			VRB_DBG(FI_LOG_EP_DATA,
 				"IND2QueuePair::Write: hr=0x%08lx, nsge=%d, "
 				"addr=0x%016llx, raddr=0x%016llx, "
