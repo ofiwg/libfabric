@@ -115,6 +115,7 @@ struct fi_cntr_attr {
 	struct fid_wait     *wait_set;  /* optional wait set, deprecated */
 	uint64_t             flags;     /* operation flags */
 	struct fid_xpu_ctx  *xpu_ctx;   /* optional XPU context */
+	enum fi_resource_sharing_mode sharing_mode; /* threads issuing calls */
 };
 ```
 
@@ -212,6 +213,11 @@ struct fi_cntr_attr {
   available. The counter is exported via `fi_cntr_export_xpu` for device-side
   use. See [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL
   if the counter is not created with FI_XPU.
+
+*sharing_mode*
+: Declares which threads issue calls on the counter, as an
+  `enum fi_resource_sharing_mode` value. See
+  [`fi_domain`(3)](fi_domain.3.html).
 
 ## fi_close
 

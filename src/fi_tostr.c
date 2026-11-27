@@ -415,6 +415,8 @@ ofi_tostr_ep_attr(char *buf, size_t len, const struct fi_ep_attr *attr,
 		     attr->max_tx_wr_size);
 	ofi_strncatf(buf, len, "%s%smax_rx_wr_size: %zu\n", prefix, TAB,
 		     attr->max_rx_wr_size);
+	ofi_strncatf(buf, len, "%s%ssharing_mode: %d\n", prefix, TAB,
+		     attr->sharing_mode);
 }
 
 static void
@@ -850,6 +852,7 @@ ofi_tostr_cq_attr(char *buf, size_t len, const struct fi_cq_attr *attr)
 	ofi_tostr_cq_wait_cond(buf, len, attr->wait_cond);
 	ofi_strncatf(buf, len, "\n");
 	ofi_strncatf(buf, len, "%sxpu_ctx: %p\n", TAB, (void *) attr->xpu_ctx);
+	ofi_strncatf(buf, len, "%ssharing_mode: %d\n", TAB, attr->sharing_mode);
 }
 
 static void ofi_tostr_mr_access(char *buf, size_t len, uint64_t access)
@@ -916,6 +919,7 @@ ofi_tostr_cntr_attr(char *buf, size_t len, const struct fi_cntr_attr *attr)
 	ofi_strncatf(buf, len, "\n");
 	ofi_strncatf(buf, len, "%sflags: 0x%lx\n", TAB, attr->flags);
 	ofi_strncatf(buf, len, "%sxpu_ctx: %p\n", TAB, (void *) attr->xpu_ctx);
+	ofi_strncatf(buf, len, "%ssharing_mode: %d\n", TAB, attr->sharing_mode);
 }
 
 static void

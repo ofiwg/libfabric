@@ -94,6 +94,8 @@ struct fi_xpu_attr {
     int                  iface;    /* enum fi_hmem_iface */
     uint64_t             device;
     struct fi_xpu_ops    *ops;
+    /* Added in 2.8 */
+    enum fi_threading    threading;
 };
 ```
 
@@ -106,6 +108,12 @@ struct fi_xpu_attr {
 *ops*
 : Optional pointer to a `fi_xpu_ops` structure containing memory management
   callbacks. If NULL, the provider uses its default mechanisms.
+
+*threading*
+: The threading model between the XPU objects of this context, with the
+  values and meaning of the domain *threading* attribute (see
+  [`fi_domain`(3)](fi_domain.3.html)). The domain *threading* attribute does not
+  apply to XPU objects.
 
 ## fi_xpu_ops
 
@@ -480,6 +488,33 @@ described in Scope.
 | fi_xpu_cntr_read, fi_xpu_cntr_readerr | Group | Every thread of the scope | Identical in every thread of the scope | One read of the counter for the scope | The scope's, the same in every thread of that scope; other scopes get their own |
 | fi_xpu_cntr_wait | Work item | One thread | Its own counter and threshold | One wait for the thread | None |
 | fi_xpu_cntr_wait | Group | Every thread of the scope | Identical in every thread of the scope | One wait for the scope; every thread returns once the threshold is reached | None |
+
+## Resource Sharing
+
+The *threading* attribute of the XPU context states whether different XPU
+objects may be accessed in parallel. The *sharing_mode* attribute of an EP,
+CQ, or counter created with FI_XPU states which device threads issue calls on
+that one object (see [`fi_domain`(3)](fi_domain.3.html)). The value is separate
+from the *scope* argument of each call, and it limits which scopes are valid on
+the object:
+
+*FI_RESOURCE_SHARING_UNSPEC*
+: Any scope is valid.
+
+*FI_RESOURCE_SHARING_SAFE*
+: Any scope is valid.
+
+*FI_RESOURCE_SHARING_GROUP*
+: Calls with a scope of FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, or
+  FI_XPU_WORK_GROUP are valid, provided that all threads taking part in the
+  call belong to that work group. Calls with a scope of FI_XPU_DEVICE are not
+  valid.
+
+*FI_RESOURCE_SHARING_SINGLE*
+: Only calls with a scope of FI_XPU_WORK_ITEM are valid.
+
+Each object carries its own value, so one kernel may use objects with
+different values at the same time.
 
 ## Data Transfer Operations
 

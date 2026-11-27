@@ -723,6 +723,7 @@ struct fi_ep_attr {
 	struct fid_xpu_ctx *xpu_ctx;
 	size_t          max_tx_wr_size;
 	size_t          max_rx_wr_size;
+	enum fi_resource_sharing_mode sharing_mode;
 };
 {% endhighlight %}
 
@@ -1085,6 +1086,12 @@ together with `FI_XPU` in the flags parameter of `fi_endpoint2`, the endpoint
 is created for XPU device-side data transfer. See
 [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if the
 endpoint is not created with FI_XPU.
+
+## sharing_mode - Resource Sharing Mode
+
+Declares which threads issue calls on the endpoint, as an
+`enum fi_resource_sharing_mode` value. It applies to both the transmit and
+receive queues. See [`fi_domain`(3)](fi_domain.3.html).
 
 ## max_tx_wr_size / max_rx_wr_size - Work Request Size
 

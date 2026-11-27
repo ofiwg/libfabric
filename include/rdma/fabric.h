@@ -417,6 +417,13 @@ struct fi_rx_attr {
 	size_t			iov_limit;
 };
 
+enum fi_resource_sharing_mode {
+	FI_RESOURCE_SHARING_UNSPEC,	/* follow the domain or XPU threading */
+	FI_RESOURCE_SHARING_SAFE,	/* any thread */
+	FI_RESOURCE_SHARING_GROUP,	/* one thread group at a time */
+	FI_RESOURCE_SHARING_SINGLE,	/* one thread at a time */
+};
+
 struct fi_ep_attr {
 	enum fi_ep_type		type;
 	uint32_t		protocol;
@@ -434,6 +441,7 @@ struct fi_ep_attr {
 	struct fid_xpu_ctx	*xpu_ctx;
 	size_t			max_tx_wr_size;
 	size_t			max_rx_wr_size;
+	enum fi_resource_sharing_mode	sharing_mode;
 };
 
 struct fi_domain_attr {
