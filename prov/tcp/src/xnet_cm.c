@@ -385,64 +385,85 @@ disable:
 	xnet_ep_disable(ep, -ret, NULL, 0);
 }
 
-void xnet_accept_sock(struct xnet_pep *pep)
+/* Create a connection handle for an accepted socket, and wait for the
+ * connect request to arrive on it (see xnet_handle_conn).
+ */
+static void xnet_new_conn(struct xnet_pep *pep, SOCKET sock)
 {
 	struct xnet_conn_handle *conn;
 	int ret;
-
-	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
-	assert(xnet_progress_locked(pep->progress));
-
-	if (pep->state != XNET_LISTENING)
-		return;
 
 	conn = calloc(1, sizeof(*conn));
 	if (!conn) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory\n");
-		return;
+		goto close;
 	}
 
 	conn->fid.fclass = FI_CLASS_CONNREQ;
 	conn->pep = pep;
 	conn->progress = pep->progress;
+	conn->sock = sock;
 	conn->sockapi = &pep->progress->sockapi;
 	ofi_sockctx_init(&conn->rx_sockctx, &conn->fid);
 	dlist_init(&conn->pep_entry);
 
-	ret = conn->sockapi->accept(conn->sockapi, pep->sock, NULL, 0,
-				    &conn->rx_sockctx);
-	if (ret < 0) {
-		conn->sock = INVALID_SOCKET;
-		if (ret == -OFI_EINPROGRESS_URING) {
-			/* Accept is in-flight.  Track the handle so
-			 * pep close can cancel it.
-			 */
-			dlist_insert_tail(&conn->pep_entry,
-					  &pep->conn_list);
-			return;
-		}
-
-		/* FIXME: handle EAGAIN */
-
-		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
-			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"accept error: %d\n", -ret);
-		}
+	if (xnet_io_uring) {
+		ret = xnet_uring_pollin_add(pep->progress, sock, false,
+					    &conn->rx_sockctx);
+	} else {
+		ret = xnet_monitor_sock(pep->progress, sock, POLLIN,
+					&conn->fid);
+	}
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+			"cannot wait for connect request: %s\n",
+			fi_strerror(-ret));
 		goto free;
 	}
 
-	conn->sock = ret;
-	ret = xnet_monitor_sock(pep->progress, conn->sock, POLLIN, &conn->fid);
-	if (ret)
-		goto close;
-
+	/* Track the handle so pep close can abort it. */
 	dlist_insert_tail(&conn->pep_entry, &pep->conn_list);
 	return;
 
-close:
-	ofi_close_socket(conn->sock);
 free:
-	xnet_conn_unlink_pep(conn);
 	free(conn);
+close:
+	ofi_close_socket(sock);
+}
+
+/* Accept the connections queued on a listening socket.
+ *
+ * With epoll, the listening socket is level-triggered: we are called
+ * again while connections remain queued, so accept one per call.
+ *
+ * With io_uring, the listening socket is watched by a multishot POLLIN
+ * request, and wakeups for connections arriving close together are
+ * coalesced into a single completion: accepting only one connection per
+ * completion would leave the others queued on the listening socket,
+ * possibly forever.  The listening socket is non-blocking, so drain the
+ * queue until accept() reports EAGAIN.
+ */
+void xnet_accept_sock(struct xnet_pep *pep)
+{
+	int ret;
+
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
+	assert(xnet_progress_locked(pep->progress));
+
+	while (pep->state == XNET_LISTENING) {
+		ret = ofi_sockapi_accept_socket(&pep->progress->sockapi,
+						pep->sock, NULL, 0, NULL);
+		if (ret < 0) {
+			if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
+				FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+					"accept error: %d\n", -ret);
+			}
+			return;
+		}
+
+		xnet_new_conn(pep, ret);
+		if (!xnet_io_uring)
+			return;
+	}
 }
