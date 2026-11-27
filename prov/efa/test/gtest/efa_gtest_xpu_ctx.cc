@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include <config.h>
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_resource.h"
 #include <gtest/gtest.h>
@@ -53,8 +54,13 @@ TEST_F(EfaXpuCtxTest, opens_queries_and_closes_on_efa_direct)
 	EXPECT_EQ(ctx->fid.fclass, (size_t) FI_CLASS_XPU_CTX);
 
 	ASSERT_EQ(fi_xpu_ctx_query(ctx, &ctx_attr), 0);
-	/* No object exports yet: nothing to report among the caps. */
+	/* The objects a context exports, where the build has the direct data path. */
+#if HAVE_EFA_DATA_PATH_DIRECT
+	EXPECT_EQ(ctx_attr.caps, (uint64_t) (FI_XPU_CAP_EP | FI_XPU_CAP_CQ |
+					     FI_XPU_CAP_CNTR));
+#else
 	EXPECT_EQ(ctx_attr.caps, 0u);
+#endif
 	EXPECT_EQ(ctx_attr.av_addr_size, sizeof(struct efa_xpu_peer));
 	EXPECT_EQ(ctx_attr.mr_desc_size, sizeof(struct efa_xpu_desc));
 

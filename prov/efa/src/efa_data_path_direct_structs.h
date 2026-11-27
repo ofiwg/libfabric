@@ -133,6 +133,14 @@ struct efa_data_path_direct_rq {
 	/* Mirror of efa_rq in rdma-core/providers/efa/efa.h */
 	struct efa_data_path_direct_wq wq;  /**< Work queue management structure */
 	uint8_t *buf;                       /**< Hardware receive queue buffer */
+	/**
+	 * Set when an XPU kernel posts the receives (fi_ep_export_xpu()) and
+	 * the host reads their completions: the request IDs are receive queue
+	 * slots rather than host wrid indices, and xpu_ctx[slot & xpu_ctx_mask]
+	 * is the context the kernel stored for each.
+	 */
+	const uint64_t *xpu_ctx;
+	uint32_t xpu_ctx_mask;
 };
 
 /**
@@ -146,6 +154,12 @@ struct efa_data_path_direct_rq {
 struct efa_data_path_direct_sq {
 	/* Mirror of efa_sq in rdma-core/providers/efa/efa.h */
 	struct efa_data_path_direct_wq wq;  /**< Work queue management structure */
+	/**
+	 * The XPU context table of a send queue a kernel posts to without
+	 * 64-bit request IDs, as for the receive queue; NULL otherwise.
+	 */
+	const uint64_t *xpu_ctx;
+	uint32_t xpu_ctx_mask;
 	uint8_t *desc;                      /**< Hardware send queue buffer ("buf" for SQ) */
 
 	/**

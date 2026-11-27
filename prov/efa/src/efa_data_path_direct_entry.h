@@ -124,9 +124,14 @@ efa_data_path_direct_is_valid_wrid_qp_gen(struct efa_io_cdesc_common *cqe,
 	struct efa_data_path_direct_wq *cur_wq;
 
 	if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) == EFA_IO_SEND_QUEUE) {
+		/* A kernel's work request carries no generation to check. */
+		if (qp->data_path_direct_qp.sq.xpu_ctx)
+			return true;
 		cur_wq = &qp->data_path_direct_qp.sq.wq;
 	} else {
 		if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED))
+			return true;
+		if (qp->data_path_direct_qp.rq.xpu_ctx)
 			return true;
 		cur_wq = &qp->data_path_direct_qp.rq.wq;
 	}

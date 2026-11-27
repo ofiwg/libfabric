@@ -241,6 +241,8 @@ endif
 src_libfabric_la_LDFLAGS += -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
+	$(top_srcdir)/include/rdma/fi_efa_errno.h \
+	$(top_srcdir)/include/rdma/fi_efa_io_defs.h \
 	$(top_srcdir)/include/rdma/fabric.h \
 	$(top_srcdir)/include/rdma/fi_atomic.h \
 	$(top_srcdir)/include/rdma/fi_cm.h \
