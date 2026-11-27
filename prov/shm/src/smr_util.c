@@ -268,6 +268,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	pthread_mutex_unlock(&ep_list_lock);
 
 	*smr = mapped_addr;
+	memset(*smr, 0, sizeof(**smr));
 
 	(*smr)->version = SMR_VERSION;
 	(*smr)->max_peers = smr_max_peers;

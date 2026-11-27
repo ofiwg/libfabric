@@ -53,19 +53,29 @@ void smr_map_to_endpoint(struct smr_ep *ep, int64_t id)
 	/* enable xpmem locally if the peer also has it enabled */
 	if (smr_get_vma_cap(peer_smr->self_vma_caps, FI_SHM_P2P_XPMEM) &&
 	    smr_get_vma_cap(ep->region->self_vma_caps, FI_SHM_P2P_XPMEM)) {
-		ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
-				       &local_peers[id].xpmem);
-		if (ret) {
-			local_peers[id].xpmem.avail = false;
-			smr_set_vma_cap(&ep->region->self_vma_caps,
-					FI_SHM_P2P_XPMEM, false);
-			return;
+		if (!local_peers[id].xpmem.avail) {
+			ret = ofi_xpmem_enable(&peer_smr->xpmem_self,
+					       &local_peers[id].xpmem);
+			if (ret) {
+				local_peers[id].xpmem.avail = false;
+				smr_set_vma_cap(&ep->region->self_vma_caps,
+						FI_SHM_P2P_XPMEM, false);
+				smr_set_vma_cap(&ep->region->peer_vma_caps,
+						FI_SHM_P2P_XPMEM, false);
+				return;
+			}
+			local_peers[id].xpmem.avail = true;
+			local_peers[id].xpmem.addr_max =
+						peer_smr->xpmem_self.address_max;
 		}
-		local_peers[id].xpmem.avail = true;
-		local_peers[id].xpmem.addr_max =
-					peer_smr->xpmem_self.address_max;
+		if (ep->region != peer_smr)
+			smr_set_vma_cap(&ep->region->peer_vma_caps,
+					FI_SHM_P2P_XPMEM, true);
 	} else {
 		local_peers[id].xpmem.avail = false;
+		if (ep->region != peer_smr)
+			smr_set_vma_cap(&ep->region->peer_vma_caps,
+					FI_SHM_P2P_XPMEM, false);
 	}
 
 	smr_set_ipc_valid(ep, id);
@@ -87,7 +97,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 	struct smr_ep *smr_ep;
 	struct smr_av *av = container_of(map, struct smr_av, smr_map);
 	size_t size;
-	int fd, ret = 0;
+	int fd = -1, ret = 0;
 	struct stat sts;
 	struct dlist_entry *entry;
 	const char *name = smr_no_prefix(peer_buf->name);
@@ -99,7 +109,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		peer_buf->region = container_of(entry, struct smr_ep_name,
 						entry)->region;
 		pthread_mutex_unlock(&ep_list_lock);
-		return FI_SUCCESS;
+		goto map_eps;
 	}
 	pthread_mutex_unlock(&ep_list_lock);
 
@@ -177,6 +187,7 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		}
 	}
 
+map_eps:
 	dlist_foreach_container(&av->util_av.ep_list, struct util_ep, util_ep,
 				av_entry) {
 		smr_ep = container_of(util_ep, struct smr_ep, util_ep);
@@ -184,7 +195,8 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 	}
 
 out:
-	close(fd);
+	if (fd >= 0)
+		close(fd);
 	return ret;
 }
 
@@ -202,11 +214,16 @@ static void smr_unmap_from_endpoint(struct smr_ep *ep, int64_t id)
 	peer_peers = smr_peer_data(peer_smr);
 	peer_id = smr_peer_data(ep->region)[id].id;
 
-	peer_peers[peer_id].id = -1;
-	peer_peers[peer_id].name_sent = 0;
+	if (peer_id >= 0) {
+		peer_peers[peer_id].id = -1;
+		peer_peers[peer_id].name_sent = 0;
+	}
 
 	local_peers = smr_peer_data(ep->region);
-	ofi_xpmem_release(&local_peers[peer_id].xpmem);
+	if (local_peers[id].xpmem.avail) {
+		ofi_xpmem_release(&local_peers[id].xpmem);
+		local_peers[id].xpmem.avail = false;
+	}
 }
 
 void smr_unmap_region(struct smr_map *map, int64_t peer_id, bool local)
