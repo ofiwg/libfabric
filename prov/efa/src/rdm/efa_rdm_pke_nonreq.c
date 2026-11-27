@@ -640,6 +640,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 					fi_strerror(-err), -err);
 				efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 				efa_rdm_rxe_release(rxe);
+				return;
 			}
 
 			rxe->internal_flags |= EFA_RDM_RXE_ACK_IN_FLIGHT;
