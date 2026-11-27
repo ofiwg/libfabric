@@ -145,6 +145,7 @@ EFA_RDM_PROTO_DEF(runtread,
 	.wants_mr = true,
 	.min_param_name = "inter_min_read_message_size",
 	.set_bounds = &efa_rdm_proto_runtread_set_bounds,
+	.release_txe_on_error = true,
 	.can_use_protocol = &efa_rdm_proto_runtread_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_runtread_construct_tx_pkes,
 	/*
@@ -171,7 +172,7 @@ EFA_RDM_PROTO_DEF(runtread,
  * before the handshake is reposted through the same entry points and an
  * accumulating write would double count.
  *
- * The other two counters are true accumulators and cannot be written that way,
+ * The remaining counters are true accumulators and cannot be written that way,
  * but they do not need to be: this hook only runs once the whole packet vector
  * reached the device, and a repost only happens for an attempt that never got
  * there, so it cannot run twice for one message. Each is balanced elsewhere --
@@ -186,6 +187,7 @@ void efa_rdm_proto_runtread_handle_tx_pkes_posted(struct efa_rdm_ep *ep,
 
 	txe->bytes_sent = txe->bytes_runt;
 	txe->peer->num_runt_bytes_in_flight += txe->bytes_runt;
+	txe->bytes_runt_in_flight += txe->bytes_runt;
 
 	/*
 	 * The receiver only posts a read when the runt did not cover the whole
@@ -239,7 +241,9 @@ ssize_t efa_rdm_proto_runtread_handle_rtm_send_completion(
 	peer = txe->peer;
 	assert(peer);
 	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
+	assert(txe->bytes_runt_in_flight >= pkt_data_size);
 	peer->num_runt_bytes_in_flight -= pkt_data_size;
+	txe->bytes_runt_in_flight -= pkt_data_size;
 
 	if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);

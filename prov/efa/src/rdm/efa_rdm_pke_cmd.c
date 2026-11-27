@@ -52,6 +52,11 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_tracepoint(rx_pke_proc_matched_msg_end, (size_t) pkt_entry, pkt_entry->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 	efa_rdm_pke_release_rx(pkt_entry);
 
+	if (ope->type == EFA_RDM_TXE && ope->state == EFA_RDM_OPE_ERR) {
+		efa_rdm_txe_release_error_if_drained(ope);
+		return;
+	}
+
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
 			assert(ep->blocking_copy_rxe_num > 0);
@@ -61,6 +66,17 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 
 		efa_rdm_ope_handle_recv_completed(ope);
 	}
+}
+
+static bool efa_rdm_pke_finish_cts_post_error(struct efa_rdm_pke *pkt_entry) {
+	struct efa_rdm_ope *ope = pkt_entry->ope;
+
+	if (!ope || ope->type != EFA_RDM_RXE || !ope->cts_post_err)
+		return false;
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_rxe_finish_cts_post_error(ope);
+	return true;
 }
 
 /**
@@ -109,6 +125,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 
 	ep = pkt_entry->ep;
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
+
+	if (efa_rdm_pke_finish_cts_post_error(pkt_entry))
+		return;
+
+	if ((pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ) &&
+	    efa_rdm_pke_drain_failed_cts_read(pkt_entry->ope)) {
+		efa_rdm_pke_release_tx(pkt_entry);
+		return;
+	}
 
 	if (!pkt_entry->peer) {
 		/*
@@ -180,7 +205,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		}
 
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
-			if (ep->handle_resource_management == FI_RM_DISABLED) {
+			if (efa_rdm_pkt_type_of(pkt_entry) == EFA_RDM_PEER_ERROR_PKT) {
+				/*
+				 * Always notify the receiver so it can mark the msg_id as complete,
+				 * regardless of the resource-management mode.
+				 */
+				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+			} else if (ep->handle_resource_management == FI_RM_DISABLED) {
+				bool peer_abort_owns_txe = efa_rdm_txe_handle_error(txe, err, prov_errno);;
+
 				/*
 				 * Write an error to the application for RNR when resource
 				 * management is disabled.
@@ -189,27 +222,20 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				 * might encounter RNR from device multiple times, but it
 				 * should only write cq err entry once
 				 */
-				if (!(txe->internal_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
-					txe->internal_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
-					efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
-				}
-
 				efa_rdm_pke_release_tx(pkt_entry);
-				if (!txe->efa_outstanding_tx_ops)
+				if (!peer_abort_owns_txe && !txe->efa_outstanding_tx_ops)
 					efa_rdm_txe_release(txe);
-			} else if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_PEER_ERROR_PKT &&
-				   (txe->state == EFA_RDM_OPE_ERR ||
-				    !efa_rdm_mr_gen_check_ope(txe))) {
+			} else if (txe->state == EFA_RDM_OPE_ERR ||
+				   !efa_rdm_mr_gen_check_ope(txe)) {
 				/*
 				 * The txe already errored or its source MR was
 				 * closed, so a repost can never succeed. Take the
-				 * MR abort path instead of requeueing. The
-				 * PEER_ERROR_PKT is still requeued: it does not use
-				 * the source MR and the receiver needs it.
+				 * MR abort path instead of requeueing.
 				 */
 				efa_rdm_pke_release_tx(pkt_entry);
-				efa_rdm_txe_handle_error(txe, FI_ECANCELED,
-							 FI_EFA_ERR_PEER_ABORTED);
+				if (!efa_rdm_txe_handle_error(txe, FI_ECANCELED,
+							      FI_EFA_ERR_PEER_ABORTED))
+					efa_rdm_txe_release_error_if_drained(txe);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such
@@ -220,22 +246,23 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			}
 		} else {
 			/*
-			 * Read atomic_proto first: efa_rdm_txe_handle_error()
-			 * can release a peer-aborting txe.
+			 * The handler reports whether peer-abort cleanup owns
+			 * the TXE lifetime after this call.
 			 */
 			bool release_atomic_txe = (txe->atomic_proto != NULL);
+			bool peer_abort_owns_txe = efa_rdm_txe_handle_error(txe, err, prov_errno);
 
-			efa_rdm_txe_handle_error(txe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			/*
-			 * This error CQE retires the atomic request's only WR.
-			 * The success-completion callback is not invoked for error CQEs,
-			 * so release the TXE here.
+			 * The success-completion callback is not invoked for
+			 * error CQEs. Release an atomic request's only WR, or
+			 * let an opted-in protocol release its drained TXE.
 			 */
-			if (release_atomic_txe) {
+			if (!peer_abort_owns_txe && release_atomic_txe) {
 				assert(txe->efa_outstanding_tx_ops == 0);
 				efa_rdm_txe_release(txe);
-			}
+			} else if (!peer_abort_owns_txe)
+				efa_rdm_txe_release_error_if_drained(txe);
 		}
 		break;
 	case EFA_RDM_RXE:
@@ -287,15 +314,17 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
 			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			int pkt_type = efa_rdm_pkt_type_of(pkt_entry);
 			bool release_atomic_response =
-				efa_rdm_ope_is_internal_atomic_response(rxe, efa_rdm_pkt_type_of(pkt_entry));
+				efa_rdm_ope_is_internal_atomic_response(rxe, pkt_type);
 
 			efa_rdm_rxe_handle_error(rxe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			if (release_atomic_response) {
 				assert(rxe->efa_outstanding_tx_ops == 0);
 				efa_rdm_rxe_release(rxe);
-			}
+			} else
+				efa_rdm_rxe_release_control_error_if_drained(rxe, pkt_type);
 		}
 		break;
 	default:
@@ -345,6 +374,18 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
+
+	if (efa_rdm_pke_finish_cts_post_error(pkt_entry))
+		return;
+
+	if (pkt_entry->ope->type == EFA_RDM_TXE &&
+	    efa_rdm_txe_releases_on_error(pkt_entry->ope)) {
+		struct efa_rdm_ope *txe = pkt_entry->ope;
+
+		efa_rdm_pke_release_tx(pkt_entry);
+		efa_rdm_txe_release_error_if_drained(txe);
+		return;
+	}
 
 	assert(pkt_entry->handle_pke);
 	pkt_entry->handle_pke(pkt_entry);

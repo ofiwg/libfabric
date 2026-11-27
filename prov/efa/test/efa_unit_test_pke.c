@@ -425,7 +425,11 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	msg.desc = NULL;
 	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
 	assert_non_null(txe);
+	txe->bytes_queued_blocking_copy = 64;
+	txe->cuda_copy_method = EFA_RDM_CUDA_COPY_LOCALREAD;
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
+	assert_int_equal(txe->bytes_queued_blocking_copy, 0);
+	assert_int_equal(txe->cuda_copy_method, EFA_RDM_CUDA_COPY_UNSPEC);
 
 	/* Allocate a packet entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
@@ -822,6 +826,7 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_a[2], *pkt_b;
 	struct efa_rdm_ope *rxe_a, *rxe_b;
+	struct efa_rdm_ope *txe[2];
 	struct efa_rdm_mr mock_mr = {0};
 	char buf_a[1024], buf_b[1024];
 	size_t pkts_to_post_before;
@@ -905,6 +910,40 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state)
 	efa_rdm_pke_release_rx(pkt_b);
 	efa_rdm_ep->queued_copy_num = 0;
 	efa_rdm_rxe_release(rxe_b);
+
+	for (i = 0; i < 2; i++) {
+		txe[i] = efa_unit_test_alloc_txe(resource, i ? ofi_op_msg : ofi_op_read_req);
+		assert_non_null(txe[i]);
+		txe[i]->cuda_copy_method = EFA_RDM_CUDA_COPY_BLOCKING;
+		efa_rdm_ep->blocking_copy_rxe_num++;
+		pkt_b = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_non_null(pkt_b);
+		pkt_b->payload_size = 64;
+		efa_rdm_pke_set_ope(pkt_b, txe[i]);
+		efa_rdm_ep->queued_copy_vec[i] = (struct efa_rdm_ep_queued_copy) {.pkt_entry = pkt_b};
+		txe[i]->bytes_queued_blocking_copy = pkt_b->payload_size;
+		efa_rdm_pke_mark_held(pkt_b);
+	}
+#if ENABLE_DEBUG
+	dlist_insert_tail(&txe[0]->pending_recv_entry, &efa_rdm_ep->ope_recv_list);
+	efa_rdm_ep->pending_recv_counter++;
+#endif
+	efa_rdm_ep->queued_copy_num = 2;
+	txe[0]->proto = &efa_rdm_proto_eager;
+	pkts_to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+	assert_false(efa_rdm_txe_handle_error(txe[0], FI_EIO, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE));
+	assert_int_equal(efa_rdm_ep->queued_copy_num, 1);
+	assert_ptr_equal(efa_rdm_ep->queued_copy_vec[0].pkt_entry->ope, txe[1]);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post - pkts_to_post_before,
+			 1);
+	assert_int_equal(txe[0]->bytes_queued_blocking_copy, 0);
+	assert_int_equal(txe[0]->cuda_copy_method, EFA_RDM_CUDA_COPY_UNSPEC);
+	assert_int_equal(efa_rdm_ep->blocking_copy_rxe_num, 1);
+	efa_rdm_txe_release_error_if_drained(txe[0]);
+#if ENABLE_DEBUG
+	assert_true(dlist_empty(&efa_rdm_ep->ope_recv_list));
+	assert_int_equal(efa_rdm_ep->pending_recv_counter, 0);
+#endif
 }
 
 /**
@@ -1226,6 +1265,78 @@ void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state)
 	assert_int_equal(reused->state, EFA_RDM_OPE_SEND);
 
 	efa_rdm_txe_release(reused);
+}
+
+static void efa_unit_test_recv_late_longcts_pkt(struct efa_rdm_ep *ep,
+					      uint32_t tx_id, bool ctsdata)
+{
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_ctsdata_hdr *hdr;
+
+	if (!ctsdata) {
+		efa_rdm_proto_longcts_handle_cts_recv(
+			efa_unit_test_alloc_cts_pke(ep, tx_id, 4096));
+		return;
+	}
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	hdr = efa_rdm_pke_get_ctsdata_hdr(pke);
+	*hdr = (struct efa_rdm_ctsdata_hdr) {
+		.type = EFA_RDM_CTSDATA_PKT,
+		.version = EFA_RDM_PROTOCOL_VERSION,
+		.recv_id = tx_id,
+	};
+	efa_rdm_proto_longcts_handle_ctsdata_recv(pke);
+}
+
+void test_efa_rdm_pke_handle_late_longcts_drains_txe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_proto proto = { .release_txe_on_error = true };
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *rxe;
+	uint32_t tx_id, rx_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	for (int i = 0; i < 2; i++) {
+		bool ctsdata = i == 1;
+
+		txe = efa_unit_test_alloc_txe(resource,
+					      ctsdata ? ofi_op_read_req : ofi_op_msg);
+		assert_non_null(txe);
+		tx_id = txe->tx_id;
+		txe->proto = &proto;
+		txe->state = EFA_RDM_OPE_ERR;
+		txe->efa_outstanding_tx_ops = 1;
+
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, tx_id), txe);
+
+		txe->efa_outstanding_tx_ops = 0;
+		txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, tx_id), txe);
+
+		txe->internal_flags &= ~EFA_RDM_OPE_PEER_ABORT_PENDING;
+		efa_unit_test_recv_late_longcts_pkt(ep, tx_id, ctsdata);
+		assert_null(efa_rdm_ep_live_txe_from_id(ep, tx_id));
+
+		rxe = efa_unit_test_alloc_rxe(resource,
+					      ctsdata ? ofi_op_msg : ofi_op_read_rsp);
+		assert_non_null(rxe);
+		rx_id = rxe->rx_id;
+		rxe->proto = &proto;
+		rxe->state = EFA_RDM_OPE_ERR;
+
+		efa_unit_test_recv_late_longcts_pkt(ep, rx_id, ctsdata);
+		assert_ptr_equal(efa_rdm_ep_live_ope_from_id(ep, rx_id), rxe);
+		efa_rdm_rxe_release(rxe);
+	}
 }
 
 /**

@@ -222,8 +222,8 @@ bool efa_rdm_peer_support_unsolicited_write_recv(struct efa_rdm_peer *peer)
  * @brief whether the peer advertises EFA_RDM_PEER_ERROR_PKT support
  *
  * Negotiated via the handshake. A peer without this bit cannot decode a
- * PEER_ERROR_PKT, so we must not emit one to it (the caller then falls
- * back to the legacy "leak the txe / write a local CQ error" behavior).
+ * PEER_ERROR_PKT, so we must not emit one to it; the caller falls back to
+ * local cleanup.
  *
  * @param[in] peer	a peer from whom we have received a HANDSHAKE
  */

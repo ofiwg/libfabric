@@ -242,6 +242,7 @@ static bool efa_rdm_proto_longcts_write_can_use(struct efa_rdm_proto *proto,
 
 EFA_RDM_PROTO_DEF(longcts_write,
 	.wants_mr = false,
+	.release_txe_on_error = true,
 	.can_use_protocol = &efa_rdm_proto_longcts_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_longcts_write_construct_tx_pkes,
 	.post_continuation = &efa_rdm_proto_post_ctsdata,

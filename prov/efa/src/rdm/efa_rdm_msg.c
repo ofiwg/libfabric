@@ -158,12 +158,20 @@ ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
 		return -FI_EAGAIN;
 
+	txe->msg_id = txe->peer->next_msg_id++;
 	err = proto->construct_tx_pkes(ep, txe, &pke_send_flags);
-	if (err)
-		return err;
+	if (!err)
+		err = efa_rdm_msg_send_constructed_pkes(ep, txe, proto,
+						       pke_send_flags);
 
-	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto,
-						 pke_send_flags);
+	if (err) {
+		txe->peer->next_msg_id--;
+		return err;
+	}
+
+	efa_rdm_tracepoint(send_begin, txe->msg_id,
+			   (size_t) txe->cq_entry.op_context, txe->total_len);
+	return FI_SUCCESS;
 }
 
 static inline
@@ -244,10 +252,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 
 	efa_rdm_proto_txe_fill(txe, ep, peer, msg, op, tag, fi_flags,
 			       internal_flags, proto);
-	txe->msg_id = peer->next_msg_id++;
-
-	efa_rdm_tracepoint(send_begin, txe->msg_id,
-			   (size_t) txe->cq_entry.op_context, txe->total_len);
 
 	/*
 	 * For backwards compatibility: if the peer may have zero-copy receive
@@ -263,13 +267,21 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	 */
 	if (ep->peer_may_have_zcpy_rx &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		/*
+		 * peer_may_have_zcpy_rx is false when FI_ORDER_SAS is requested, so
+		 * this path does not require submission-order msg_ids. Defer allocation
+		 * until repost so an RTM that never posts cannot leave a permanent hole
+		 * in the receiver's reorder window.
+		 */
 		err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-		if (err) {
+		if (err)
 			efa_rdm_txe_release(txe);
-			peer->next_msg_id--;
-		}
 		goto out;
 	}
+
+	txe->msg_id = peer->next_msg_id++;
+	efa_rdm_tracepoint(send_begin, txe->msg_id,
+			   (size_t) txe->cq_entry.op_context, txe->total_len);
 
 	err = efa_rdm_msg_post_rtm_proto(ep, txe, proto);
 	if (err) {

@@ -164,6 +164,7 @@ struct efa_rdm_ope {
 	struct dlist_entry peer_entry;
 
 	uint64_t bytes_runt;
+	uint64_t bytes_runt_in_flight;
 
 	/* the following variables are for RX operation only */
 	uint64_t bytes_received;
@@ -181,6 +182,8 @@ struct efa_rdm_ope {
 	struct efa_rdm_pke *unexp_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
+	/* Pending error from posting the next CTS, or zero. */
+	int cts_post_err;
 	/* the rxe_map that the rxe is ever inserted */
 	struct efa_rdm_rxe_map *rxe_map;
 	/* end of RX related variables */
@@ -346,6 +349,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
+void efa_rdm_rxe_release_control_error_if_drained(struct efa_rdm_ope *rxe, int pkt_type);
+
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
 /* The follow flags are applied to the internal_flags field
@@ -401,14 +406,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * emit/suppress into its drain helper.
  */
 #define EFA_RDM_OPE_PEER_ABORT_PENDING BIT_ULL(20)
-
-/**
- * @brief flag to indicate a txe has already written an cq error entry for RNR
- *
- * This flag is used to prevent writing multiple cq error entries
- * for the same txe
- */
-#define EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
 
 /**
  * @brief flag to indicate an ope has queued ctrl packet,
@@ -556,9 +553,14 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+bool efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
+
+void efa_rdm_txe_release_error_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
+
+void efa_rdm_rxe_handle_cts_post_error(struct efa_rdm_ope *rxe, int err);
+void efa_rdm_rxe_finish_cts_post_error(struct efa_rdm_ope *rxe);
 
 bool efa_rdm_rxe_mark_peer_aborted_if_needed(struct efa_rdm_ope *rxe, int prov_errno);
 

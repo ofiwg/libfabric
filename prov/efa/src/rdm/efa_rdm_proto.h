@@ -67,6 +67,9 @@ struct efa_rdm_proto {
 			   enum fi_hmem_iface target_iface,
 			   enum fi_hmem_iface bounds_profile_iface);
 
+	/* Fatal errors can release the TXE after all of its WRs drain. */
+	bool release_txe_on_error;
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
@@ -125,6 +128,13 @@ struct efa_rdm_proto {
 	int req_pkt_type_dc;
 	int req_pkt_type_tagged_dc;
 };
+
+static inline bool efa_rdm_txe_releases_on_error(const struct efa_rdm_ope *txe)
+{
+	return txe->state == EFA_RDM_OPE_ERR && txe->proto &&
+	       txe->proto->release_txe_on_error &&
+	       !(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+}
 
 #define EFA_RDM_PROTO_DEF(_name, ...) \
 	struct efa_rdm_proto efa_rdm_proto_##_name = { \
