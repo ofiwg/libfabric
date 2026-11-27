@@ -128,6 +128,7 @@ const char *greeting = "Hello from Client!";
 
 char test_name[50] = "custom";
 int timeout = -1;
+int ft_oob_timeout = -1;
 struct timespec start, end;
 
 int listen_sock = -1;
@@ -5066,11 +5067,11 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	ssize_t ret, err = 0;
 
 	for (rcvd = 0; rcvd < len; ) {
-		if (timeout >= 0) {
-			ret = ft_poll_fd(fd, timeout * 1000);
+		if (ft_oob_timeout >= 0) {
+			ret = ft_poll_fd(fd, ft_oob_timeout * 1000);
 			if (ret == -FI_EAGAIN) {
 				FT_ERR("%ds timeout expired waiting for the "
-				       "peer", timeout);
+				       "peer", ft_oob_timeout);
 				err = -FI_ETIMEDOUT;
 				break;
 			}
@@ -5463,6 +5464,7 @@ int ft_parse_long_opts(int op, char *optarg)
 		return ft_parse_pin_core_opt(optarg);
 	case LONG_OPT_TIMEOUT:
 		timeout = atoi(optarg);
+		ft_oob_timeout = timeout;
 		return 0;
 	case LONG_OPT_DEBUG_ASSERT:
 		return 0;
