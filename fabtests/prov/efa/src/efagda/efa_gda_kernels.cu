@@ -27,11 +27,35 @@
  */
 
 #include "efa_cuda_dp_impl.cuh"
+#include "efa_cuda_dp_version.h"
 #include "efa_gda_kernels.h"
 #include <errno.h>
 #include <assert.h>
 
 #define CNTR_POLL_MAX_ITER 100000000
+
+/* Large enough for either send WQE format (64 or 128 bytes). */
+#define EFAGDA_WR_BUF_SIZE sizeof(struct efa_io_tx_wqe_128)
+
+/*
+ * The efa-dp-direct send path reads the QP's constant fields through __ldg(),
+ * which is only valid on global memory, so the kernels below use the QP in
+ * place. The CQ functions do not, so the CQs are still polled through
+ * __shared__ copies.
+ */
+
+/* Tag each receive with its RQ slot. The tests never read it back. */
+static __device__ uint16_t efagda_rq_slot(efa_cuda_qp *qp)
+{
+	return (uint16_t)(qp->rq.wq.pc & qp->rq.wq.queue_mask);
+}
+
+extern "C" void efagda_get_dp_version(int *major, int *minor, int *subminor)
+{
+	*major = EFA_CUDA_DP_VERSION_MAJOR;
+	*minor = EFA_CUDA_DP_VERSION_MINOR;
+	*subminor = EFA_CUDA_DP_VERSION_SUBMINOR;
+}
 
 static __device__ int efa_cuda_cntr_poll(volatile uint64_t *cntr_ptr, uint64_t target)
 {
@@ -64,14 +88,12 @@ __global__ void efagda_lat_send_kernel(
 	int scnt = 0;
 	int rcnt = 0;
 	void *cqe;
-	struct efa_io_tx_wqe wr_buf;
-	__shared__ efa_cuda_qp local_qp;
-	__shared__ efa_cuda_cq local_send_cq;
-	__shared__ efa_cuda_cq local_recv_cq;
+	uint8_t wr_buf[EFAGDA_WR_BUF_SIZE] __align__(8);
 	uint64_t send_cntr_start_val = 0;
 	uint64_t recv_cntr_start_val = 0;
+	__shared__ efa_cuda_cq local_send_cq;
+	__shared__ efa_cuda_cq local_recv_cq;
 
-	local_qp = *qp;
 	local_send_cq = *send_cq;
 	local_recv_cq = *recv_cq;
 
@@ -82,11 +104,11 @@ __global__ void efagda_lat_send_kernel(
 
 	/* Post initial receives */
 	for (int i = 0; i < rx_depth; i++) {
-		if (efa_cuda_post_recv_wr(&local_qp, recv_addr, recv_length,
-					  recv_lkey))
+		if (efa_cuda_post_recv_wr(qp, efagda_rq_slot(qp), recv_addr,
+					  recv_length, recv_lkey))
 			return;
 	}
-	efa_cuda_flush_rq_wrs(&local_qp);
+	efa_cuda_flush_rq_wrs(qp);
 
 	while (scnt < iters || rcnt < iters) {
 		/* Poll for receive completion (except for first client send) */
@@ -107,11 +129,11 @@ __global__ void efagda_lat_send_kernel(
 
 			/* Repost receive */
 			if (rcnt + rx_depth <= iters) {
-				if (efa_cuda_post_recv_wr(&local_qp, recv_addr,
-							  recv_length,
+				if (efa_cuda_post_recv_wr(qp, efagda_rq_slot(qp),
+							  recv_addr, recv_length,
 							  recv_lkey))
 					return;
-				efa_cuda_flush_rq_wrs(&local_qp);
+				efa_cuda_flush_rq_wrs(qp);
 			}
 		}
 
@@ -119,18 +141,18 @@ __global__ void efagda_lat_send_kernel(
 		if (scnt < iters) {
 			scnt++;
 
-			if (efa_cuda_start_sq_batch(&local_qp, 1))
+			EfaCudaWrBuilder wr(&qp->sq.wr_ctx, wr_buf);
+
+			if (efa_cuda_start_sq_batch(qp, 1))
 				return;
-			if (efa_cuda_init_send_wr(&wr_buf, scnt))
+			if (wr.init_send(scnt))
 				return;
-			efa_cuda_wr_set_remote(&wr_buf, ah, remote_qpn,
-					       remote_qkey);
-			if (efa_cuda_wr_set_sge(&wr_buf, send_lkey, send_addr,
-						send_length))
+			wr.set_remote(ah, remote_qpn, remote_qkey);
+			if (wr.set_sge(send_lkey, send_addr, send_length))
 				return;
-			if (efa_cuda_sq_batch_place_wr(&local_qp, 0, &wr_buf))
+			if (efa_cuda_sq_batch_place_wr(qp, 0, wr_buf))
 				return;
-			efa_cuda_flush_sq_wrs(&local_qp);
+			efa_cuda_flush_sq_wrs(qp);
 
 			/* Wait for send completion */
 			if (send_cntr_ptr) {
@@ -150,15 +172,14 @@ __global__ void efagda_lat_send_kernel(
 			efa_cuda_cq_pop(&local_send_cq, 1);
 		}
 	}
-
-	*qp = local_qp;
 	*send_cq = local_send_cq;
 	*recv_cq = local_recv_cq;
+
 }
 
-int efagda_run_lat_send(struct efa_cuda_qp *qp,
-			struct efa_cuda_cq *send_cq,
-			struct efa_cuda_cq *recv_cq,
+int efagda_run_lat_send(void *qp,
+			void *send_cq,
+			void *recv_cq,
 			volatile uint64_t *send_cntr_ptr,
 			volatile uint64_t *recv_cntr_ptr,
 			uint16_t ah, uint16_t remote_qpn,
@@ -173,7 +194,8 @@ int efagda_run_lat_send(struct efa_cuda_qp *qp,
 	cudaError_t err;
 
 	efagda_lat_send_kernel<<<1, 1, 0, stream>>>(
-		qp, send_cq, recv_cq,
+		(efa_cuda_qp *)qp, (efa_cuda_cq *)send_cq,
+		(efa_cuda_cq *)recv_cq,
 		send_cntr_ptr, recv_cntr_ptr,
 		ah, remote_qpn, remote_qkey,
 		recv_addr, recv_length, recv_lkey,
@@ -216,12 +238,10 @@ __global__ void efagda_bw_kernel(
 	int scnt = 0;
 	int ccnt = 0;
 	void *cqe;
-	struct efa_io_tx_wqe wr_buf;
-	__shared__ efa_cuda_qp local_qp;
-	__shared__ efa_cuda_cq local_send_cq;
+	uint8_t wr_buf[EFAGDA_WR_BUF_SIZE] __align__(8);
 	uint64_t send_cntr_start_val = 0;
+	__shared__ efa_cuda_cq local_send_cq;
 
-	local_qp = *qp;
 	local_send_cq = *send_cq;
 
 	if (send_cntr_ptr) {
@@ -231,23 +251,25 @@ __global__ void efagda_bw_kernel(
 	while (scnt < iters || ccnt < iters) {
 		/* Post writes up to tx_depth */
 		while (scnt < iters && (scnt - ccnt) < tx_depth) {
+			EfaCudaWrBuilder wr(&qp->sq.wr_ctx, wr_buf);
 			int ret;
+
 			switch (opcode) {
 			case IBV_WR_RDMA_WRITE:
-				ret = efa_cuda_init_rdma_write_wr(&wr_buf,
-					scnt, remote_rkey, remote_addr);
+				ret = wr.init_rdma_write(scnt, remote_rkey,
+							 remote_addr);
 				break;
 			case IBV_WR_RDMA_WRITE_WITH_IMM:
-				ret = efa_cuda_init_rdma_write_imm_wr(&wr_buf,
-					scnt, remote_rkey, remote_addr,
-					0x12345678);
+				ret = wr.init_rdma_write_imm(scnt, remote_rkey,
+							     remote_addr,
+							     0x12345678);
 				break;
 			case IBV_WR_RDMA_READ:
-				ret = efa_cuda_init_rdma_read_wr(&wr_buf,
-					scnt, remote_rkey, remote_addr);
+				ret = wr.init_rdma_read(scnt, remote_rkey,
+							remote_addr);
 				break;
 			case IBV_WR_SEND:
-				ret = efa_cuda_init_send_wr(&wr_buf, scnt);
+				ret = wr.init_send(scnt);
 				break;
 			default:
 				return;
@@ -255,17 +277,15 @@ __global__ void efagda_bw_kernel(
 			if (ret)
 				return;
 
-			if (efa_cuda_wr_set_sge(&wr_buf, send_lkey, send_addr,
-						send_length))
+			if (wr.set_sge(send_lkey, send_addr, send_length))
 				return;
-			efa_cuda_wr_set_remote(&wr_buf, ah, remote_qpn,
-					       remote_qkey);
+			wr.set_remote(ah, remote_qpn, remote_qkey);
 
-			if (efa_cuda_start_sq_batch(&local_qp, 1))
+			if (efa_cuda_start_sq_batch(qp, 1))
 				return;
-			if (efa_cuda_sq_batch_place_wr(&local_qp, 0, &wr_buf))
+			if (efa_cuda_sq_batch_place_wr(qp, 0, wr_buf))
 				return;
-			efa_cuda_flush_sq_wrs(&local_qp);
+			efa_cuda_flush_sq_wrs(qp);
 			scnt++;
 		}
 
@@ -291,9 +311,8 @@ __global__ void efagda_bw_kernel(
 			}
 		}
 	}
-
-	*qp = local_qp;
 	*send_cq = local_send_cq;
+
 }
 
 __global__ void efagda_bw_recv_kernel(
@@ -308,11 +327,9 @@ __global__ void efagda_bw_recv_kernel(
 {
 	int rcnt = 0;
 	void *cqe;
-	__shared__ efa_cuda_qp local_qp;
-	__shared__ efa_cuda_cq local_recv_cq;
 	uint64_t recv_cntr_start_val = 0;
+	__shared__ efa_cuda_cq local_recv_cq;
 
-	local_qp = *qp;
 	local_recv_cq = *recv_cq;
 
 	if (recv_cntr_ptr)
@@ -320,11 +337,11 @@ __global__ void efagda_bw_recv_kernel(
 
 	/* Post initial receives */
 	for (int i = 0; i < rx_depth; i++) {
-		if (efa_cuda_post_recv_wr(&local_qp, recv_addr, recv_length,
-					  recv_lkey))
+		if (efa_cuda_post_recv_wr(qp, efagda_rq_slot(qp), recv_addr,
+					  recv_length, recv_lkey))
 			return;
 	}
-	efa_cuda_flush_rq_wrs(&local_qp);
+	efa_cuda_flush_rq_wrs(qp);
 
 	while (rcnt < iters) {
 		if (recv_cntr_ptr) {
@@ -347,19 +364,19 @@ __global__ void efagda_bw_recv_kernel(
 
 		/* Repost receive */
 		if (rcnt + rx_depth <= iters) {
-			if (efa_cuda_post_recv_wr(&local_qp, recv_addr,
-						  recv_length, recv_lkey))
+			if (efa_cuda_post_recv_wr(qp, efagda_rq_slot(qp),
+						  recv_addr, recv_length,
+						  recv_lkey))
 				return;
-			efa_cuda_flush_rq_wrs(&local_qp);
+			efa_cuda_flush_rq_wrs(qp);
 		}
 	}
-
-	*qp = local_qp;
 	*recv_cq = local_recv_cq;
+
 }
 
-int efagda_run_bw(struct efa_cuda_qp *qp,
-		  struct efa_cuda_cq *send_cq,
+int efagda_run_bw(void *qp,
+		  void *send_cq,
 		  volatile uint64_t *send_cntr_ptr,
 		  enum ibv_wr_opcode opcode,
 		  uint64_t send_addr, uint32_t send_length, uint32_t send_lkey,
@@ -371,7 +388,8 @@ int efagda_run_bw(struct efa_cuda_qp *qp,
 	cudaError_t err;
 
 	efagda_bw_kernel<<<1, 1, 0, stream>>>(
-		qp, send_cq, send_cntr_ptr, opcode,
+		(efa_cuda_qp *)qp, (efa_cuda_cq *)send_cq, send_cntr_ptr,
+		opcode,
 		send_addr, send_length, send_lkey,
 		ah, remote_qpn, remote_qkey,
 		remote_addr, remote_rkey,
@@ -394,8 +412,8 @@ int efagda_run_bw(struct efa_cuda_qp *qp,
 	return 0;
 }
 
-int efagda_run_bw_recv(struct efa_cuda_qp *qp,
-		       struct efa_cuda_cq *recv_cq,
+int efagda_run_bw_recv(void *qp,
+		       void *recv_cq,
 		       volatile uint64_t *recv_cntr_ptr,
 		       uint64_t recv_addr, uint32_t recv_length,
 		       uint32_t recv_lkey,
@@ -405,7 +423,7 @@ int efagda_run_bw_recv(struct efa_cuda_qp *qp,
 	cudaError_t err;
 
 	efagda_bw_recv_kernel<<<1, 1, 0, stream>>>(
-		qp, recv_cq, recv_cntr_ptr,
+		(efa_cuda_qp *)qp, (efa_cuda_cq *)recv_cq, recv_cntr_ptr,
 		recv_addr, recv_length, recv_lkey,
 		iters, rx_depth);
 

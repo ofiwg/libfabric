@@ -11,7 +11,7 @@ libefagda.so: efa_gda_kernels.o
 	$(NVCC) $(NVCC_FLAGS) -shared -o libefagda.so efa_gda_kernels.o
 
 efa_gda_kernels.o: efa_gda_kernels.cu efa_gda_kernels.h
-	$(NVCC) $(NVCC_FLAGS) -c efa_gda_kernels.cu $(CUDA_FLAGS) -I$(EFA_DP_DIRECT)/CUDA/src
+	$(NVCC) $(NVCC_FLAGS) -c efa_gda_kernels.cu $(CUDA_FLAGS) -I$(EFA_DP_DIRECT)/CUDA/device -I$(EFA_DP_DIRECT)/CUDA/common
 
 install: libefagda.so
 	install -d $(libdir)

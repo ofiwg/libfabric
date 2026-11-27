@@ -31,16 +31,23 @@
 
 #include <stdint.h>
 #include <cuda_runtime.h>
-#include <efa_cuda_dp.h>
 #include <infiniband/verbs.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int efagda_run_lat_send(struct efa_cuda_qp *qp,
-			struct efa_cuda_cq *send_cq,
-			struct efa_cuda_cq *recv_cq,
+/*
+ * The QP and CQ arguments are device pointers to queue structures that the
+ * efa-dp-direct host library initialized for the layout version reported by
+ * efagda_get_dp_version(). That is the version of the efa-dp-direct device
+ * header these kernels were compiled against.
+ */
+void efagda_get_dp_version(int *major, int *minor, int *subminor);
+
+int efagda_run_lat_send(void *qp,
+			void *send_cq,
+			void *recv_cq,
 			volatile uint64_t *send_cntr_ptr,
 			volatile uint64_t *recv_cntr_ptr,
 			uint16_t ah, uint16_t remote_qpn,
@@ -52,8 +59,8 @@ int efagda_run_lat_send(struct efa_cuda_qp *qp,
 			int iters, int rx_depth, int is_client,
 			cudaStream_t stream);
 
-int efagda_run_bw(struct efa_cuda_qp *qp,
-		  struct efa_cuda_cq *send_cq,
+int efagda_run_bw(void *qp,
+		  void *send_cq,
 		  volatile uint64_t *send_cntr_ptr,
 		  enum ibv_wr_opcode opcode,
 		  uint64_t send_addr, uint32_t send_length, uint32_t send_lkey,
@@ -62,8 +69,8 @@ int efagda_run_bw(struct efa_cuda_qp *qp,
 		  int iters, int tx_depth,
 		  cudaStream_t stream);
 
-int efagda_run_bw_recv(struct efa_cuda_qp *qp,
-		       struct efa_cuda_cq *recv_cq,
+int efagda_run_bw_recv(void *qp,
+		       void *recv_cq,
 		       volatile uint64_t *recv_cntr_ptr,
 		       uint64_t recv_addr, uint32_t recv_length,
 		       uint32_t recv_lkey,
